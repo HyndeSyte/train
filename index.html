@@ -312,7 +312,13 @@ body { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
     <div id="session-grip"></div>
   </div>
   <div class="scroll" id="session-content"></div>
-  <div style="padding:12px 16px; flex-shrink:0;">
+  <div style="padding:12px 16px; flex-shrink:0; border-top:1px solid var(--border);">
+    <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <button class="feel-btn" data-feel="easy" onclick="setFeel('easy')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-family:var(--font);cursor:pointer;">Easy</button>
+      <button class="feel-btn" data-feel="solid" onclick="setFeel('solid')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-family:var(--font);cursor:pointer;">Solid</button>
+      <button class="feel-btn" data-feel="hard" onclick="setFeel('hard')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-family:var(--font);cursor:pointer;">Hard</button>
+    </div>
+    <input type="text" id="session-notes" placeholder="Notes (optional)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;padding:10px;margin-bottom:8px;-webkit-appearance:none;">
     <button class="btn btn-primary" onclick="completeSession()">Complete Session</button>
   </div>
   <div class="rest-timer" id="rest-timer">
@@ -418,31 +424,32 @@ const EXERCISE_LIBRARY = {
     name: 'Ring Row', grip: 'high',
     ladder: ['Inverted Row (feet down)', 'Ring Row (feet elevated)', 'Archer Ring Row', 'Front Lever Tuck Row'],
     repRange: [5, 8], sets: 3, unit: 'reps',
-    note: 'Full range, slow eccentric. Control the bottom.'
+    note: 'Full range, slow eccentric. Control the bottom. Grip: heel of palm over ring, not fingers.'
   },
   'ring-pushup': {
     name: 'Ring Push-Up', grip: 'high',
     ladder: ['Ring Push-Up', 'Ring Push-Up (feet elevated)', 'Ring Archer Push-Up', 'Ring Dip (partial)'],
     repRange: [6, 10], sets: 3, unit: 'reps',
-    note: 'Turn rings out at top. Elbows at 45°.'
+    note: 'Turn rings out at top. Elbows at 45°. Grip: heel of palm over ring, not fingers.'
   },
   'ring-support': {
     name: 'Ring Support Hold', grip: 'high',
     ladder: ['Ring Support Hold', 'Ring Support (turned out)', 'Ring L-Sit Support', 'Ring Support + Slow Turn'],
     repRange: [15, 30], sets: 3, unit: 'sec',
-    note: 'Locked arms, rings turned out. Breathe.'
+    note: 'Locked arms, rings turned out. Breathe. Grip: heel of palm over ring, not fingers.'
   },
   'ring-curl': {
     name: 'Ring Bicep Curl', grip: 'high',
     ladder: ['Ring Curl (steep angle)', 'Ring Curl (moderate)', 'Ring Curl (low angle)', 'Ring Curl (feet elevated)'],
     repRange: [8, 12], sets: 2, unit: 'reps',
-    note: 'Slow eccentric, strict body line.'
+    note: 'Slow eccentric, strict body line. Grip: heel of palm over ring, not fingers.'
   },
-  'scap-pullup': {
-    name: 'Scap Pull-Up', grip: 'high',
-    ladder: ['Dead Hang Scap Pull', 'Scap Pull-Up', 'Scap Pull + Hold', 'Scap Pull + Slow Neg'],
-    repRange: [5, 8], sets: 2, unit: 'reps',
-    note: 'Engage scaps only. No arm bend.'
+  'ring-pullup': {
+    name: 'Ring Pull-Up', grip: 'high',
+    ladder: ['Ring Negative Pull-Up (5s)', 'Ring Pull-Up (band assist)', 'Ring Pull-Up', 'Ring L-Sit Pull-Up'],
+    repRange: [3, 6], sets: 3, unit: 'reps',
+    note: 'Rings allow natural wrist rotation — use it. Start from dead hang, pull to chest, slow negative. Grip: heel of palm over ring.',
+    travelAlt: 'Same — rings are portable.'
   },
 
   // === U2 Exercises (Parallette/DB) ===
@@ -470,11 +477,12 @@ const EXERCISE_LIBRARY = {
     repRange: [5, 10], sets: 3, unit: 'reps',
     note: 'Hollow body throughout. Don\'t collapse lower back.'
   },
-  'ring-tricep': {
-    name: 'Ring Tricep Extension', grip: 'low',
-    ladder: ['Ring Tricep Ext (steep)', 'Ring Tricep Ext (moderate)', 'Ring Tricep Ext (low angle)', 'Ring Tricep Ext + Pause'],
-    repRange: [8, 12], sets: 2, unit: 'reps',
-    note: 'Elbows tucked. Adjust angle for load.'
+  'pike-pushup': {
+    name: 'Pike Push-Up', grip: 'low',
+    ladder: ['Pike Push-Up', 'Pike Push-Up (elevated feet)', 'Parallette Pike Push-Up (deficit)', 'Wall HSPU Negative (5s)'],
+    repRange: [5, 8], sets: 3, unit: 'reps',
+    note: 'Overhead pressing pattern. Head passes between hands. 8ft ceiling is fine for parallette pike.',
+    travelAlt: 'Pike push-up on floor — no equipment needed.'
   },
 
   // === L1 Exercises (Hinge-primary) ===
@@ -490,17 +498,26 @@ const EXERCISE_LIBRARY = {
     repRange: [8, 12], sets: 3, unit: 'reps',
     note: 'Drive through heels. Squeeze at top.'
   },
-  'bird-dog': {
-    name: 'Bird-Dog', grip: 'none',
-    ladder: ['Bird-Dog', 'Bird-Dog (3s hold)', 'Bird-Dog (5s hold)', 'Bird-Dog (band resist)'],
-    repRange: [8, 12], sets: 3, unit: 'reps/side',
-    note: 'Slow, controlled. Pause at full extension.'
+  'single-leg-rdl': {
+    name: 'Single-Leg RDL', grip: 'none',
+    ladder: ['BW Single-Leg RDL', 'DB Single-Leg RDL', 'DB SL RDL (slow ecc)', 'DB SL RDL (deficit)'],
+    repRange: [6, 10], sets: 3, unit: 'reps/side',
+    note: 'Hinge at hip, not back. Light touch on wall for balance if needed. 25lb DB in opposite hand.',
+    travelAlt: 'BW single-leg RDL — no equipment needed.'
   },
   'jump-rope': {
     name: 'Jump Rope', grip: 'none',
     ladder: ['Jump Rope 20s on/off', 'Jump Rope 30s on/off', 'Jump Rope 40s on/off', 'Jump Rope 30s on/15s off'],
     repRange: [4, 6], sets: 1, unit: 'rounds',
-    note: 'Stay light on feet. Sub hill sprints outdoors.'
+    note: 'Stay light on feet. Sub hill sprints outdoors.',
+    travelAlt: 'Hill sprints or burpees.'
+  },
+  'hanging-knee-raise': {
+    name: 'Hanging Knee Raise', grip: 'none',
+    ladder: ['Hanging Tuck Knee Raise', 'Hanging Knee Raise', 'Hanging Knee Raise (slow)', 'Hanging Leg Raise'],
+    repRange: [6, 12], sets: 3, unit: 'reps',
+    note: 'From ring hang. Controlled negative — no swinging. Decompresses spine after hinge work. Grip: heel of palm over ring.',
+    travelAlt: 'Same — rings are portable.'
   },
 
   // === L2 Exercises (Squat-primary) ===
@@ -515,6 +532,13 @@ const EXERCISE_LIBRARY = {
     ladder: ['Reverse Lunge', 'Step-Through Lunge', 'Step-Through + Balance Hold', 'Step-Through + Hop'],
     repRange: [6, 10], sets: 3, unit: 'reps/side',
     note: 'Balance pause at top of each rep.'
+  },
+  'cossack-squat': {
+    name: 'Cossack Squat', grip: 'none',
+    ladder: ['Supported Cossack Squat', 'Cossack Squat', 'Cossack Squat (slow tempo)', 'Weighted Cossack Squat'],
+    repRange: [5, 8], sets: 3, unit: 'reps/side',
+    note: 'Lateral plane movement. Heel stays planted. Go only as deep as you can control. Builds hip mobility + lateral stability.',
+    travelAlt: 'BW Cossack squat — no equipment needed.'
   },
   'calf-raise': {
     name: 'Calf Raises', grip: 'none',
@@ -536,7 +560,8 @@ const EXERCISE_LIBRARY = {
   'hip-car': { name: 'Hip CARs', grip: 'none', ladder: ['Hip CARs'], repRange: [3,5], sets: 2, unit: 'reps/side', note: 'Controlled, biggest circles possible.', isMobility: true },
   'deep-squat': { name: 'Deep Squat Hold', grip: 'none', ladder: ['Deep Squat Hold'], repRange: [30,60], sets: 2, unit: 'sec', note: 'Support heels if needed. Breathe deep.', isMobility: true },
   'couch-stretch': { name: 'Couch Stretch', grip: 'none', ladder: ['Couch Stretch'], repRange: [30,45], sets: 2, unit: 'sec/side', note: 'Keep core engaged. Don\'t arch low back.', isMobility: true },
-  'skin-the-cat': { name: 'German Hang / Skin the Cat', grip: 'high', ladder: ['German Hang Hold', 'Slow Skin the Cat'], repRange: [3,5], sets: 2, unit: 'reps', note: 'Shoulder mobility. Controlled throughout.', isMobility: true },
+  'skin-the-cat': { name: 'German Hang / Skin the Cat', grip: 'high', ladder: ['German Hang Hold', 'Slow Skin the Cat'], repRange: [3,5], sets: 2, unit: 'reps', note: 'Shoulder mobility. Controlled throughout. Grip: heel of palm over ring.', isMobility: true },
+  'ext-rotation': { name: 'External Rotation', grip: 'none', ladder: ['Side-Lying External Rotation'], repRange: [8,12], sets: 2, unit: 'reps/side', note: 'Side-lying, elbow at 90°. Slow, controlled. Pause at end range. Extra attention on RIGHT side — slow tempo, full range. Key for shoulder health & impingement prevention.', isMobility: true },
 };
 
 // Session templates: mobility → anchor → builders (pair) → finisher
@@ -546,10 +571,10 @@ const SESSION_TEMPLATES = {
     fullName: 'U1 — Ring-Dominant Upper',
     grip: 'high',
     blocks: [
-      { type: 'mobility', label: 'Mobility Primer', exercises: ['wrist-prep', 'shoulder-dislocate', 'skin-the-cat'] },
+      { type: 'mobility', label: 'Mobility Primer', exercises: ['wrist-prep', 'shoulder-dislocate', 'ext-rotation', 'skin-the-cat'] },
       { type: 'anchor', label: 'Anchor', exercises: ['ring-row'] },
-      { type: 'builder', label: 'Builders', exercises: ['ring-pushup', 'ring-support'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['ring-curl', 'scap-pullup'] },
+      { type: 'builder', label: 'Builders', exercises: ['ring-pullup', 'ring-pushup'] },
+      { type: 'finisher', label: 'Finisher', exercises: ['ring-support', 'ring-curl'] },
     ]
   },
   U2: {
@@ -557,10 +582,10 @@ const SESSION_TEMPLATES = {
     fullName: 'U2 — Parallette & DB Upper',
     grip: 'low',
     blocks: [
-      { type: 'mobility', label: 'Mobility Primer', exercises: ['wrist-prep', 'thoracic-ext'] },
+      { type: 'mobility', label: 'Mobility Primer', exercises: ['wrist-prep', 'thoracic-ext', 'ext-rotation'] },
       { type: 'anchor', label: 'Anchor', exercises: ['para-pushup'] },
-      { type: 'builder', label: 'Builders', exercises: ['db-press', 'ring-face-pull'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['ab-wheel', 'ring-tricep'] },
+      { type: 'builder', label: 'Builders', exercises: ['pike-pushup', 'db-press'] },
+      { type: 'finisher', label: 'Finisher', exercises: ['ring-face-pull', 'ab-wheel'] },
     ]
   },
   L1: {
@@ -570,8 +595,8 @@ const SESSION_TEMPLATES = {
     blocks: [
       { type: 'mobility', label: 'Mobility Primer', exercises: ['hip-car', 'deep-squat'] },
       { type: 'anchor', label: 'Anchor', exercises: ['jefferson-curl'] },
-      { type: 'builder', label: 'Builders', exercises: ['glute-bridge', 'bird-dog'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['jump-rope'] },
+      { type: 'builder', label: 'Builders', exercises: ['single-leg-rdl', 'glute-bridge'] },
+      { type: 'finisher', label: 'Finisher', exercises: ['jump-rope', 'hanging-knee-raise'] },
     ]
   },
   L2: {
@@ -581,8 +606,8 @@ const SESSION_TEMPLATES = {
     blocks: [
       { type: 'mobility', label: 'Mobility Primer', exercises: ['couch-stretch', 'hip-car'] },
       { type: 'anchor', label: 'Anchor', exercises: ['split-squat'] },
-      { type: 'builder', label: 'Builders', exercises: ['step-lunge', 'calf-raise'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['hollow-body'] },
+      { type: 'builder', label: 'Builders', exercises: ['step-lunge', 'cossack-squat'] },
+      { type: 'finisher', label: 'Finisher', exercises: ['calf-raise', 'hollow-body'] },
     ]
   }
 };
@@ -667,7 +692,25 @@ async function syncToSheet() {
             variation: varName,
             sets: reps,
             hit: hit,
-            duration: entry.duration || 0
+            duration: entry.duration || 0,
+            feel: entry.feel || '',
+            notes: entry.notes || ''
+          });
+        });
+      }
+      if (entry.skipped) {
+        entry.skipped.forEach(exId => {
+          const ex = EXERCISE_LIBRARY[exId];
+          rows.push({
+            date: entry.date,
+            session: entry.sessionType,
+            exercise: ex ? ex.name : exId,
+            variation: 'SKIPPED',
+            sets: [],
+            hit: false,
+            duration: entry.duration || 0,
+            feel: entry.feel || '',
+            notes: entry.notes || ''
           });
         });
       }
@@ -982,6 +1025,8 @@ function renderHome() {
       <div class="streak-row">${streakHtml}</div>
     </div>
     ${state.log.length > 0 ? renderLastSession(state) : ''}
+    ${renderSessionPreview(nextType)}
+    ${renderRotationLookahead(state.rotationIndex)}
   `;
 }
 
@@ -994,8 +1039,40 @@ function renderLastSession(state) {
     <div class="card">
       <div style="font-size:13px;color:var(--text2);">Last Session</div>
       <div style="font-size:15px;font-weight:600;margin:4px 0;">${SESSION_TEMPLATES[last.sessionType]?.name || last.sessionType}</div>
-      <div style="font-size:12px;color:var(--text2);">${last.date} &middot; ${hitCount}/${totalEx} HITs</div>
+      <div style="font-size:12px;color:var(--text2);">${last.date} &middot; ${hitCount}/${totalEx} HITs${last.feel ? ' &middot; ' + last.feel : ''}</div>
     </div>`;
+}
+
+function renderSessionPreview(sessionType) {
+  const template = SESSION_TEMPLATES[sessionType];
+  let html = '<div class="card"><div style="font-size:13px;color:var(--text2);margin-bottom:10px;">Session Preview</div>';
+  template.blocks.forEach(block => {
+    html += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:10px 0 4px;${block === template.blocks[0] ? 'margin-top:0;' : ''}">${block.label}</div>`;
+    block.exercises.forEach(exId => {
+      const ex = EXERCISE_LIBRARY[exId];
+      const isMob = ex.isMobility;
+      const varName = isMob ? ex.name : getVariationName(exId);
+      const detail = isMob ? '' : ` <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>`;
+      html += `<div style="font-size:13px;padding:3px 0;">${varName}${detail}</div>`;
+    });
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderRotationLookahead(currentIndex) {
+  let html = '<div class="card"><div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Up Next</div><div style="display:flex;gap:8px;">';
+  for (let i = 1; i <= 3; i++) {
+    const idx = (currentIndex + i) % 4;
+    const type = ROTATION[idx];
+    const t = SESSION_TEMPLATES[type];
+    html += `<div style="flex:1;background:var(--surface2);border-radius:8px;padding:8px;text-align:center;">
+      <span class="badge badge-${type.toLowerCase()}" style="font-size:10px;">${type}</span>
+      <div style="font-size:11px;color:var(--text2);margin-top:4px;">${t.name}</div>
+    </div>`;
+  }
+  html += '</div></div>';
+  return html;
 }
 
 function getAllSessionExercises() {
@@ -1031,6 +1108,8 @@ function startSession(type) {
     type,
     template,
     reps: {},
+    skipped: {},
+    feel: null,
     startTime: Date.now()
   };
 
@@ -1046,8 +1125,27 @@ function startSession(type) {
   const gripColor = template.grip === 'high' ? 'var(--grip-high)' : template.grip === 'low' ? 'var(--grip-low)' : 'var(--grip-none)';
   document.getElementById('session-grip').innerHTML = `<span class="grip-dot" style="background:${gripColor}"></span>`;
 
+  // Reset feel buttons and notes
+  document.querySelectorAll('.feel-btn').forEach(b => {
+    b.style.borderColor = 'var(--border)';
+    b.style.color = 'var(--text2)';
+    b.style.background = 'var(--surface2)';
+  });
+  const notesEl = document.getElementById('session-notes');
+  if (notesEl) notesEl.value = '';
+
   renderSessionContent();
   showScreen('session');
+}
+
+function setFeel(feel) {
+  activeSession.feel = feel;
+  document.querySelectorAll('.feel-btn').forEach(b => {
+    const isActive = b.dataset.feel === feel;
+    b.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
+    b.style.color = isActive ? 'var(--accent)' : 'var(--text2)';
+    b.style.background = isActive ? 'var(--accent-dim)' : 'var(--surface2)';
+  });
 }
 
 function renderSessionContent() {
@@ -1063,9 +1161,10 @@ function renderSessionContent() {
       const isMob = ex.isMobility;
       const reps = activeSession.reps[exId];
       const topRange = ex.repRange[1];
+      const isSkipped = activeSession.skipped && activeSession.skipped[exId];
 
       let setsHtml = '';
-      if (!isMob || ex.sets > 1) {
+      if (!isSkipped && (!isMob || ex.sets > 1)) {
         const setInputs = [];
         for (let s = 0; s < ex.sets; s++) {
           const val = reps[s] || '';
@@ -1087,21 +1186,41 @@ function renderSessionContent() {
             ${setInputs.join('')}
             <div class="target-label">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit}</div>
           </div>`;
-      } else {
+      } else if (!isSkipped) {
         setsHtml = `<div style="font-size:12px;color:var(--text2);">${ex.repRange[0] === 1 && ex.unit === 'min' ? '2-3 min' : ex.repRange[0]+'-'+ex.repRange[1]+' '+ex.unit}</div>`;
       }
 
+      const skipBtn = !isMob && !isSkipped ? `<button style="background:none;border:none;color:var(--text3);font-size:11px;padding:4px 0;cursor:pointer;font-family:var(--font);" onclick="skipExercise('${exId}')">Skip</button>` : '';
+      const unskipBtn = isSkipped ? `<button style="background:none;border:none;color:var(--accent);font-size:11px;padding:4px 0;cursor:pointer;font-family:var(--font);" onclick="unskipExercise('${exId}')">Undo skip</button>` : '';
+
       html += `
-        <div class="exercise-card">
-          <div class="exercise-name">${isMob ? ex.name : varName}</div>
-          ${!isMob ? `<div class="exercise-detail">${ex.name} progression</div>` : ''}
-          ${setsHtml}
+        <div class="exercise-card" style="${isSkipped ? 'opacity:0.4;' : ''}">
+          <div style="display:flex;justify-content:space-between;align-items:start;">
+            <div>
+              <div class="exercise-name">${isMob ? ex.name : varName}</div>
+              ${!isMob ? `<div class="exercise-detail">${ex.name} progression</div>` : ''}
+            </div>
+            ${skipBtn}${unskipBtn}
+          </div>
+          ${isSkipped ? '<div style="font-size:12px;color:var(--text3);margin:4px 0;">Skipped</div>' : setsHtml}
           <div class="exercise-note">${ex.note}</div>
         </div>`;
     });
   });
 
   document.getElementById('session-content').innerHTML = html;
+}
+
+function skipExercise(exId) {
+  if (!activeSession.skipped) activeSession.skipped = {};
+  activeSession.skipped[exId] = true;
+  activeSession.reps[exId] = activeSession.reps[exId].map(() => 0);
+  renderSessionContent();
+}
+
+function unskipExercise(exId) {
+  if (activeSession.skipped) delete activeSession.skipped[exId];
+  renderSessionContent();
 }
 
 function logRep(input) {
@@ -1172,24 +1291,37 @@ function completeSession() {
   const state = getState();
   const today = new Date().toISOString().split('T')[0];
 
-  // Build exercise data (non-mobility only)
+  // Build exercise data (non-mobility only, non-skipped)
   const exercises = {};
+  const skipped = [];
   Object.entries(activeSession.reps).forEach(([exId, reps]) => {
     if (!EXERCISE_LIBRARY[exId].isMobility) {
-      exercises[exId] = reps;
+      if (activeSession.skipped && activeSession.skipped[exId]) {
+        skipped.push(exId);
+      } else {
+        exercises[exId] = reps;
+      }
     }
   });
+
+  // Capture notes and feel
+  const notesEl = document.getElementById('session-notes');
+  const notes = notesEl ? notesEl.value.trim() : '';
+  const feel = activeSession.feel || null;
 
   // Log entry
   const entry = {
     date: today,
     sessionType: activeSession.type,
     exercises,
+    skipped: skipped.length > 0 ? skipped : undefined,
+    feel,
+    notes: notes || undefined,
     duration: Math.round((Date.now() - activeSession.startTime) / 60000)
   };
   state.log.push(entry);
 
-  // Update promotion tracking
+  // Update promotion tracking (only for non-skipped)
   Object.entries(exercises).forEach(([exId, reps]) => {
     const hit = checkHit(exId, reps);
     updatePromotionTracking(exId, hit);
@@ -1246,15 +1378,26 @@ function renderHistory() {
         </div>`;
       });
     }
+    if (entry.skipped && entry.skipped.length > 0) {
+      entry.skipped.forEach(exId => {
+        const ex = EXERCISE_LIBRARY[exId];
+        detailHtml += `<div class="history-exercise" style="color:var(--text3);">&#8212; ${ex ? ex.name : exId}: <span>skipped</span></div>`;
+      });
+    }
+    if (entry.notes) {
+      detailHtml += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">"${entry.notes}"</div>`;
+    }
+
+    const feelLabel = entry.feel ? ` &middot; ${entry.feel}` : '';
 
     return `
       <div class="history-item" onclick="this.classList.toggle('expanded')">
-        <div class="history-date">${formatDate(entry.date)}${entry.duration ? ' &middot; ' + entry.duration + ' min' : ''}</div>
+        <div class="history-date">${formatDate(entry.date)}${entry.duration ? ' &middot; ' + entry.duration + ' min' : ''}${feelLabel}</div>
         <div class="history-type">
           <span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span>
           ${template ? template.name : ''}
         </div>
-        <div class="history-hits">${hitCount}/${totalEx} HITs</div>
+        <div class="history-hits">${hitCount}/${totalEx} HITs${entry.skipped && entry.skipped.length > 0 ? ' &middot; ' + entry.skipped.length + ' skipped' : ''}</div>
         <div class="history-detail">${detailHtml}</div>
       </div>`;
   }).join('');
@@ -1372,10 +1515,10 @@ function renderProgress() {
 
 function renderReference() {
   const categories = [
-    { label: 'U1 — Ring Upper', ids: ['ring-row', 'ring-pushup', 'ring-support', 'ring-curl', 'scap-pullup'] },
-    { label: 'U2 — Parallette/DB', ids: ['para-pushup', 'db-press', 'ring-face-pull', 'ab-wheel', 'ring-tricep'] },
-    { label: 'L1 — Hinge Lower', ids: ['jefferson-curl', 'glute-bridge', 'bird-dog', 'jump-rope'] },
-    { label: 'L2 — Squat Lower', ids: ['split-squat', 'step-lunge', 'calf-raise', 'hollow-body'] },
+    { label: 'U1 — Ring Upper', ids: ['ring-row', 'ring-pullup', 'ring-pushup', 'ring-support', 'ring-curl'] },
+    { label: 'U2 — Parallette/DB', ids: ['para-pushup', 'pike-pushup', 'db-press', 'ring-face-pull', 'ab-wheel'] },
+    { label: 'L1 — Hinge Lower', ids: ['jefferson-curl', 'single-leg-rdl', 'glute-bridge', 'jump-rope', 'hanging-knee-raise'] },
+    { label: 'L2 — Squat Lower', ids: ['split-squat', 'step-lunge', 'cossack-squat', 'calf-raise', 'hollow-body'] },
   ];
 
   let html = '';
@@ -1484,7 +1627,7 @@ function renderSettings() {
       <div style="font-size:13px;color:var(--text3);">
         <strong>Data</strong>: ${state.log.length} sessions logged<br>
         <strong>Storage</strong>: ~${(JSON.stringify(state).length / 1024).toFixed(1)} KB used<br>
-        <strong>Version</strong>: Train v2.2
+        <strong>Version</strong>: Train v3.0
       </div>
     </div>
     <div class="card" style="margin-top:12px;">
@@ -1520,14 +1663,14 @@ function copySyncScript() {
   var logSheet = ss.getSheetByName('Log');
   if (!logSheet) {
     logSheet = ss.insertSheet('Log');
-    logSheet.appendRow(['Date','Session','Exercise','Variation','S1','S2','S3','HIT','Duration (min)']);
+    logSheet.appendRow(['Date','Session','Exercise','Variation','S1','S2','S3','HIT','Duration (min)','Feel','Notes']);
     logSheet.getRange('1:1').setFontWeight('bold');
     logSheet.setFrozenRows(1);
   }
 
   // Clear and rewrite all log rows (simple, no drift)
   var lastRow = logSheet.getLastRow();
-  if (lastRow > 1) logSheet.getRange(2, 1, lastRow - 1, 9).clearContent();
+  if (lastRow > 1) logSheet.getRange(2, 1, lastRow - 1, 11).clearContent();
 
   var rows = payload.logRows || [];
   if (rows.length > 0) {
@@ -1542,10 +1685,12 @@ function copySyncScript() {
         sets[1] || '',
         sets[2] || '',
         r.hit ? 'HIT' : '',
-        r.duration || ''
+        r.duration || '',
+        r.feel || '',
+        r.notes || ''
       ];
     });
-    logSheet.getRange(2, 1, data.length, 9).setValues(data);
+    logSheet.getRange(2, 1, data.length, 11).setValues(data);
   }
 
   return ContentService.createTextOutput(JSON.stringify({status:'ok'}))
