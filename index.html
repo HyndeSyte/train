@@ -8,83 +8,78 @@
 <style>
 :root {
   --bg: #0a0a0a;
-  --surface: #141414;
-  --surface2: #1e1e1e;
-  --border: #2a2a2a;
-  --text: #e8e8e8;
-  --text2: #888;
-  --text3: #555;
+  --surface: #131315;
+  --surface2: #1c1c1f;
+  --border: #262628;
+  --text: #eaeaea;
+  --text2: #8a8a8e;
+  --text3: #4a4a4e;
   --accent: #4ade80;
-  --accent-dim: #22543d;
+  --accent-dim: #1a3a28;
   --warn: #fbbf24;
   --warn-dim: #78350f;
   --hit: #4ade80;
-  --miss: #555;
   --grip-high: #ef4444;
   --grip-low: #fbbf24;
   --grip-none: #4ade80;
-  --font: 'SF Pro Text', -apple-system, system-ui, sans-serif;
+  --font: -apple-system, 'SF Pro Display', system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Menlo', monospace;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --radius: 14px;
 }
-
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
-
 html, body {
-  font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-  overscroll-behavior: none;
+  font-family: var(--font); background: var(--bg); color: var(--text);
+  height: 100vh; height: 100dvh; overflow: hidden; overscroll-behavior: none;
 }
-
 .screen { display:none; height:100vh; height:100dvh; flex-direction:column; overflow:hidden; }
 .screen.active { display:flex; }
+.scroll { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding:10px 16px; }
 
-/* Scrollable content area */
-.scroll { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding: 8px 14px; }
-
-/* Header */
+/* Header — sub-screens only */
 .header {
   display:flex; align-items:center; justify-content:space-between;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  min-height: 36px; flex-shrink:0;
+  padding:10px 16px; padding-top: calc(10px + var(--safe-top));
+  border-bottom:1px solid var(--border); min-height:40px; flex-shrink:0;
 }
-.header h1 { font-size:16px; font-weight:700; letter-spacing:-0.3px; }
+.header h1 { font-size:17px; font-weight:700; letter-spacing:-0.3px; }
 .header-btn {
-  background:none; border:none; color:var(--text2); font-size:18px;
+  background:none; border:none; color:var(--text2); font-size:16px;
   padding:4px 8px; cursor:pointer; font-family:var(--font); line-height:1;
 }
 .header-btn:active { color:var(--text); }
 
+/* Home — no header bar, content starts at safe area */
+.home-top {
+  padding:6px 16px 0; padding-top: calc(6px + var(--safe-top)); flex-shrink:0;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.home-brand { font-size:13px; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; }
+
 /* Cards */
 .card {
   background: var(--surface); border:1px solid var(--border);
-  border-radius:10px; padding:12px; margin-bottom:8px; overflow:hidden;
+  border-radius: var(--radius); padding:14px; margin-bottom:10px; overflow:hidden;
 }
 
-/* Session type badges */
+/* Badges */
 .badge {
-  display:inline-block; padding:2px 8px; border-radius:5px;
-  font-size:11px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;
+  display:inline-flex; align-items:center; padding:3px 10px; border-radius:6px;
+  font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
 }
 .badge-u1 { background:#1e3a5f; color:#60a5fa; }
 .badge-u2 { background:#3b1f5e; color:#c084fc; }
 .badge-l1 { background:#1e3b1e; color:#4ade80; }
 .badge-l2 { background:#3b351e; color:#fbbf24; }
 
-/* Grip indicator */
-.grip-dot {
-  display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:8px; vertical-align:middle;
-}
+.grip-dot { display:inline-block; width:8px; height:8px; border-radius:50%; vertical-align:middle; }
 
 /* Buttons */
 .btn {
-  display:block; width:100%; padding:11px; border:none; border-radius:10px;
-  font-family:var(--font); font-size:15px; font-weight:600;
-  cursor:pointer; text-align:center; transition: opacity 0.1s;
+  display:block; width:100%; padding:14px; border:none; border-radius:12px;
+  font-family:var(--font); font-size:16px; font-weight:700;
+  cursor:pointer; text-align:center; transition:opacity 0.1s; letter-spacing:-0.2px;
 }
 .btn:active { opacity:0.7; }
 .btn-primary { background:var(--accent); color:#0a0a0a; }
@@ -92,61 +87,59 @@ html, body {
 .btn-small { padding:10px 16px; font-size:14px; width:auto; display:inline-block; }
 .btn-danger { background:#7f1d1d; color:#fca5a5; }
 
-/* Home screen */
-.next-session-title { font-size:22px; font-weight:800; letter-spacing:-0.5px; margin:4px 0 2px; }
-.session-meta { color:var(--text2); font-size:12px; margin-bottom:8px; }
+/* Session title */
+.session-name { font-size:28px; font-weight:800; letter-spacing:-1px; line-height:1.1; margin:4px 0; }
 
-/* Streak dots */
-.streak-row { display:flex; gap:4px; margin:0; }
+/* Streak — small fixed rounded squares */
+.streak-row { display:flex; gap:5px; flex-shrink:0; }
 .streak-dot {
-  width:20px; height:20px; min-width:20px; min-height:20px; flex-shrink:0;
-  border-radius:50%; display:flex; align-items:center;
-  justify-content:center; font-size:7px; color:var(--text3); font-weight:600;
+  width:18px; height:18px; flex:0 0 18px;
+  border-radius:4px; display:flex; align-items:center;
+  justify-content:center; font-size:7px; color:var(--text3); font-weight:700;
 }
-.streak-dot.done { background:var(--accent-dim); color:var(--accent); }
-.streak-dot.empty { background:var(--surface2); border:1px solid var(--border); }
-.streak-dot.today { border:2px solid var(--accent); }
+.streak-dot.done { background:var(--accent); color:#0a0a0a; }
+.streak-dot.empty { background:var(--surface2); }
+.streak-dot.today { box-shadow:0 0 0 1.5px var(--accent); }
 
 /* Nav */
 .nav {
   display:flex; border-top:1px solid var(--border); flex-shrink:0;
-  background:var(--surface);
+  padding-bottom: var(--safe-bottom); background:var(--surface);
 }
 .nav-btn {
-  flex:1; padding:6px 0 4px; background:none; border:none;
-  color:var(--text3); font-size:9px; font-family:var(--font);
+  flex:1; padding:8px 0 6px; background:none; border:none;
+  color:var(--text3); font-size:9px; font-family:var(--font); font-weight:600;
   cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px;
+  letter-spacing:0.3px;
 }
 .nav-btn.active { color:var(--accent); }
-.nav-icon { font-size:14px; }
+.nav-icon { font-size:16px; line-height:1; }
 
 /* Session screen */
 .block-label {
   font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
-  color:var(--text3); margin:20px 0 8px; padding-top:8px;
-  border-top:1px solid var(--border);
+  color:var(--text3); margin:20px 0 8px; padding-top:8px; border-top:1px solid var(--border);
 }
 .block-label:first-child { border-top:none; margin-top:8px; }
-
 .exercise-card {
-  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
   padding:14px; margin-bottom:8px;
 }
-.exercise-name { font-size:15px; font-weight:600; margin-bottom:2px; }
+.exercise-name { font-size:16px; font-weight:600; margin-bottom:2px; }
 .exercise-detail { font-size:12px; color:var(--text2); margin-bottom:10px; }
-.exercise-note { font-size:11px; color:var(--text3); font-style:italic; margin-top:8px; }
+.exercise-note { font-size:11px; color:var(--text3); font-style:italic; margin-top:8px; line-height:1.4; }
 
 /* Set logging */
-.sets-row { display:flex; gap:6px; align-items:center; flex-wrap: wrap; }
+.sets-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 .set-input {
-  width:48px; height:44px; background:var(--surface2); border:1px solid var(--border);
-  border-radius:8px; color:var(--text); font-family:var(--font-mono);
-  font-size:18px; text-align:center; -webkit-appearance:none;
+  width:50px; height:46px; background:var(--surface2); border:1.5px solid var(--border);
+  border-radius:10px; color:var(--text); font-family:var(--font-mono);
+  font-size:20px; text-align:center; -webkit-appearance:none;
 }
 .set-input:focus { border-color:var(--accent); outline:none; }
 .set-input.hit { border-color:var(--hit); background:var(--accent-dim); }
-.set-label { font-size:10px; color:var(--text3); text-align:center; width:48px; }
-.target-label { font-size:12px; color:var(--text2); margin-left:auto; white-space:nowrap; }
+.set-label { font-size:10px; color:var(--text3); text-align:center; width:50px; }
+.target-label { font-size:13px; color:var(--text2); margin-left:auto; white-space:nowrap; }
 
 /* Rest timer */
 .rest-timer {
@@ -155,21 +148,18 @@ html, body {
   padding:12px 16px; display:none; align-items:center; gap:12px;
 }
 .rest-timer.visible { display:flex; }
-.rest-time {
-  font-family:var(--font-mono); font-size:28px; font-weight:700; min-width:70px;
-}
+.rest-time { font-family:var(--font-mono); font-size:28px; font-weight:700; min-width:70px; }
 .rest-time.done { color:var(--accent); }
 .rest-label { font-size:12px; color:var(--text2); flex:1; }
 .rest-dismiss {
   background:var(--surface2); border:1px solid var(--border); color:var(--text2);
-  padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer;
-  font-family:var(--font);
+  padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer; font-family:var(--font);
 }
 
-/* Promotion prompt */
+/* Promotion */
 .promo-card {
   background:var(--accent-dim); border:1px solid var(--accent);
-  border-radius:10px; padding:14px; margin-bottom:8px;
+  border-radius:var(--radius); padding:14px; margin-bottom:10px;
 }
 .promo-card h3 { color:var(--accent); font-size:14px; margin-bottom:4px; }
 .promo-card p { font-size:13px; color:var(--text2); margin-bottom:10px; }
@@ -178,7 +168,7 @@ html, body {
 /* History */
 .history-item {
   background:var(--surface); border:1px solid var(--border);
-  border-radius:10px; padding:14px; margin-bottom:8px; cursor:pointer;
+  border-radius:12px; padding:14px; margin-bottom:8px; cursor:pointer;
 }
 .history-date { font-size:13px; color:var(--text2); }
 .history-type { font-size:16px; font-weight:600; margin:4px 0; }
@@ -190,79 +180,48 @@ html, body {
 
 /* Progress */
 .progress-section { margin-bottom:24px; }
-.progress-section h2 { font-size:15px; font-weight:700; margin-bottom:12px; }
+.progress-section h2 { font-size:16px; font-weight:700; margin-bottom:12px; }
 .bar-chart { display:flex; align-items:flex-end; gap:4px; height:100px; }
 .bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
-.bar {
-  width:100%; background:var(--accent-dim); border-radius:4px 4px 0 0; min-height:2px;
-  transition: height 0.3s;
-}
+.bar { width:100%; background:var(--accent-dim); border-radius:4px 4px 0 0; min-height:2px; transition:height 0.3s; }
 .bar-label { font-size:9px; color:var(--text3); }
 .bar-value { font-size:10px; color:var(--text2); }
-
 .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.stat-box {
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:10px; padding:14px; text-align:center;
-}
+.stat-box { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; text-align:center; }
 .stat-num { font-size:28px; font-weight:800; font-family:var(--font-mono); }
 .stat-label { font-size:11px; color:var(--text2); margin-top:4px; }
-
-/* Promotion log */
-.promo-log-item {
-  display:flex; justify-content:space-between; align-items:center;
-  padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;
-}
+.promo-log-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
 .promo-log-item:last-child { border-bottom:none; }
 .promo-arrow { color:var(--accent); margin:0 6px; }
 
 /* Settings */
-.setting-row {
-  display:flex; justify-content:space-between; align-items:center;
-  padding:14px 0; border-bottom:1px solid var(--border);
-}
+.setting-row { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--border); }
 .setting-row:last-child { border-bottom:none; }
 
-/* Exercise reference */
+/* Reference */
 .ref-exercise { padding:10px 0; border-bottom:1px solid var(--border); }
 .ref-exercise:last-child { border-bottom:none; }
-.ref-name { font-size:14px; font-weight:600; }
+.ref-name { font-size:15px; font-weight:600; }
 .ref-ladder { font-size:12px; color:var(--text2); margin-top:4px; }
 .ref-current { color:var(--accent); font-weight:600; }
 
-/* Empty state */
+/* Empty / Sync / Modal */
 .empty { text-align:center; padding:40px 20px; color:var(--text3); }
 .empty-icon { font-size:40px; margin-bottom:12px; }
-
-/* Sync indicator */
-.sync-dot {
-  width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle;
-}
+.sync-dot { width:6px; height:6px; border-radius:50%; display:inline-block; vertical-align:middle; }
 .sync-dot.synced { background:var(--accent); }
-.sync-dot.syncing { background:var(--warn); animation: pulse 1s infinite; }
+.sync-dot.syncing { background:var(--warn); animation:pulse 1s infinite; }
 .sync-dot.error { background:var(--grip-high); }
 .sync-dot.none { background:var(--text3); }
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
-.sync-status { font-size:11px; color:var(--text3); display:flex; align-items:center; }
-.sync-url-input {
-  width:100%; background:var(--surface2); border:1px solid var(--border);
-  border-radius:8px; color:var(--text); font-family:var(--font-mono);
-  font-size:12px; padding:10px; margin:8px 0; -webkit-appearance:none;
-}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.sync-status { font-size:10px; color:var(--text3); display:flex; align-items:center; gap:4px; }
+.sync-url-input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:12px; padding:10px; margin:8px 0; -webkit-appearance:none; }
 .sync-url-input:focus { border-color:var(--accent); outline:none; }
 .setup-steps { font-size:12px; color:var(--text2); line-height:1.8; }
 .setup-steps code { background:var(--surface2); padding:2px 6px; border-radius:4px; font-family:var(--font-mono); font-size:11px; }
-
-/* Confirm modal */
-.modal-overlay {
-  position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200;
-  display:none; align-items:flex-end; justify-content:center;
-}
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; display:none; align-items:flex-end; justify-content:center; }
 .modal-overlay.visible { display:flex; }
-.modal {
-  background:var(--surface); border-radius:16px 16px 0 0;
-  padding:24px 16px; width:100%; max-width:500px;
-}
+.modal { background:var(--surface); border-radius:16px 16px 0 0; padding:24px 16px; width:100%; max-width:500px; }
 .modal h3 { font-size:17px; margin-bottom:8px; }
 .modal p { font-size:14px; color:var(--text2); margin-bottom:16px; }
 .modal-actions { display:flex; gap:8px; }
@@ -273,8 +232,8 @@ html, body {
 
 <!-- ==================== HOME SCREEN ==================== -->
 <div id="screen-home" class="screen active">
-  <div class="header">
-    <h1>Train</h1>
+  <div class="home-top">
+    <span class="home-brand">Train</span>
     <span id="sync-indicator" class="sync-status"></span>
   </div>
   <div class="scroll">
@@ -974,10 +933,10 @@ function showScreen(name) {
 
   // Update nav
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  const navMap = { home:'today', history:'history', progress:'progress', reference:'exercises', settings:'settings' };
+  const match = navMap[name] || name;
   document.querySelectorAll('.nav-btn').forEach(b => {
-    if (b.textContent.trim().toLowerCase().includes(
-      name === 'reference' ? 'exercises' : name
-    )) b.classList.add('active');
+    if (b.textContent.trim().toLowerCase().includes(match)) b.classList.add('active');
   });
 
   // Render
@@ -1032,16 +991,18 @@ function renderHome() {
   document.getElementById('home-content').innerHTML = `
     ${promoHtml}
     <div class="card">
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-        <span class="badge badge-${nextType.toLowerCase()}">${nextType}</span>
-        <span class="grip-dot" style="background:${gripColor}"></span>
-        <span style="font-size:10px;color:var(--text3);">${template.grip} grip</span>
-        <span style="font-size:10px;color:var(--text3);margin-left:auto;">~${estimate} min &middot; ${template.blocks.reduce((a,b) => a + b.exercises.length, 0)} exercises</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span class="badge badge-${nextType.toLowerCase()}">${nextType}</span>
+          <span class="grip-dot" style="background:${gripColor}"></span>
+          <span style="font-size:11px;color:var(--text3);">${template.grip}</span>
+        </div>
+        <span style="font-size:11px;color:var(--text3);">~${estimate} min</span>
       </div>
-      <div class="next-session-title">${template.name}</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;overflow:hidden;">
+      <div class="session-name">${template.name}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px;">
         <div class="streak-row">${streakHtml}</div>
-        <div style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0;">${sessionsThisWeek}/7</div>
+        <span style="font-size:11px;color:var(--text3);font-weight:600;">${sessionsThisWeek}/7</span>
       </div>
       <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Session</button>
     </div>
@@ -1066,19 +1027,19 @@ function renderSessionPreview(sessionType) {
   const template = SESSION_TEMPLATES[sessionType];
   let inner = '';
   template.blocks.forEach(block => {
-    inner += `<div style="font-size:9px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:6px 0 2px;">${block.label}</div>`;
+    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${block.label}</div>`;
     block.exercises.forEach(exId => {
       const ex = EXERCISE_LIBRARY[exId];
       const isMob = ex.isMobility;
       const varName = isMob ? ex.name : getVariationName(exId);
       const detail = isMob ? '' : ` <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>`;
-      inner += `<div style="font-size:12px;padding:1px 0;">${varName}${detail}</div>`;
+      inner += `<div style="font-size:14px;padding:2px 0;line-height:1.4;">${varName}${detail}</div>`;
     });
   });
-  return `<div class="card" style="padding:10px 12px;">
+  return `<div class="card">
     <details open>
-      <summary style="font-size:12px;color:var(--text2);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
-        Session Preview <span style="font-size:10px;color:var(--text3);">&#9662;</span>
+      <summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;font-weight:600;">
+        Session Preview <span style="font-size:11px;color:var(--text3);font-weight:400;">&#9662;</span>
       </summary>
       <div style="margin-top:6px;">${inner}</div>
     </details>
