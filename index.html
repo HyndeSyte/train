@@ -38,23 +38,25 @@ html, body {
   font-family: var(--font);
   background: var(--bg);
   color: var(--text);
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
 }
 
-body { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
+body { }
 
-.screen { display:none; height:100%; flex-direction:column; overflow:hidden; }
+.screen { display:none; height:100vh; height:100dvh; flex-direction:column; overflow:hidden; }
 .screen.active { display:flex; }
 
 /* Scrollable content area */
-.scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding: 16px; }
+.scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding: 12px 16px; }
 
 /* Header */
 .header {
   display:flex; align-items:center; justify-content:space-between;
-  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  padding: 12px 16px; padding-top: calc(12px + var(--safe-top));
+  border-bottom: 1px solid var(--border);
   min-height: 48px; flex-shrink:0;
 }
 .header h1 { font-size:18px; font-weight:700; letter-spacing:-0.3px; }
@@ -67,7 +69,7 @@ body { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
 /* Cards */
 .card {
   background: var(--surface); border:1px solid var(--border);
-  border-radius:12px; padding:16px; margin-bottom:12px;
+  border-radius:12px; padding:14px; margin-bottom:10px;
 }
 
 /* Session type badges */
@@ -98,14 +100,14 @@ body { padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
 .btn-danger { background:#7f1d1d; color:#fca5a5; }
 
 /* Home screen */
-.next-session-title { font-size:28px; font-weight:800; letter-spacing:-0.5px; margin:8px 0 4px; }
-.session-meta { color:var(--text2); font-size:13px; margin-bottom:16px; }
+.next-session-title { font-size:24px; font-weight:800; letter-spacing:-0.5px; margin:6px 0 2px; }
+.session-meta { color:var(--text2); font-size:13px; margin-bottom:12px; }
 
 /* Streak dots */
 .streak-row { display:flex; gap:6px; margin:12px 0; }
 .streak-dot {
-  width:32px; height:32px; border-radius:50%; display:flex; align-items:center;
-  justify-content:center; font-size:10px; color:var(--text3); font-weight:600;
+  width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; font-size:9px; color:var(--text3); font-weight:600;
 }
 .streak-dot.done { background:var(--accent-dim); color:var(--accent); }
 .streak-dot.empty { background:var(--surface2); border:1px solid var(--border); }
@@ -1021,12 +1023,12 @@ function renderHome() {
       <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Session</button>
     </div>
     <div class="card">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Last 7 days &middot; ${sessionsThisWeek} sessions</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">Last 7 days &middot; ${sessionsThisWeek} sessions</div>
       <div class="streak-row">${streakHtml}</div>
     </div>
+    ${renderRotationLookahead(state.rotationIndex)}
     ${state.log.length > 0 ? renderLastSession(state) : ''}
     ${renderSessionPreview(nextType)}
-    ${renderRotationLookahead(state.rotationIndex)}
   `;
 }
 
@@ -1045,30 +1047,37 @@ function renderLastSession(state) {
 
 function renderSessionPreview(sessionType) {
   const template = SESSION_TEMPLATES[sessionType];
-  let html = '<div class="card"><div style="font-size:13px;color:var(--text2);margin-bottom:10px;">Session Preview</div>';
+  let inner = '';
   template.blocks.forEach(block => {
-    html += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:10px 0 4px;${block === template.blocks[0] ? 'margin-top:0;' : ''}">${block.label}</div>`;
+    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${block.label}</div>`;
     block.exercises.forEach(exId => {
       const ex = EXERCISE_LIBRARY[exId];
       const isMob = ex.isMobility;
       const varName = isMob ? ex.name : getVariationName(exId);
       const detail = isMob ? '' : ` <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>`;
-      html += `<div style="font-size:13px;padding:3px 0;">${varName}${detail}</div>`;
+      inner += `<div style="font-size:13px;padding:2px 0;">${varName}${detail}</div>`;
     });
   });
-  html += '</div>';
-  return html;
+  return `<div class="card" style="padding:12px 16px;">
+    <details>
+      <summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+        Session Preview <span style="font-size:11px;color:var(--text3);">tap to expand</span>
+      </summary>
+      <div style="margin-top:8px;">${inner}</div>
+    </details>
+  </div>`;
 }
 
 function renderRotationLookahead(currentIndex) {
-  let html = '<div class="card"><div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Up Next</div><div style="display:flex;gap:8px;">';
+  let html = '<div class="card" style="padding:10px 16px;"><div style="display:flex;gap:8px;align-items:center;">';
+  html += '<div style="font-size:11px;color:var(--text3);white-space:nowrap;">Up next</div>';
   for (let i = 1; i <= 3; i++) {
     const idx = (currentIndex + i) % 4;
     const type = ROTATION[idx];
     const t = SESSION_TEMPLATES[type];
-    html += `<div style="flex:1;background:var(--surface2);border-radius:8px;padding:8px;text-align:center;">
-      <span class="badge badge-${type.toLowerCase()}" style="font-size:10px;">${type}</span>
-      <div style="font-size:11px;color:var(--text2);margin-top:4px;">${t.name}</div>
+    html += `<div style="flex:1;background:var(--surface2);border-radius:6px;padding:6px;text-align:center;">
+      <span class="badge badge-${type.toLowerCase()}" style="font-size:9px;padding:2px 6px;">${type}</span>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${t.name}</div>
     </div>`;
   }
   html += '</div></div>';
