@@ -1026,7 +1026,6 @@ function renderHome() {
       <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">Last 7 days &middot; ${sessionsThisWeek} sessions</div>
       <div class="streak-row">${streakHtml}</div>
     </div>
-    ${renderRotationLookahead(state.rotationIndex)}
     ${state.log.length > 0 ? renderLastSession(state) : ''}
     ${renderSessionPreview(nextType)}
   `;
@@ -1066,22 +1065,6 @@ function renderSessionPreview(sessionType) {
       <div style="margin-top:8px;">${inner}</div>
     </details>
   </div>`;
-}
-
-function renderRotationLookahead(currentIndex) {
-  let html = '<div class="card" style="padding:10px 16px;"><div style="display:flex;gap:8px;align-items:center;">';
-  html += '<div style="font-size:11px;color:var(--text3);white-space:nowrap;">Up next</div>';
-  for (let i = 1; i <= 3; i++) {
-    const idx = (currentIndex + i) % 4;
-    const type = ROTATION[idx];
-    const t = SESSION_TEMPLATES[type];
-    html += `<div style="flex:1;background:var(--surface2);border-radius:6px;padding:6px;text-align:center;">
-      <span class="badge badge-${type.toLowerCase()}" style="font-size:9px;padding:2px 6px;">${type}</span>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px;">${t.name}</div>
-    </div>`;
-  }
-  html += '</div></div>';
-  return html;
 }
 
 function getAllSessionExercises() {
