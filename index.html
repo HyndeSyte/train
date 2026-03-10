@@ -2,10 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Train">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#0a0a0a">
 <title>Train</title>
 <style>
@@ -28,8 +25,6 @@
   --grip-none: #4ade80;
   --font: 'SF Pro Text', -apple-system, system-ui, sans-serif;
   --font-mono: 'SF Mono', 'Menlo', monospace;
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
@@ -44,38 +39,36 @@ html, body {
   overscroll-behavior: none;
 }
 
-body { }
-
 .screen { display:none; height:100vh; height:100dvh; flex-direction:column; overflow:hidden; }
 .screen.active { display:flex; }
 
 /* Scrollable content area */
-.scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding: 12px 16px; }
+.scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding: 8px 14px; }
 
 /* Header */
 .header {
   display:flex; align-items:center; justify-content:space-between;
-  padding: 12px 16px; padding-top: calc(12px + var(--safe-top));
+  padding: 8px 16px;
   border-bottom: 1px solid var(--border);
-  min-height: 48px; flex-shrink:0;
+  min-height: 36px; flex-shrink:0;
 }
-.header h1 { font-size:18px; font-weight:700; letter-spacing:-0.3px; }
+.header h1 { font-size:16px; font-weight:700; letter-spacing:-0.3px; }
 .header-btn {
-  background:none; border:none; color:var(--text2); font-size:14px;
-  padding:8px; cursor:pointer; font-family:var(--font);
+  background:none; border:none; color:var(--text2); font-size:18px;
+  padding:4px 8px; cursor:pointer; font-family:var(--font); line-height:1;
 }
 .header-btn:active { color:var(--text); }
 
 /* Cards */
 .card {
   background: var(--surface); border:1px solid var(--border);
-  border-radius:12px; padding:14px; margin-bottom:10px;
+  border-radius:10px; padding:12px; margin-bottom:8px;
 }
 
 /* Session type badges */
 .badge {
-  display:inline-block; padding:3px 10px; border-radius:6px;
-  font-size:12px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;
+  display:inline-block; padding:2px 8px; border-radius:5px;
+  font-size:11px; font-weight:600; letter-spacing:0.5px; text-transform:uppercase;
 }
 .badge-u1 { background:#1e3a5f; color:#60a5fa; }
 .badge-u2 { background:#3b1f5e; color:#c084fc; }
@@ -89,8 +82,8 @@ body { }
 
 /* Buttons */
 .btn {
-  display:block; width:100%; padding:14px; border:none; border-radius:10px;
-  font-family:var(--font); font-size:16px; font-weight:600;
+  display:block; width:100%; padding:11px; border:none; border-radius:10px;
+  font-family:var(--font); font-size:15px; font-weight:600;
   cursor:pointer; text-align:center; transition: opacity 0.1s;
 }
 .btn:active { opacity:0.7; }
@@ -100,14 +93,15 @@ body { }
 .btn-danger { background:#7f1d1d; color:#fca5a5; }
 
 /* Home screen */
-.next-session-title { font-size:24px; font-weight:800; letter-spacing:-0.5px; margin:6px 0 2px; }
-.session-meta { color:var(--text2); font-size:13px; margin-bottom:12px; }
+.next-session-title { font-size:22px; font-weight:800; letter-spacing:-0.5px; margin:4px 0 2px; }
+.session-meta { color:var(--text2); font-size:12px; margin-bottom:8px; }
 
 /* Streak dots */
-.streak-row { display:flex; gap:6px; margin:4px 0; justify-content:center; }
+.streak-row { display:flex; gap:4px; margin:0; }
 .streak-dot {
-  width:22px; height:22px; border-radius:50%; display:flex; align-items:center;
-  justify-content:center; font-size:8px; color:var(--text3); font-weight:600;
+  width:20px; height:20px; min-width:20px; min-height:20px; flex-shrink:0;
+  border-radius:50%; display:flex; align-items:center;
+  justify-content:center; font-size:7px; color:var(--text3); font-weight:600;
 }
 .streak-dot.done { background:var(--accent-dim); color:var(--accent); }
 .streak-dot.empty { background:var(--surface2); border:1px solid var(--border); }
@@ -116,15 +110,15 @@ body { }
 /* Nav */
 .nav {
   display:flex; border-top:1px solid var(--border); flex-shrink:0;
-  padding-bottom: var(--safe-bottom); background:var(--surface);
+  background:var(--surface);
 }
 .nav-btn {
-  flex:1; padding:10px 0 8px; background:none; border:none;
-  color:var(--text3); font-size:10px; font-family:var(--font);
-  cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px;
+  flex:1; padding:6px 0 4px; background:none; border:none;
+  color:var(--text3); font-size:9px; font-family:var(--font);
+  cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px;
 }
 .nav-btn.active { color:var(--accent); }
-.nav-icon { font-size:20px; }
+.nav-icon { font-size:14px; }
 
 /* Session screen */
 .block-label {
@@ -268,7 +262,6 @@ body { }
 .modal {
   background:var(--surface); border-radius:16px 16px 0 0;
   padding:24px 16px; width:100%; max-width:500px;
-  padding-bottom: calc(16px + var(--safe-bottom));
 }
 .modal h3 { font-size:17px; margin-bottom:8px; }
 .modal p { font-size:14px; color:var(--text2); margin-bottom:16px; }
@@ -281,11 +274,8 @@ body { }
 <!-- ==================== HOME SCREEN ==================== -->
 <div id="screen-home" class="screen active">
   <div class="header">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <h1>Train</h1>
-      <span id="sync-indicator" class="sync-status"></span>
-    </div>
-    <button class="header-btn" onclick="showScreen('settings')">&#9881;</button>
+    <h1>Train</h1>
+    <span id="sync-indicator" class="sync-status"></span>
   </div>
   <div class="scroll">
     <div id="home-content"></div>
@@ -301,7 +291,10 @@ body { }
       <span class="nav-icon">&#9650;</span>Progress
     </button>
     <button class="nav-btn" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9881;</span>Exercises
+      <span class="nav-icon">&#9733;</span>Exercises
+    </button>
+    <button class="nav-btn" onclick="showScreen('settings')">
+      <span class="nav-icon">&#9881;</span>Settings
     </button>
   </nav>
 </div>
@@ -347,7 +340,10 @@ body { }
       <span class="nav-icon">&#9650;</span>Progress
     </button>
     <button class="nav-btn" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9881;</span>Exercises
+      <span class="nav-icon">&#9733;</span>Exercises
+    </button>
+    <button class="nav-btn" onclick="showScreen('settings')">
+      <span class="nav-icon">&#9881;</span>Settings
     </button>
   </nav>
 </div>
@@ -369,7 +365,10 @@ body { }
       <span class="nav-icon">&#9650;</span>Progress
     </button>
     <button class="nav-btn" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9881;</span>Exercises
+      <span class="nav-icon">&#9733;</span>Exercises
+    </button>
+    <button class="nav-btn" onclick="showScreen('settings')">
+      <span class="nav-icon">&#9881;</span>Settings
     </button>
   </nav>
 </div>
@@ -391,7 +390,10 @@ body { }
       <span class="nav-icon">&#9650;</span>Progress
     </button>
     <button class="nav-btn active" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9881;</span>Exercises
+      <span class="nav-icon">&#9733;</span>Exercises
+    </button>
+    <button class="nav-btn" onclick="showScreen('settings')">
+      <span class="nav-icon">&#9881;</span>Settings
     </button>
   </nav>
 </div>
@@ -399,11 +401,26 @@ body { }
 <!-- ==================== SETTINGS SCREEN ==================== -->
 <div id="screen-settings" class="screen">
   <div class="header">
-    <button class="header-btn" onclick="showScreen('home')">&#8592; Back</button>
     <h1>Settings</h1>
-    <div></div>
   </div>
   <div class="scroll" id="settings-content"></div>
+  <nav class="nav">
+    <button class="nav-btn" onclick="showScreen('home')">
+      <span class="nav-icon">&#9679;</span>Today
+    </button>
+    <button class="nav-btn" onclick="showScreen('history')">
+      <span class="nav-icon">&#9776;</span>History
+    </button>
+    <button class="nav-btn" onclick="showScreen('progress')">
+      <span class="nav-icon">&#9650;</span>Progress
+    </button>
+    <button class="nav-btn" onclick="showScreen('reference')">
+      <span class="nav-icon">&#9733;</span>Exercises
+    </button>
+    <button class="nav-btn active" onclick="showScreen('settings')">
+      <span class="nav-icon">&#9881;</span>Settings
+    </button>
+  </nav>
 </div>
 
 <!-- ==================== MODAL ==================== -->
@@ -1015,16 +1032,18 @@ function renderHome() {
   document.getElementById('home-content').innerHTML = `
     ${promoHtml}
     <div class="card">
-      <span class="badge badge-${nextType.toLowerCase()}">${nextType}</span>
-      <span class="grip-dot" style="background:${gripColor}"></span>
-      <span style="font-size:11px;color:var(--text3);margin-left:4px;">Grip: ${template.grip}</span>
-      <div class="next-session-title">${template.name}</div>
-      <div class="session-meta">~${estimate} min &middot; ${template.blocks.reduce((a,b) => a + b.exercises.length, 0)} exercises</div>
-      <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Session</button>
-      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
-        <div style="font-size:11px;color:var(--text3);white-space:nowrap;">${sessionsThisWeek}/7</div>
-        <div class="streak-row" style="margin:0;">${streakHtml}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span class="badge badge-${nextType.toLowerCase()}">${nextType}</span>
+        <span class="grip-dot" style="background:${gripColor}"></span>
+        <span style="font-size:10px;color:var(--text3);">${template.grip} grip</span>
+        <span style="font-size:10px;color:var(--text3);margin-left:auto;">~${estimate} min &middot; ${template.blocks.reduce((a,b) => a + b.exercises.length, 0)} exercises</span>
       </div>
+      <div class="next-session-title">${template.name}</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <div class="streak-row">${streakHtml}</div>
+        <div style="font-size:10px;color:var(--text3);white-space:nowrap;">${sessionsThisWeek}/7 this week</div>
+      </div>
+      <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Session</button>
     </div>
     ${state.log.length > 0 ? renderLastSession(state) : ''}
     ${renderSessionPreview(nextType)}
@@ -1037,10 +1056,9 @@ function renderLastSession(state) {
   const hitCount = last.exercises ? Object.entries(last.exercises).filter(([id, reps]) => checkHit(id, reps)).length : 0;
   const totalEx = last.exercises ? Object.keys(last.exercises).length : 0;
   return `
-    <div class="card">
-      <div style="font-size:13px;color:var(--text2);">Last Session</div>
-      <div style="font-size:15px;font-weight:600;margin:4px 0;">${SESSION_TEMPLATES[last.sessionType]?.name || last.sessionType}</div>
-      <div style="font-size:12px;color:var(--text2);">${last.date} &middot; ${hitCount}/${totalEx} HITs${last.feel ? ' &middot; ' + last.feel : ''}</div>
+    <div class="card" style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:12px;color:var(--text2);">Last: <strong style="color:var(--text);">${SESSION_TEMPLATES[last.sessionType]?.name || last.sessionType}</strong></div>
+      <div style="font-size:11px;color:var(--text2);">${last.date.slice(5)} &middot; ${hitCount}/${totalEx} HITs${last.feel ? ' &middot; ' + last.feel : ''}</div>
     </div>`;
 }
 
@@ -1048,21 +1066,21 @@ function renderSessionPreview(sessionType) {
   const template = SESSION_TEMPLATES[sessionType];
   let inner = '';
   template.blocks.forEach(block => {
-    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${block.label}</div>`;
+    inner += `<div style="font-size:9px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:6px 0 2px;">${block.label}</div>`;
     block.exercises.forEach(exId => {
       const ex = EXERCISE_LIBRARY[exId];
       const isMob = ex.isMobility;
       const varName = isMob ? ex.name : getVariationName(exId);
       const detail = isMob ? '' : ` <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>`;
-      inner += `<div style="font-size:13px;padding:2px 0;">${varName}${detail}</div>`;
+      inner += `<div style="font-size:12px;padding:1px 0;">${varName}${detail}</div>`;
     });
   });
-  return `<div class="card" style="padding:12px 16px;">
-    <details open>
-      <summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
-        Session Preview <span style="font-size:11px;color:var(--text3);">tap to collapse</span>
+  return `<div class="card" style="padding:10px 12px;">
+    <details>
+      <summary style="font-size:12px;color:var(--text2);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+        Session Preview <span style="font-size:10px;color:var(--text3);">&#9662;</span>
       </summary>
-      <div style="margin-top:8px;">${inner}</div>
+      <div style="margin-top:6px;">${inner}</div>
     </details>
   </div>`;
 }
