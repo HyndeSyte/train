@@ -129,6 +129,7 @@ html, body {
 .timer-big.work { color:var(--accent); }
 .timer-big.done { color:var(--accent); }
 .timer-phase { text-align:center; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text3); }
+.statebig-rc { font-size:34px; font-weight:800; text-align:center; letter-spacing:-1px; line-height:1.05; margin:22px 0 8px; color:var(--accent); }
 
 .set-pills { display:flex; gap:6px; justify-content:center; margin:14px 0; flex-wrap:wrap; }
 .set-pill { width:34px; height:34px; border-radius:8px; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:13px; color:var(--text3); border:1px solid var(--border); }
@@ -597,6 +598,8 @@ function tone(freq, start, dur, vol){
 }
 function soundStart(){ unlockAudio(); tone(660, 0, 0.14, 0.22); if(navigator.vibrate) navigator.vibrate(60); }
 function soundEnd(){ unlockAudio(); tone(880,0,0.16,0.28); tone(880,0.22,0.16,0.28); tone(1175,0.46,0.26,0.3); if(navigator.vibrate) navigator.vibrate([120,80,120]); }
+// Interim alias — replaced by the locked six-cue vocabulary in the audio pass.
+function soundGo(){ unlockAudio(); tone(523,0,0.14,0.26); tone(784,0.12,0.18,0.3); if(navigator.vibrate) navigator.vibrate([90,60,120]); }
 
 // ===================================================================
 // SESSION STATE MACHINE
@@ -645,7 +648,13 @@ function resumeSession(){
   if(!s.activeSession){ renderHome(); return; }
   AS = s.activeSession;
   // Reconcile a timer that expired while the app was closed.
-  if(AS.timerEnd && Date.now() >= AS.timerEnd){ AS.timerEnd = null; AS.timerKind = null; }
+  if(AS.timerEnd && Date.now() >= AS.timerEnd){
+    const wasKind = AS.timerKind;
+    AS.timerEnd = null; AS.timerKind = null;
+    // A rest timer that finished while away resumes into the terminal rest-complete state
+    // (never auto-advances past the set the user hasn't started).
+    if(wasKind === 'rest' && AS.phase === 'rest') AS.phase = 'restComplete';
+  }
   enterSessionScreen();
 }
 
@@ -736,6 +745,21 @@ function renderExerciseStation(st){
     <div class="flow-sub">${ex.name} &middot; target ${ex.repRange[0]}\u2013${ex.repRange[1]} ${ex.unit}</div>
     <div class="set-pills">${pills}</div>`;
 
+  if(AS.phase === 'restComplete'){
+    // Terminal rest state: timer hit zero, GO already played. Wait for the user.
+    body.innerHTML = head + `
+      <div class="statebig-rc">Rest complete</div>
+      <div class="exercise-note" style="text-align:center;">Next: ${restNextLabel(st, ex)}</div>`;
+    foot.innerHTML = `
+      <button class="btn btn-primary" onclick="startNextAfterRest()">Start Next Set</button>
+      <div class="flow-actions-row">
+        <button class="mini-btn" onclick="redoLastSet()">Redo last set</button>
+        <button class="mini-btn" onclick="noteIssue()">Note</button>
+        <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+      </div>`;
+    return;
+  }
+
   if(AS.phase === 'rest'){
     // Rest timer view (chains after a logged/duration set)
     body.innerHTML = head + `
@@ -774,7 +798,7 @@ function renderExerciseStation(st){
     body.innerHTML = head + `
       <div class="target-pill">Hold for ${top} ${ex.unit}</div>
       <div class="exercise-note">${ex.note}</div>
-      ${ex.demoUrl ? `<a class="demo-link" href="${ex.demoUrl}" target="_blank" rel="noopener">&#9654; Demo</a>` : ''}`;
+      <button class="demo-link" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
     foot.innerHTML = `
       <button class="btn btn-primary" onclick="startDurationSet()">Start hold</button>
       <div class="flow-actions-row">
@@ -789,7 +813,7 @@ function renderExerciseStation(st){
       <div class="target-pill">Target ${ex.repRange[0]}\u2013${ex.repRange[1]} ${ex.unit}</div>
       <input class="rep-input-big" id="rep-input" type="number" inputmode="numeric" pattern="[0-9]*" value="${cur}" placeholder="0" onfocus="this.select()">
       <div class="exercise-note">${ex.note}</div>
-      ${ex.demoUrl ? `<a class="demo-link" href="${ex.demoUrl}" target="_blank" rel="noopener">&#9654; Demo</a>` : ''}`;
+      <button class="demo-link" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
     foot.innerHTML = `
       <button class="btn btn-primary" onclick="logRepSet()">Log set</button>
       <div class="flow-actions-row">
@@ -868,7 +892,10 @@ function beginRestOrAdvance(st, ex, rec){
   }
 }
 function endRestNow(){ stopTimerLoop(); AS.timerEnd=null; AS.timerKind=null; advanceAfterSet(); }
-function onRestTimerComplete(){ soundEnd(); AS.timerEnd=null; AS.timerKind=null; advanceAfterSet(); }
+// User-tapped advance from the terminal restComplete state.
+function startNextAfterRest(){ unlockAudio(); advanceAfterSet(); }
+// Rest timer expiring must NOT auto-advance. Play GO and wait for the user's tap.
+function onRestTimerComplete(){ soundGo(); AS.timerEnd=null; AS.timerKind=null; AS.phase='restComplete'; persistAS(); renderStation(); }
 
 function advanceAfterSet(){
   const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
@@ -910,6 +937,15 @@ function skipExercise(){
   AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
   persistAS();
   renderStation();
+}
+
+// Non-blocking reference: shows the Tier-3 text cue in a modal. No external
+// navigation, no session-state or timer change. Media arrives in the curation pass.
+function showRef(exId){
+  const ex = EXERCISE_LIBRARY[exId]; if(!ex) return;
+  showModal(getVariationName(exId), ex.note || 'Text cue coming soon.', [
+    { text:'Close', cls:'btn-secondary', action:()=>hideModal() }
+  ]);
 }
 
 function noteIssue(){
@@ -1054,23 +1090,23 @@ function renderHome(){
   const s = getState();
   const nextType = ROTATION[s.rotationIndex % 4];
   const t = SESSION_TEMPLATES[nextType];
-  const streak = getLast7DaysStreak();
   const est = estimateDuration(nextType);
   const gc = t.grip==='high'?'var(--grip-high)':t.grip==='low'?'var(--grip-low)':'var(--grip-none)';
 
-  // Resume banner
-  let resumeHtml = '';
+  // RESUME GUARD: an active session takes over Home entirely. No start path,
+  // no Today card, no promotions competing with the in-progress decision.
   if(s.activeSession){
     const rt = SESSION_TEMPLATES[s.activeSession.type];
-    resumeHtml = `
+    document.getElementById('home-content').innerHTML = `
       <div class="promo-card">
         <h3>&#9656; Session in progress</h3>
         <p>${rt ? rt.name : s.activeSession.type} \u2014 pick up where you left off.</p>
         <div class="promo-actions">
-          <button class="btn btn-small btn-primary" onclick="resumeSession()">Resume</button>
-          <button class="btn btn-small btn-secondary" onclick="discardActiveSession()">Discard</button>
+          <button class="btn btn-small btn-primary" onclick="resumeSession()">Resume Session</button>
+          <button class="btn btn-small btn-secondary" onclick="discardActiveSession()">Discard Session</button>
         </div>
       </div>`;
+    return;
   }
 
   // Promotions
@@ -1090,11 +1126,7 @@ function renderHome(){
     }
   });
 
-  const streakHtml = streak.map(d=>{ let c = d.trained?'done':'empty'; if(d.isToday) c+=' today'; return `<div class="streak-dot ${c}">${d.dayLabel}</div>`; }).join('');
-  const sessionsThisWeek = streak.filter(d=>d.trained).length;
-
   document.getElementById('home-content').innerHTML = `
-    ${resumeHtml}
     ${promoHtml}
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
@@ -1106,11 +1138,7 @@ function renderHome(){
         <span style="font-size:11px;color:var(--text3);">~${est} min</span>
       </div>
       <div class="session-name">${t.name}</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px;">
-        <div class="streak-row">${streakHtml}</div>
-        <span style="font-size:11px;color:var(--text3);font-weight:600;">${sessionsThisWeek}/7</span>
-      </div>
-      <button class="btn btn-primary" onclick="${s.activeSession ? 'confirmStartFresh(\''+nextType+'\')' : 'startSession(\''+nextType+'\')'}">Start Session</button>
+      <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Today's Session</button>
       <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;">Opens with the Form</div>
     </div>
     ${s.log.length ? renderLastSession(s) : ''}
@@ -1230,7 +1258,7 @@ function renderReference(){
       const ladder = ex.ladder.map((v,idx)=>{ if(idx===i) return `<span class="ref-current">${v}</span>`; if(idx<i) return `<span style="text-decoration:line-through;color:var(--text3);">${v}</span>`; return `<span style="color:var(--text3);">${v}</span>`; }).join(' &#8594; ');
       const promo = getPromotionState(exId);
       const hit = promo.consecutiveHits>0 ? ` &middot; <span style="color:var(--accent);">${promo.consecutiveHits}/2 HITs</span>` : '';
-      const demo = ex.demoUrl ? `<a href="${ex.demoUrl}" target="_blank" rel="noopener" style="color:var(--text3);font-size:11px;text-decoration:none;padding:3px 8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);white-space:nowrap;flex-shrink:0;">&#9654; Demo</a>` : '';
+      const demo = '';
       html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>${hit}</div>${demo}</div><div class="ref-ladder">${ladder}</div></div>`;
     });
   });
