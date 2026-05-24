@@ -24,6 +24,7 @@ body{
 .page-head h1{font-size:30px;font-weight:800;letter-spacing:-0.8px;}
 .page-head p{font-size:14px;color:#555;margin-top:6px;max-width:680px;}
 .legend{font-size:12px;color:#666;margin-top:10px;}
+.revnote{font-size:12px;color:#7a4a00;background:#fdf3e0;border:1px solid #f0d9b0;border-radius:8px;padding:10px 12px;margin-top:12px;max-width:760px;}
 .batch{max-width:1200px;margin:44px auto 0;}
 .batch-title{font-size:13px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#111;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:6px;}
 .batch-note{font-size:13px;color:#555;margin-bottom:22px;max-width:760px;}
@@ -48,6 +49,9 @@ body{
 /* chrome */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px 2px;flex-shrink:0;}
 .brand{font-size:11px;font-weight:800;letter-spacing:1.5px;color:var(--text3);}
+.hdr-mid{font-size:12px;font-weight:700;color:var(--text2);}
+.hdr-right{display:flex;align-items:center;gap:10px;color:var(--text3);}
+.dots{font-size:16px;color:var(--text2);letter-spacing:1px;}
 .nav{display:flex;border-top:1px solid var(--border);padding:7px 6px 10px;background:var(--surface);flex-shrink:0;}
 .nav div{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:8px;font-weight:600;color:var(--text3);}
 .nav div.on{color:var(--accent);}
@@ -70,14 +74,11 @@ body{
 .cue{font-size:11px;color:var(--text3);font-style:italic;line-height:1.4;}
 .meta{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);display:flex;align-items:center;gap:7px;}
 .note-ex{font-size:11px;color:var(--text3);font-style:italic;line-height:1.4;}
-
-.streak{display:flex;gap:4px;}
-.sd{width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:6px;font-weight:700;color:var(--text3);background:var(--surface2);}
-.sd.on{background:var(--accent);color:#0a0a0a;}
-.sd.today{box-shadow:0 0 0 1.5px var(--accent);}
+.formcue{font-size:17px;font-weight:600;color:var(--text);padding:7px 0;border-bottom:1px solid var(--border);}
 
 .timer{font-family:var(--mono);font-size:62px;font-weight:700;text-align:center;letter-spacing:-2px;line-height:1;margin:14px 0;}
 .timer.work{color:var(--accent);} .timer.rest{color:var(--warn);}
+.statebig{font-size:34px;font-weight:800;text-align:center;letter-spacing:-1px;line-height:1.05;margin:14px 0 8px;color:var(--accent);}
 .tphase{text-align:center;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);}
 
 .pills{display:flex;gap:5px;justify-content:center;margin:10px 0;}
@@ -91,9 +92,6 @@ body{
 .tgt{text-align:center;font-size:12px;color:var(--text2);}
 .demo{display:inline-block;margin-top:8px;color:var(--text3);font-size:11px;border:1px solid var(--border);background:var(--surface2);border-radius:6px;padding:4px 9px;}
 .foot{padding:11px 14px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;display:flex;flex-direction:column;gap:7px;}
-.mini-row{display:flex;gap:6px;}
-.mini{flex:1;text-align:center;font-size:11px;color:var(--text3);border:1px solid var(--border);border-radius:8px;padding:8px 2px;}
-.mini.warn{color:#fca5a5;border-color:#5a2222;}
 
 /* bottom sheet */
 .sheet-scrim{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;}
@@ -102,7 +100,10 @@ body{
 .sheet p{font-size:13px;color:var(--text2);}
 .tags{display:flex;flex-wrap:wrap;gap:6px;}
 .tag{font-size:11px;border:1px solid var(--border);background:var(--surface2);border-radius:14px;padding:6px 11px;color:var(--text2);}
+.tag.pain{border-color:#5a2222;color:#fca5a5;}
 .field{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px;font-size:12px;color:var(--text3);}
+.mini-row{display:flex;gap:6px;}
+.mini{flex:1;text-align:center;font-size:11px;color:var(--text3);border:1px solid var(--border);border-radius:8px;padding:8px 2px;}
 
 /* reference drawer */
 .draw{width:100%;background:var(--surface);border-radius:16px 16px 0 0;border-top:1px solid var(--border);padding:16px;display:flex;flex-direction:column;gap:9px;}
@@ -114,7 +115,6 @@ body{
 .chip.ok{background:var(--accent-dim);color:var(--accent);}
 .chip.part{background:var(--warn-dim);color:var(--warn);}
 .chip.stop{background:#5a2222;color:#fca5a5;}
-.divider{height:1px;background:var(--border);margin:2px 0;}
 .sumrow{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border);}
 </style>
 </head>
@@ -122,27 +122,28 @@ body{
 
 <div class="page-head">
   <h1>Train PWA v4 — Wireframes</h1>
-  <p>Working mockup of the guided-session redesign, in the app's real palette. This is the iteration surface — once approved here, it ports to Figma as the handoff artifact. Screens grouped by the six review batches.</p>
+  <p>Working mockup of the guided-session redesign, in the app's real palette. This is the iteration surface — once approved here, it ports to Figma as the handoff artifact. Screens grouped by review batch.</p>
   <div class="legend">Phone frames are ~scaled. Hierarchy, states, and interaction model are what to scrutinize — not pixel-exact sizing.</div>
+  <div class="revnote"><strong>Rev 2 (2026-05-24) — GPT red-team applied.</strong> Home streak row removed; Stop moved into header ⋯ (Skip · Note · Stop); Form screen 1 cut to terse cues; rest-complete de-shouted; Review title factual; Note-issue de-clinicalized (joint-pain flag kept); sound legend copy made practical; Progress tab dropped (nav = Today · History · Exercises · Settings); "Synced" hidden.</div>
 </div>
 
 <!-- ============ BATCH 1 ============ -->
 <div class="batch">
   <div class="batch-title">Batch 1 — The Spine</div>
-  <div class="batch-note">Entry pattern and the duplicate-session guard. Home opens straight to "Start," promotions sit below it, and an in-progress session takes over the screen until resumed or discarded.</div>
+  <div class="batch-note">Entry pattern and the duplicate-session guard. Home opens straight to "Start" with no streak row or completion count — today's action plus a factual "Last trained" line, nothing that manufactures missed-day guilt. An in-progress session takes over the screen until resumed or discarded.</div>
   <div class="frames">
 
     <!-- Home no session -->
     <div class="frame-wrap">
       <div class="frame-cap">Home — no active session</div>
+      <div class="frame-sub">No week-row, no "2/7". Grip is worded, not color-only.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="brand">TRAIN</span><span class="dim">●</span></div>
+        <div class="topbar"><span class="brand">TRAIN</span><span class="dim"></span></div>
         <div class="body">
-          <div class="card" style="display:flex;flex-direction:column;gap:8px;">
+          <div class="card" style="display:flex;flex-direction:column;gap:9px;">
             <div class="row"><div style="display:flex;align-items:center;gap:6px;"><span class="badge b-u1">U1</span><span class="gdot" style="background:var(--grip-high)"></span><span class="dim">high grip</span></div><span class="dim">~38 min</span></div>
             <div class="title-xl">Ring Upper</div>
-            <div class="row"><div class="streak"><span class="sd on">Mo</span><span class="sd">Tu</span><span class="sd on">We</span><span class="sd">Th</span><span class="sd">Fr</span><span class="sd">Sa</span><span class="sd today">Su</span></div><span class="dim" style="font-weight:700">2/7</span></div>
-            <button class="btn b-pri">Start Today's Session</button>
+            <button class="btn b-pri" style="margin-top:2px">Start Today's Session</button>
             <div style="text-align:center" class="dim">Opens with the Form</div>
           </div>
           <div class="card" style="background:var(--accent-dim);border-color:var(--accent);display:flex;flex-direction:column;gap:6px;">
@@ -150,18 +151,18 @@ body{
             <div class="muted">Ring Row: feet elevated → Archer Ring Row</div>
             <div style="display:flex;gap:7px;"><span class="btn b-pri b-sm">Advance</span><span class="btn b-sec b-sm">Not yet</span></div>
           </div>
-          <div class="card" style="padding:9px 12px;"><div class="row"><span class="muted">Last: Squat Lower</span><span class="dim">05-22 · 4/5 HITs</span></div></div>
+          <div class="card" style="padding:9px 12px;"><div class="row"><span class="muted">Last trained: Squat Lower</span><span class="dim">05-22</span></div></div>
         </div>
-        <div class="nav"><div class="on"><span class="ic">●</span>Today</div><div><span class="ic">☰</span>History</div><div><span class="ic">▲</span>Progress</div><div><span class="ic">★</span>Exercises</div><div><span class="ic">⚙</span>Settings</div></div>
+        <div class="nav"><div class="on"><span class="ic">●</span>Today</div><div><span class="ic">☰</span>History</div><div><span class="ic">★</span>Exercises</div><div><span class="ic">⚙</span>Settings</div></div>
       </div></div>
     </div>
 
     <!-- Home resume -->
     <div class="frame-wrap">
       <div class="frame-cap">Home — session in progress</div>
-      <div class="frame-sub">"Start New" is hidden until resume completes or the session is discarded.</div>
+      <div class="frame-sub">"Start New" is hidden until resume completes or the session is discarded. No ambient "Synced" indicator.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="brand">TRAIN</span><span class="dim" style="color:var(--accent)">● Synced</span></div>
+        <div class="topbar"><span class="brand">TRAIN</span><span class="dim"></span></div>
         <div class="body">
           <div class="card" style="background:var(--accent-dim);border-color:var(--accent);display:flex;flex-direction:column;gap:7px;">
             <div style="color:var(--accent);font-size:13px;font-weight:700;">▶ Session in progress</div>
@@ -172,7 +173,7 @@ body{
           </div>
           <div style="padding:2px 4px" class="dim">"Start New Session" is intentionally hidden while a session is active — it returns only after Resume completes or the session is discarded.</div>
         </div>
-        <div class="nav"><div class="on"><span class="ic">●</span>Today</div><div><span class="ic">☰</span>History</div><div><span class="ic">▲</span>Progress</div><div><span class="ic">★</span>Exercises</div><div><span class="ic">⚙</span>Settings</div></div>
+        <div class="nav"><div class="on"><span class="ic">●</span>Today</div><div><span class="ic">☰</span>History</div><div><span class="ic">★</span>Exercises</div><div><span class="ic">⚙</span>Settings</div></div>
       </div></div>
     </div>
 
@@ -190,33 +191,30 @@ body{
 <!-- ============ BATCH 2 ============ -->
 <div class="batch">
   <div class="batch-title">Batch 2 — The Form</div>
-  <div class="batch-note">Seven guided, advance-only screens. No rep fields, no rest timers, no logging. Screen 1 groups the three opening prep beats; screen 7 closes and hands off to strength work.</div>
+  <div class="batch-note">Seven guided, advance-only screens. No rep fields, no rest timers, no logging. Screen 1 is now terse cue lines, not paragraphs (detail lives in the reference). Header ⋯ holds Skip this step · Skip Form · Note · Stop — footer is the advance only.</div>
   <div class="frames">
 
     <!-- Form screen 1 -->
     <div class="frame-wrap">
       <div class="frame-cap">Form — Screen 1 (Root / Hands / Shoulders)</div>
-      <div class="frame-sub">Riskiest single screen: must feel like practice, not homework.</div>
+      <div class="frame-sub">Riskiest single screen — now terse practice cues, not homework. Detail moves to the reference drawer.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Form</span><span class="gdot" style="background:var(--grip-high)"></span></div>
+        <div class="topbar"><span class="badge b-form">Form</span><span class="hdr-mid">Step 1 of 7</span><span class="dots">⋯</span></div>
         <div style="padding:8px 14px 0;display:flex;gap:3px;">
           <span style="flex:1;height:4px;border-radius:2px;background:var(--warn)"></span>
           <span style="flex:6;height:4px;border-radius:2px;background:var(--surface2)"></span>
         </div>
         <div class="body">
-          <div class="meta"><span class="badge b-form">Form</span> Screen 1 of 7</div>
-          <div class="cue">Begin standing. Feet planted, hands rise from the sides.</div>
-          <div class="title-xl" style="font-size:22px">Root &amp; Prepare</div>
-          <div class="refloop">&#9719; visual loop &middot; per movement &middot; now / eventually</div>
-          <div style="display:flex;flex-direction:column;gap:11px;margin-top:6px;">
-            <div><div style="font-size:14px;font-weight:700">Root + Breath + Weight Shift</div><div class="muted" style="margin-top:3px">Foot tripod, knees soft, ribs down. 3 slow breaths. Shift weight slowly — balance never stolen.</div></div>
-            <div style="height:1px;background:var(--border)"></div>
-            <div><div style="font-size:14px;font-weight:700">Wrist + Hand Wave → Centerline</div><div class="muted" style="margin-top:3px">Circles, palm flex, finger articulation. Hands settle to the centerline, elbows heavy.</div></div>
-            <div style="height:1px;background:var(--border)"></div>
-            <div><div style="font-size:14px;font-weight:700">Neck + Scapular Setting</div><div class="muted" style="margin-top:3px">Small circles. Collarbones wide, traps quiet.</div></div>
+          <div class="title-xl" style="font-size:24px;margin-top:4px">Root &amp; Prepare</div>
+          <div class="refloop">&#9719; visual loop &middot; now / eventually</div>
+          <div style="margin-top:8px">
+            <div class="formcue">Feet alive.</div>
+            <div class="formcue">Hands to centerline.</div>
+            <div class="formcue" style="border-bottom:none">Shoulders quiet.</div>
           </div>
+          <div class="cue" style="margin-top:14px;font-size:13px">Stay planted. Let the reach grow from quiet shoulders.</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Next</button><div class="mini-row"><span class="mini">Reference</span><span class="mini">Skip screen</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-pri">Next</button></div>
       </div></div>
     </div>
 
@@ -225,20 +223,23 @@ body{
       <div class="frame-cap">Form — Screen 4 (Deep Squat), representative single-movement screen</div>
       <div class="frame-sub">Screens 2–6 follow this lean single-movement layout.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Form</span><span class="gdot" style="background:var(--grip-high)"></span></div>
+        <div class="topbar"><span class="badge b-form">Form</span><span class="hdr-mid">Step 4 of 7</span><span class="dots">⋯</span></div>
         <div style="padding:8px 14px 0;display:flex;gap:3px;">
           <span style="flex:3;height:4px;border-radius:2px;background:var(--accent)"></span>
           <span style="flex:1;height:4px;border-radius:2px;background:var(--warn)"></span>
           <span style="flex:3;height:4px;border-radius:2px;background:var(--surface2)"></span>
         </div>
         <div class="body">
-          <div class="meta"><span class="badge b-form">Form</span> Screen 4 of 7</div>
-          <div class="cue">Bring the front foot in to meet the other; sink into the bottom.</div>
-          <div class="title-xl" style="font-size:22px">Deep Squat Pry</div>
+          <div class="title-xl" style="font-size:24px;margin-top:4px">Deep Squat Pry</div>
           <div class="refloop">&#9719; visual loop &middot; now / eventually</div>
-          <div style="margin-top:6px"><div style="font-size:14px;font-weight:700">Deep Squat Pry</div><div class="muted" style="margin-top:3px">Feet wide, sink to the bottom, elbows push the knees out. Explore and shift. 30–45 seconds — a moving conversation with the bottom range.</div></div>
+          <div style="margin-top:8px">
+            <div class="formcue">Sink to the bottom.</div>
+            <div class="formcue">Elbows push knees wide.</div>
+            <div class="formcue" style="border-bottom:none">Explore and shift.</div>
+          </div>
+          <div class="cue" style="margin-top:14px;font-size:13px">A moving conversation with the bottom range. ~40 seconds.</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Next</button><div class="mini-row"><span class="mini">Reference</span><span class="mini">Skip screen</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-pri">Next</button></div>
       </div></div>
     </div>
 
@@ -247,23 +248,22 @@ body{
       <div class="frame-cap">Form — Screen 7 (Bow &amp; Close)</div>
       <div class="frame-sub">Final screen hands off to strength work.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Form</span><span class="gdot" style="background:var(--grip-high)"></span></div>
+        <div class="topbar"><span class="badge b-form">Form</span><span class="hdr-mid">Step 7 of 7</span><span class="dots">⋯</span></div>
         <div style="padding:8px 14px 0;display:flex;gap:3px;">
           <span style="flex:6;height:4px;border-radius:2px;background:var(--accent)"></span>
           <span style="flex:1;height:4px;border-radius:2px;background:var(--warn)"></span>
         </div>
         <div class="body">
-          <div class="meta"><span class="badge b-form">Form</span> Screen 7 of 7</div>
-          <div class="cue">Press to hands and knees, rise slowly, then stack up into the bow.</div>
-          <div class="title-xl" style="font-size:22px">Bow &amp; Close</div>
-          <div class="refloop">&#9719; visual loop &middot; per movement &middot; now / eventually</div>
-          <div style="display:flex;flex-direction:column;gap:11px;margin-top:6px;">
-            <div><div style="font-size:14px;font-weight:700">Jefferson Curl / Bow</div><div class="muted" style="margin-top:3px">Fold vertebra by vertebra, head heavy, slow return. 5 reps. A bow into the work.</div></div>
-            <div style="height:1px;background:var(--border)"></div>
-            <div><div style="font-size:14px;font-weight:700">Closing Reach + Breath</div><div class="muted" style="margin-top:3px">Full overhead reach, pause, slow exhale. 3 reps. The seal.</div></div>
+          <div class="title-xl" style="font-size:24px;margin-top:4px">Bow &amp; Close</div>
+          <div class="refloop">&#9719; visual loop &middot; now / eventually</div>
+          <div style="margin-top:8px">
+            <div class="formcue">Fold vertebra by vertebra.</div>
+            <div class="formcue">Head heavy, slow return.</div>
+            <div class="formcue" style="border-bottom:none">Reach up, exhale, seal.</div>
           </div>
+          <div class="cue" style="margin-top:14px;font-size:13px">A bow into the work, then begin.</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Begin Training</button><div class="mini-row"><span class="mini">Reference</span><span class="mini">Skip screen</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-pri">Begin Training</button></div>
       </div></div>
     </div>
 
@@ -273,14 +273,15 @@ body{
 <!-- ============ BATCH 3 ============ -->
 <div class="batch">
   <div class="batch-title">Batch 3 — The Exercise Engine</div>
-  <div class="batch-note">The core loop. Rep sets log a number; duration sets run a work timer. No separate "Start Set" tap for rep work. One set on screen at a time.</div>
+  <div class="batch-note">The core loop. Rep sets log a number; duration sets run a work timer. Header is identity · exercise · ⋯ (⋯ holds Skip set · Skip exercise · Note · Stop). Footer is the primary action only. One set on screen at a time.</div>
   <div class="frames">
 
     <!-- Set ready rep -->
     <div class="frame-wrap">
       <div class="frame-cap">Set-Ready — rep type</div>
+      <div class="frame-sub">Header ⋯ holds Skip set · Skip exercise · Note · Stop (always ≤2 taps, never the headline).</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Ring Upper</span><span class="gdot" style="background:var(--grip-high)"></span></div>
+        <div class="topbar"><span class="badge b-u1">U1</span><span class="hdr-mid">Ring Upper</span><span class="dots">⋯</span></div>
         <div style="padding:8px 14px 0;display:flex;gap:3px;"><span style="flex:7;height:4px;border-radius:2px;background:var(--accent)"></span><span style="flex:1;height:4px;border-radius:2px;background:var(--warn)"></span><span style="flex:4;height:4px;border-radius:2px;background:var(--surface2)"></span></div>
         <div class="body">
           <div class="meta"><span class="badge b-u1">Builders</span> Set 1 of 3</div>
@@ -292,7 +293,7 @@ body{
           <span class="demo">▶ Reference</span>
           <div class="dim" style="margin-top:10px">After this: log reps → rest 1:15</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Log Set</button><div class="mini-row"><span class="mini">Skip set</span><span class="mini">Skip exercise</span><span class="mini">Note</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-pri">Log Set</button></div>
       </div></div>
     </div>
 
@@ -300,7 +301,7 @@ body{
     <div class="frame-wrap">
       <div class="frame-cap">Set-Ready — duration type</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Ring Upper</span><span class="gdot" style="background:var(--grip-high)"></span></div>
+        <div class="topbar"><span class="badge b-u1">U1</span><span class="hdr-mid">Ring Upper</span><span class="dots">⋯</span></div>
         <div style="padding:8px 14px 0;display:flex;gap:3px;"><span style="flex:9;height:4px;border-radius:2px;background:var(--accent)"></span><span style="flex:1;height:4px;border-radius:2px;background:var(--warn)"></span><span style="flex:2;height:4px;border-radius:2px;background:var(--surface2)"></span></div>
         <div class="body">
           <div class="meta"><span class="badge b-u1">Finisher</span> Set 2 of 3</div>
@@ -312,16 +313,16 @@ body{
           <span class="demo">▶ Reference</span>
           <div class="dim" style="margin-top:10px">Timer ends → rest 0:45</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Start Hold</button><div class="mini-row"><span class="mini">Skip set</span><span class="mini">Skip exercise</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-pri">Start Hold</button></div>
       </div></div>
     </div>
 
     <!-- Work timer -->
     <div class="frame-wrap">
       <div class="frame-cap">Work Timer Active (duration)</div>
-      <div class="frame-sub">Wall-clock based; survives backgrounding. Auto-chains into rest on completion.</div>
+      <div class="frame-sub">Wall-clock based; survives backgrounding. Auto-chains into rest on completion. Speaker = in-the-moment mute.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Ring Upper</span><span class="dim">🔊</span></div>
+        <div class="topbar"><span class="badge b-u1">U1</span><span class="hdr-mid">Ring Upper</span><span class="hdr-right"><span>🔊</span><span class="dots">⋯</span></span></div>
         <div class="body">
           <div class="meta"><span class="badge b-u1">Finisher</span> Set 2 of 3</div>
           <div class="title-xl" style="font-size:20px">Ring Support Hold</div>
@@ -330,7 +331,7 @@ body{
           <div class="note-ex" style="text-align:center">Ribs down. Breathe behind the tension.</div>
           <div class="dim" style="text-align:center;margin-top:12px">Next: rest 0:45</div>
         </div>
-        <div class="foot"><button class="btn b-sec">Pause</button><div class="mini-row"><span class="mini">End set early</span><span class="mini">Note</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-sec">Pause</button></div>
       </div></div>
     </div>
 
@@ -338,7 +339,7 @@ body{
     <div class="frame-wrap">
       <div class="frame-cap">Set Logging — rep type</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Ring Upper</span><span class="gdot" style="background:var(--grip-high)"></span></div>
+        <div class="topbar"><span class="badge b-u1">U1</span><span class="hdr-mid">Ring Upper</span><span class="dots">⋯</span></div>
         <div class="body">
           <div class="meta"><span class="badge b-u1">Builders</span> Set 1 of 3</div>
           <div class="title-xl" style="font-size:20px">Ring Pull-Up</div>
@@ -347,7 +348,7 @@ body{
           <div class="tgt">Save starts the rest timer.</div>
           <div class="note-ex" style="margin-top:8px;text-align:center">Reps entered, not pre-filled. Editable before save.</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Save Set</button><div class="mini-row"><span class="mini">Redo / clear</span><span class="mini">Skip set</span><span class="mini">Note</span></div></div>
+        <div class="foot"><button class="btn b-pri">Save Set</button></div>
       </div></div>
     </div>
 
@@ -357,13 +358,13 @@ body{
 <!-- ============ BATCH 4 ============ -->
 <div class="batch">
   <div class="batch-title">Batch 4 — Rest &amp; Transitions</div>
-  <div class="batch-note">The highest-risk screen in the system. Rest counts down, then STOPS and waits — it never auto-starts the next set. The next action is always named.</div>
+  <div class="batch-note">The highest-risk screen. Rest counts down, then STOPS and waits — it never auto-starts the next set. The rest-complete screen names the next action calmly; the GO audio carries the urgency, the screen does not shout.</div>
   <div class="frames">
 
     <div class="frame-wrap">
       <div class="frame-cap">Rest Timer — active</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Ring Upper</span><span class="dim">🔊</span></div>
+        <div class="topbar"><span class="badge b-u1">U1</span><span class="hdr-mid">Ring Upper</span><span class="hdr-right"><span>🔊</span><span class="dots">⋯</span></span></div>
         <div class="body">
           <div class="meta"><span class="badge b-u1">Builders</span> Set 1 saved</div>
           <div class="tphase" style="margin-top:10px">Rest</div>
@@ -371,22 +372,21 @@ body{
           <div class="card" style="padding:9px 12px"><div class="muted" style="color:var(--text)">Ring Pull-Up — Set 1 saved: 5 reps</div></div>
           <div class="dim" style="text-align:center;margin-top:10px">Next: Ring Pull-Up — Set 2 of 3</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Start Next Now</button><div class="mini-row"><span class="mini">Pause</span><span class="mini">Redo last set</span><span class="mini">Skip next</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-pri">Start Next Now</button></div>
       </div></div>
     </div>
 
     <div class="frame-wrap">
       <div class="frame-cap">Rest — complete (the correction)</div>
-      <div class="frame-sub">Timer hit zero, sound played — and it WAITS. No auto-advance. v4 prototype auto-advances; this fixes it.</div>
+      <div class="frame-sub">Timer hit zero, GO sound played — and it WAITS. No auto-advance. Calm state word, not a shouted "GO".</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Ring Upper</span><span class="dim">🔊</span></div>
+        <div class="topbar"><span class="badge b-u1">U1</span><span class="hdr-mid">Ring Upper</span><span class="hdr-right"><span>🔊</span><span class="dots">⋯</span></span></div>
         <div class="body">
           <div class="meta"><span class="badge b-u1">Builders</span> Set 1 saved</div>
-          <div class="tphase" style="margin-top:10px;color:var(--accent)">Rest complete</div>
-          <div class="timer work">GO</div>
+          <div class="statebig" style="margin-top:24px">Rest complete</div>
           <div class="dim" style="text-align:center">Next: Ring Pull-Up — Set 2 of 3</div>
         </div>
-        <div class="foot"><button class="btn b-pri">Start Next Set</button><div class="mini-row"><span class="mini">Redo last set</span><span class="mini">Skip next</span><span class="mini warn">Stop</span></div></div>
+        <div class="foot"><button class="btn b-pri">Start Next Set</button></div>
       </div></div>
     </div>
 
@@ -396,7 +396,7 @@ body{
 <!-- ============ BATCH 5 ============ -->
 <div class="batch">
   <div class="batch-title">Batch 5 — Interrupts</div>
-  <div class="batch-note">The safety layer — bottom sheets reachable from every active state. Skipped work never counts toward HIT or promotion. Stopping saves a partial session; it's never framed as failure.</div>
+  <div class="batch-note">The safety layer — bottom sheets reached from the header ⋯ on every active state. Skipped work never counts toward HIT. "Add a note" is framed as training context, not a support feature — but keeps an explicit joint-pain flag. Stopping saves a partial; never framed as failure.</div>
   <div class="frames">
 
     <div class="frame-wrap">
@@ -414,14 +414,14 @@ body{
     </div>
 
     <div class="frame-wrap">
-      <div class="frame-cap">Note an issue</div>
-      <div class="frame-sub">Lightweight tags, not a pain diagnosis tree. Reachable from set-ready, work, logging, rest.</div>
+      <div class="frame-cap">Add a note</div>
+      <div class="frame-sub">De-clinicalized: training context, not a diagnosis tree. Joint-pain flag kept (red, deliberate).</div>
       <div class="phone"><div class="notch"></div><div class="scr" style="position:relative">
         <div class="body" style="opacity:.25"><div class="meta"><span class="badge b-u1">Anchor</span> Set 2 of 3</div><div class="title-xl" style="font-size:20px">Ring Row</div></div>
         <div class="sheet-scrim"><div class="sheet">
-          <h3>Note an issue</h3>
-          <p>Logged, not diagnosed.</p>
-          <div class="tags"><span class="tag">Pain / irritation</span><span class="tag">Setup problem</span><span class="tag">Too hard today</span><span class="tag">Other</span></div>
+          <h3>Add a note</h3>
+          <p>Save context for this set.</p>
+          <div class="tags"><span class="tag pain">Pain / irritation</span><span class="tag">Setup</span><span class="tag">Too heavy today</span><span class="tag">Other</span></div>
           <div class="field">What's going on…</div>
           <button class="btn b-pri">Save &amp; Continue</button>
           <div class="mini-row"><span class="mini">Save &amp; Skip Set</span><span class="mini">Save &amp; Stop</span></div>
@@ -449,20 +449,21 @@ body{
 <!-- ============ BATCH 6 ============ -->
 <div class="batch">
   <div class="batch-title">Batch 6 — Close &amp; Reference</div>
-  <div class="batch-note">Session review saves the truth without dashboard creep, then completion closes the loop. The reference drawer shows all four states — and never blocks the session.</div>
+  <div class="batch-note">Session review states the truth factually — no premature praise (that single line lives on Completion only). The reference drawer shows all four states and never blocks the session.</div>
   <div class="frames">
 
     <!-- Review -->
     <div class="frame-wrap">
-      <div class="frame-cap">Session Review</div>
+      <div class="frame-cap">Session Review (Complete)</div>
+      <div class="frame-sub">Title is state-specific: "Session review" / "Partial session saved" / "Stopped session". No cheerleading here.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">✕ Stop</span><span class="muted" style="font-weight:700">Review</span><span class="gdot" style="background:var(--grip-high)"></span></div>
+        <div class="topbar"><span class="badge b-u1">U1</span><span class="hdr-mid">Review</span><span class="dots">⋯</span></div>
         <div class="body">
-          <div class="meta"><span class="badge b-u1">U1</span> Session review <span class="chip ok">Complete</span></div>
-          <div class="title-xl" style="font-size:22px">Nice work.</div>
+          <div class="meta">Session summary <span class="chip ok">Complete</span></div>
+          <div class="title-xl" style="font-size:22px">Session review</div>
           <div class="muted">4 completed · 1 skipped of 5 exercises. The Form is done.</div>
           <div style="margin-top:6px">
-            <div class="sumrow"><span>Form</span><span class="dim">7/7 screens</span></div>
+            <div class="sumrow"><span>Form</span><span class="dim">7/7</span></div>
             <div class="sumrow"><span>Anchor · Ring Row</span><span style="color:var(--accent)">HIT</span></div>
             <div class="sumrow"><span>Builders · Ring Pull-Up</span><span class="muted">5,5,4</span></div>
             <div class="sumrow"><span>Builders · Ring Push-Up</span><span class="dim">skipped</span></div>
@@ -477,6 +478,7 @@ body{
     <!-- Completion -->
     <div class="frame-wrap">
       <div class="frame-cap">Completion</div>
+      <div class="frame-sub">The one light positive line lives here. No badges, confetti, or streaks.</div>
       <div class="phone"><div class="notch"></div><div class="scr">
         <div class="body" style="justify-content:center;align-items:center;text-align:center;gap:12px;padding:24px;">
           <div style="font-size:40px">✓</div>
@@ -488,7 +490,7 @@ body{
       </div></div>
     </div>
 
-    <!-- Reference drawer states -->
+    <!-- Reference drawer curated -->
     <div class="frame-wrap">
       <div class="frame-cap">Reference drawer — curated loop</div>
       <div class="frame-sub">Bottom drawer; never resets the timer or changes session state.</div>
@@ -504,7 +506,7 @@ body{
       </div></div>
     </div>
 
-    <!-- Reference drawer video + text + missing combined -->
+    <!-- Reference drawer other 3 states -->
     <div class="frame-wrap">
       <div class="frame-cap">Reference drawer — other 3 states</div>
       <div class="frame-sub">Timestamped video · text-only · unavailable. Never a broken link or a search.</div>
@@ -535,16 +537,16 @@ body{
 
 <!-- ============ BATCH 7 ============ -->
 <div class="batch">
-  <div class="batch-title">Batch 7 — Audio Cue Legend (in-app: Settings &rarr; Sound)</div>
-  <div class="batch-note">The learnable six-cue vocabulary, shown once and parked in settings. Shape encodes meaning so you act on sound alone, screen-free. Nothing here is a failure tone. Global on/off only — no per-cue config.</div>
+  <div class="batch-title">Batch 7 — Sound cues (in-app: Settings &rarr; Sound)</div>
+  <div class="batch-note">The in-app sound reference. Practical copy only — six short tones, global on/off. (The design rationale lives in the spec, not the UI.)</div>
   <div class="frames">
     <div class="frame-wrap">
-      <div class="frame-cap">Sound — what each cue means</div>
+      <div class="frame-cap">Settings → Sound cues</div>
       <div class="phone"><div class="notch"></div><div class="scr">
-        <div class="topbar"><span class="muted">&lsaquo; Settings</span><span class="muted" style="font-weight:700">Sound</span><span class="dim">&nbsp;</span></div>
+        <div class="topbar"><span class="muted">&lsaquo; Settings</span><span class="hdr-mid">Sound cues</span><span class="dim">&nbsp;</span></div>
         <div class="body" style="gap:0;">
           <div class="legrow" style="border-bottom:1px solid var(--border);">
-            <span style="flex:1;"><div style="font-weight:700;font-size:14px;">Cue sounds</div><div class="dim">Hear short tones for each event</div></span>
+            <span style="flex:1;"><div style="font-weight:700;font-size:14px;">Cue sounds</div><div class="dim">Short tones for timers and saved actions</div></span>
             <span class="badge" style="background:var(--accent-dim);color:var(--accent);">On</span>
           </div>
           <div style="height:8px;"></div>
@@ -553,7 +555,7 @@ body{
           <div class="legrow"><span class="legglyph" style="color:var(--accent);">&#9601;&#9603;</span><span style="flex:1;"><div style="font-weight:700;font-size:14px;">STARTED</div><div class="dim">Hold is timing — look away.</div></span></div>
           <div class="legrow"><span class="legglyph" style="color:var(--text2);">&#9644;</span><span style="flex:1;"><div style="font-weight:700;font-size:14px;">LOGGED</div><div class="dim">Set saved.</div></span></div>
           <div class="legrow"><span class="legglyph" style="color:var(--accent);">&#9601;&#9603;&#9606;</span><span style="flex:1;"><div style="font-weight:700;font-size:14px;">SESSION DONE</div><div class="dim">Workout complete.</div></span></div>
-          <div class="legrow" style="border-bottom:none;"><span class="legglyph" style="color:var(--text3);">&#9644;</span><span style="flex:1;"><div style="font-weight:700;font-size:14px;">NOTED</div><div class="dim">Skip or issue logged. Flat, never punitive.</div></span></div>
+          <div class="legrow" style="border-bottom:none;"><span class="legglyph" style="color:var(--text3);">&#9644;</span><span style="flex:1;"><div style="font-weight:700;font-size:14px;">NOTED</div><div class="dim">Skip or issue logged.</div></span></div>
         </div>
       </div></div>
     </div>
