@@ -163,21 +163,7 @@ html, body {
 .status-partial { background:var(--warn-dim); color:var(--warn); }
 .status-stopped { background:#5a2222; color:#fca5a5; }
 
-/* Progress */
-.progress-section { margin-bottom:24px; }
-.progress-section h2 { font-size:16px; font-weight:700; margin-bottom:12px; }
-.bar-chart { display:flex; align-items:flex-end; gap:4px; height:100px; }
-.bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
-.bar { width:100%; background:var(--accent-dim); border-radius:4px 4px 0 0; min-height:2px; }
-.bar-label { font-size:9px; color:var(--text3); }
-.bar-value { font-size:10px; color:var(--text2); }
-.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.stat-box { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; text-align:center; }
-.stat-num { font-size:28px; font-weight:800; font-family:var(--font-mono); }
-.stat-label { font-size:11px; color:var(--text2); margin-top:4px; }
-.promo-log-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
-.promo-log-item:last-child { border-bottom:none; }
-.promo-arrow { color:var(--accent); margin:0 6px; }
+/* Promo / resume cards (Home: promotion prompts + active-session resume guard) */
 .promo-card { background:var(--accent-dim); border:1px solid var(--accent); border-radius:var(--radius); padding:14px; margin-bottom:10px; }
 .promo-card h3 { color:var(--accent); font-size:14px; margin-bottom:4px; }
 .promo-card p { font-size:13px; color:var(--text2); margin-bottom:10px; }
@@ -265,7 +251,7 @@ html, body {
   <nav class="nav">
     <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
     <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
-    <button class="nav-btn active" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
+    <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
     <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
 </div>
