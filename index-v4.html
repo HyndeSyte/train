@@ -85,15 +85,6 @@ html, body {
 
 .session-name { font-size:28px; font-weight:800; letter-spacing:-1px; line-height:1.1; margin:4px 0; }
 
-.streak-row { display:flex; gap:5px; flex-shrink:0; }
-.streak-dot {
-  width:18px; height:18px; flex:0 0 18px;
-  border-radius:4px; display:flex; align-items:center;
-  justify-content:center; font-size:7px; color:var(--text3); font-weight:700;
-}
-.streak-dot.done { background:var(--accent); color:#0a0a0a; }
-.streak-dot.empty { background:var(--surface2); }
-.streak-dot.today { box-shadow:0 0 0 1.5px var(--accent); }
 
 .nav {
   display:flex; border-top:1px solid var(--border); flex-shrink:0;
@@ -236,7 +227,6 @@ html, body {
   <nav class="nav">
     <button class="nav-btn active" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
     <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
-    <button class="nav-btn" onclick="showScreen('progress')"><span class="nav-icon">&#9650;</span>Progress</button>
     <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
     <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
@@ -263,20 +253,6 @@ html, body {
   <nav class="nav">
     <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
     <button class="nav-btn active" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
-    <button class="nav-btn" onclick="showScreen('progress')"><span class="nav-icon">&#9650;</span>Progress</button>
-    <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
-    <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
-  </nav>
-</div>
-
-<!-- ==================== PROGRESS ==================== -->
-<div id="screen-progress" class="screen">
-  <div class="header"><h1>Progress</h1></div>
-  <div class="scroll" id="progress-content"></div>
-  <nav class="nav">
-    <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
-    <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
-    <button class="nav-btn active" onclick="showScreen('progress')"><span class="nav-icon">&#9650;</span>Progress</button>
     <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
     <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
@@ -289,7 +265,6 @@ html, body {
   <nav class="nav">
     <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
     <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
-    <button class="nav-btn" onclick="showScreen('progress')"><span class="nav-icon">&#9650;</span>Progress</button>
     <button class="nav-btn active" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
     <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
@@ -302,7 +277,6 @@ html, body {
   <nav class="nav">
     <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
     <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
-    <button class="nav-btn" onclick="showScreen('progress')"><span class="nav-icon">&#9650;</span>Progress</button>
     <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
     <button class="nav-btn active" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
@@ -486,29 +460,8 @@ function promoteExercise(exId){
 }
 
 // ===================================================================
-// STREAK / VOLUME
+// VOLUME
 // ===================================================================
-function getLast7DaysStreak(){
-  const s = getState(); const today = new Date(); const days = [];
-  for(let i=6;i>=0;i--){
-    const d = new Date(today); d.setDate(d.getDate()-i);
-    const ds = d.toISOString().split('T')[0];
-    days.push({ dateStr:ds, dayLabel:['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()], trained:s.log.some(e=>e.date===ds), isToday:i===0 });
-  }
-  return days;
-}
-function getWeeklyVolume(weeks){
-  const s = getState(); const out = []; const today = new Date();
-  for(let w=weeks-1;w>=0;w--){
-    const ws = new Date(today); ws.setDate(ws.getDate()-(w*7+today.getDay()));
-    const we = new Date(ws); we.setDate(we.getDate()+6);
-    const a = ws.toISOString().split('T')[0], b = we.toISOString().split('T')[0];
-    let sessions=0, totalSets=0;
-    s.log.forEach(e=>{ if(e.date>=a && e.date<=b){ sessions++; if(e.exercises) Object.values(e.exercises).forEach(sets=> totalSets += sets.filter(x=>x>0).length); } });
-    out.push({ week:weeks-w, sessions, totalSets });
-  }
-  return out;
-}
 function estimateDuration(type){
   const t = SESSION_TEMPLATES[type]; let sec = 7*60; // Form ~7 min
   t.blocks.forEach(b=> b.exercises.forEach(exId=>{
@@ -596,10 +549,33 @@ function tone(freq, start, dur, vol){
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   o.start(t0); o.stop(t0 + dur + 0.02);
 }
-function soundStart(){ unlockAudio(); tone(660, 0, 0.14, 0.22); if(navigator.vibrate) navigator.vibrate(60); }
-function soundEnd(){ unlockAudio(); tone(880,0,0.16,0.28); tone(880,0.22,0.16,0.28); tone(1175,0.46,0.26,0.3); if(navigator.vibrate) navigator.vibrate([120,80,120]); }
-// Interim alias — replaced by the locked six-cue vocabulary in the audio pass.
-function soundGo(){ unlockAudio(); tone(523,0,0.14,0.26); tone(784,0.12,0.18,0.3); if(navigator.vibrate) navigator.vibrate([90,60,120]); }
+// Sound on/off (persisted). Default on.
+function soundEnabled(){ try { return localStorage.getItem('train_sound_off') !== '1'; } catch(e){ return true; } }
+function setSoundEnabled(on){ try { localStorage.setItem('train_sound_off', on ? '0' : '1'); } catch(e){} }
+
+// Waveform-capable tone. Mirrors tone() but lets a cue pick its timbre.
+function toneW(freq, start, dur, vol, type){
+  if(!audioCtx || !soundEnabled()) return;
+  const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  o.connect(g); g.connect(audioCtx.destination);
+  const t0 = audioCtx.currentTime + start;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol||0.25, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function buzz(pattern){ if(soundEnabled() && navigator.vibrate) navigator.vibrate(pattern); }
+
+// ---- The six locked cues (vocabulary fixed 2026-05-24) ----
+// Rising family (GO / STARTED / SESSION DONE) separated by note count + interval.
+// Singles (LOGGED / NOTED) separated by pitch. Shapes carry meaning; on/off only.
+function cueGo(){ unlockAudio(); toneW(523,0,0.13,0.30,'triangle'); toneW(784,0.12,0.20,0.34,'triangle'); buzz([90,60,130]); }        // rest over -> go
+function cueRelease(){ unlockAudio(); toneW(784,0,0.16,0.26,'sine'); toneW(523,0.16,0.22,0.26,'sine'); buzz([140,80,140]); }       // hold up -> come off
+function cueStarted(){ unlockAudio(); toneW(587,0,0.09,0.20,'sine'); toneW(740,0.10,0.12,0.22,'sine'); buzz(50); }                 // hold timing started
+function cueLogged(){ unlockAudio(); toneW(587,0,0.14,0.24,'triangle'); buzz(40); }                                               // set saved
+function cueSessionDone(){ unlockAudio(); toneW(523,0,0.14,0.28,'triangle'); toneW(659,0.14,0.14,0.30,'triangle'); toneW(784,0.30,0.26,0.32,'triangle'); buzz([110,70,110,70,150]); } // workout complete
+function cueNoted(){ unlockAudio(); toneW(392,0,0.16,0.20,'sine'); buzz(30); }                                                    // skip / issue logged
 
 // ===================================================================
 // SESSION STATE MACHINE
@@ -714,7 +690,7 @@ function renderFormStation(st){
     </div>`;
 }
 function advanceForm(){ unlockAudio(); const flow = currentFlow(); AS.records[flow[AS.cursor].uid].status = 'done'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
-function skipFormScreen(){ const flow = currentFlow(); AS.records[flow[AS.cursor].uid].status = 'skipped'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
+function skipFormScreen(){ cueNoted(); const flow = currentFlow(); AS.records[flow[AS.cursor].uid].status = 'skipped'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
 
 // ---- EXERCISE STATION ----
 function renderExerciseStation(st){
@@ -760,35 +736,38 @@ function renderExerciseStation(st){
     return;
   }
 
-  if(AS.phase === 'rest'){
+  if(AS.phase === 'rest' || AS.phase === 'restPaused'){
+    const paused = AS.phase === 'restPaused';
     // Rest timer view (chains after a logged/duration set)
     body.innerHTML = head + `
-      <div class="timer-phase">Rest</div>
-      <div class="timer-big rest" id="timer-display">--</div>
+      <div class="timer-phase">${paused ? 'Rest paused' : 'Rest'}</div>
+      <div class="timer-big rest" id="timer-display">${paused ? fmtRemaining() : '--'}</div>
       <div class="exercise-note">Next: ${restNextLabel(st, ex)}</div>`;
     foot.innerHTML = `
       <button class="btn btn-primary" onclick="endRestNow()">Skip rest \u2192 Next</button>
       <div class="flow-actions-row">
-        <button class="mini-btn" onclick="redoLastSet()">Redo last set</button>
+        <button class="mini-btn" onclick="${paused ? 'resumeTimer()' : 'pauseTimer()'}">${paused ? 'Resume' : 'Pause'}</button>
         <button class="mini-btn" onclick="noteIssue()">Note issue</button>
         <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
       </div>`;
-    startTimerLoop();
+    if(!paused) startTimerLoop();
     return;
   }
 
-  if(isDur && AS.phase === 'work'){
+  if(isDur && (AS.phase === 'work' || AS.phase === 'workPaused')){
+    const paused = AS.phase === 'workPaused';
     body.innerHTML = head + `
-      <div class="timer-phase">Hold</div>
-      <div class="timer-big work" id="timer-display">--</div>
+      <div class="timer-phase">${paused ? 'Paused' : 'Hold'}</div>
+      <div class="timer-big work" id="timer-display">${paused ? fmtRemaining() : '--'}</div>
       <div class="exercise-note">${ex.note}</div>`;
     foot.innerHTML = `
-      <button class="btn btn-secondary" onclick="finishDurationEarly()">Done early</button>
+      <button class="btn btn-primary" onclick="${paused ? 'resumeTimer()' : 'pauseTimer()'}">${paused ? 'Resume' : 'Pause'}</button>
       <div class="flow-actions-row">
+        <button class="mini-btn" onclick="finishDurationEarly()">End set early</button>
         <button class="mini-btn" onclick="skipCurrentSet()">Skip set</button>
         <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
       </div>`;
-    startTimerLoop();
+    if(!paused) startTimerLoop();
     return;
   }
 
@@ -842,6 +821,7 @@ function logRepSet(){
   const val = parseInt(input && input.value, 10) || 0;
   rec.sets[AS.setIdx] = val;
   rec.setStatus[AS.setIdx] = 'done';
+  cueLogged();
   beginRestOrAdvance(st, ex, rec);
 }
 
@@ -852,7 +832,7 @@ function startDurationSet(){
   AS.phase = 'work';
   AS.timerKind = 'work';
   AS.timerEnd = Date.now() + ex.repRange[1]*1000;
-  soundStart();
+  cueStarted();
   persistAS();
   renderStation();
 }
@@ -863,13 +843,14 @@ function finishDurationEarly(){
   rec.sets[AS.setIdx] = elapsed;
   rec.setStatus[AS.setIdx] = 'done';
   AS.timerEnd = null; AS.timerKind = null;
+  cueLogged();
   beginRestOrAdvance(st, ex, rec);
 }
 function onWorkTimerComplete(){
   const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
   rec.sets[AS.setIdx] = ex.repRange[1]; // full hold achieved
   rec.setStatus[AS.setIdx] = 'done';
-  soundEnd();
+  cueRelease();
   AS.timerEnd = null; AS.timerKind = null;
   beginRestOrAdvance(st, ex, rec);
 }
@@ -884,7 +865,6 @@ function beginRestOrAdvance(st, ex, rec){
     AS.phase = 'rest';
     AS.timerKind = 'rest';
     AS.timerEnd = Date.now() + restSec*1000;
-    soundStart();
     persistAS();
     renderStation();
   } else {
@@ -892,10 +872,35 @@ function beginRestOrAdvance(st, ex, rec){
   }
 }
 function endRestNow(){ stopTimerLoop(); AS.timerEnd=null; AS.timerKind=null; advanceAfterSet(); }
+// Pause/resume for work and rest timers. Stores remaining ms so the absolute
+// timerEnd can be rebuilt on resume (survives the wall-clock model).
+function fmtRemaining(){
+  const ms = (AS && AS.timerRemaining != null) ? AS.timerRemaining
+           : (AS && AS.timerEnd ? Math.max(0, AS.timerEnd - Date.now()) : 0);
+  const sec = Math.max(0, Math.round(ms/1000));
+  return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+}
+function pauseTimer(){
+  if(!AS || !AS.timerEnd) return;
+  stopTimerLoop();
+  AS.timerRemaining = Math.max(0, AS.timerEnd - Date.now());
+  AS.timerEnd = null;
+  AS.phase = (AS.phase === 'rest') ? 'restPaused' : 'workPaused';
+  persistAS();
+  renderStation();
+}
+function resumeTimer(){
+  if(!AS || AS.timerRemaining == null) return;
+  AS.timerEnd = Date.now() + AS.timerRemaining;
+  AS.timerRemaining = null;
+  AS.phase = (AS.phase === 'restPaused') ? 'rest' : 'work';
+  persistAS();
+  renderStation();
+}
 // User-tapped advance from the terminal restComplete state.
 function startNextAfterRest(){ unlockAudio(); advanceAfterSet(); }
 // Rest timer expiring must NOT auto-advance. Play GO and wait for the user's tap.
-function onRestTimerComplete(){ soundGo(); AS.timerEnd=null; AS.timerKind=null; AS.phase='restComplete'; persistAS(); renderStation(); }
+function onRestTimerComplete(){ cueGo(); AS.timerEnd=null; AS.timerKind=null; AS.phase='restComplete'; persistAS(); renderStation(); }
 
 function advanceAfterSet(){
   const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
@@ -919,6 +924,7 @@ function redoLastSet(){
 }
 
 function skipCurrentSet(){
+  cueNoted();
   stopTimerLoop();
   const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
   rec.sets[AS.setIdx] = 0; rec.setStatus[AS.setIdx] = 'skipped';
@@ -928,6 +934,7 @@ function skipCurrentSet(){
 }
 
 function skipExercise(){
+  cueNoted();
   stopTimerLoop();
   const flow = currentFlow(); const st = flow[AS.cursor]; const rec = AS.records[st.uid];
   rec.setStatus = rec.setStatus.map(s=> s==='done' ? s : 'skipped');
@@ -954,7 +961,7 @@ function noteIssue(){
   if(txt === null) return;
   rec.note = txt.trim();
   rec.issueFlag = txt.trim() ? 'issue' : 'none';
-  if(txt.trim()) AS.issues.push({ exId: st.exId || null, note: txt.trim() });
+  if(txt.trim()){ AS.issues.push({ exId: st.exId || null, note: txt.trim() }); cueNoted(); }
   persistAS();
 }
 
@@ -1060,6 +1067,7 @@ function finalizeSession(statusReason){
   s.activeSession = null;
   saveState(s);
   AS = null;
+  if(statusReason === 'completed') cueSessionDone();
   syncToSheet();
   showScreen('home');
 }
@@ -1074,11 +1082,10 @@ function showScreen(name){
   document.getElementById('screen-'+name).classList.add('active');
   currentScreen = name;
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  const map = { home:'today', history:'history', progress:'progress', reference:'exercises', settings:'settings' };
+  const map = { home:'today', history:'history', reference:'exercises', settings:'settings' };
   document.querySelectorAll('.nav-btn').forEach(b=>{ if(b.textContent.trim().toLowerCase().includes(map[name]||name)) b.classList.add('active'); });
   if(name==='home') renderHome();
   if(name==='history') renderHistory();
-  if(name==='progress') renderProgress();
   if(name==='reference') renderReference();
   if(name==='settings') renderSettings();
 }
@@ -1176,12 +1183,6 @@ function discardActiveSession(){
     { text:'Discard', cls:'btn-danger', action:()=>{ const s=getState(); s.activeSession=null; saveState(s); AS=null; hideModal(); renderHome(); } }
   ]);
 }
-function confirmStartFresh(type){
-  showModal('Start a new session?', 'You have a session in progress. Starting fresh will discard it.', [
-    { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
-    { text:'Start fresh', cls:'btn-danger', action:()=>{ hideModal(); startSession(type); } }
-  ]);
-}
 
 // ===================================================================
 // HISTORY
@@ -1209,31 +1210,6 @@ function renderHistory(){
   document.getElementById('history-content').innerHTML = html;
 }
 function formatDate(ds){ const d = new Date(ds+'T12:00:00'); return `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}, ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getDate()}`; }
-
-// ===================================================================
-// PROGRESS
-// ===================================================================
-function renderProgress(){
-  const s = getState();
-  const weekly = getWeeklyVolume(8);
-  const totalSessions = s.log.length;
-  const totalPromos = s.promotionLog ? s.promotionLog.length : 0;
-  const last4 = weekly.slice(-4);
-  const avg = last4.length ? (last4.reduce((a,b)=>a+b.sessions,0)/last4.length).toFixed(1) : '0';
-  let totalHits = 0; s.log.forEach(e=>{ if(e.exercises) Object.entries(e.exercises).forEach(([id,r])=>{ if(checkHit(id,r)) totalHits++; }); });
-  const maxS = Math.max(...weekly.map(w=>w.sessions),4);
-  const bars = weekly.map(w=>`<div class="bar-col"><div class="bar-value">${w.sessions||''}</div><div class="bar" style="height:${w.sessions?Math.max(w.sessions/maxS*80,4):2}px;"></div><div class="bar-label">W${w.week}</div></div>`).join('');
-  let promoLog = (s.promotionLog && s.promotionLog.length) ? s.promotionLog.slice(-10).reverse().map(p=>`<div class="promo-log-item"><span>${p.from} <span class="promo-arrow">&#8594;</span> ${p.to}</span><span style="color:var(--text3);font-size:12px;">${p.date}</span></div>`).join('') : '<div style="color:var(--text3);font-size:13px;padding:12px 0;">No promotions yet.</div>';
-  document.getElementById('progress-content').innerHTML = `
-    <div class="stat-grid">
-      <div class="stat-box"><div class="stat-num">${totalSessions}</div><div class="stat-label">Sessions</div></div>
-      <div class="stat-box"><div class="stat-num">${avg}</div><div class="stat-label">Avg/Week (4wk)</div></div>
-      <div class="stat-box"><div class="stat-num">${totalHits}</div><div class="stat-label">Total HITs</div></div>
-      <div class="stat-box"><div class="stat-num">${totalPromos}</div><div class="stat-label">Promotions</div></div>
-    </div>
-    <div class="progress-section" style="margin-top:20px;"><h2>Sessions / Week</h2><div class="bar-chart">${bars}</div></div>
-    <div class="progress-section"><h2>Promotion Log</h2><div class="card">${promoLog}</div></div>`;
-}
 
 // ===================================================================
 // REFERENCE
@@ -1273,25 +1249,40 @@ function renderSettings(){
   const syncUrl = getSyncUrl();
   const lastSync = localStorage.getItem('train_last_sync');
   const lastSyncDisplay = lastSync ? new Date(lastSync).toLocaleString() : 'Never';
+  const soundOn = soundEnabled();
   document.getElementById('settings-content').innerHTML = `
+    <div class="block-label" style="margin-top:8px;">Sound cues</div>
     <div class="card">
-      <div style="font-weight:700;margin-bottom:12px;">Google Sheets Sync</div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Last sync: ${lastSyncDisplay}</div>
-      <input type="text" class="sync-url-input" id="sync-url-input" placeholder="Paste Apps Script URL here" value="${syncUrl}">
-      <div style="display:flex;gap:8px;margin-top:4px;">
-        <button class="btn btn-small btn-primary" onclick="saveSyncUrl()">Save</button>
-        <button class="btn btn-small btn-secondary" onclick="testSync()">Test</button>
-        <button class="btn btn-small btn-secondary" onclick="syncToSheet()">Sync Now</button>
+      <div class="setting-row">
+        <div><div style="font-weight:600;">Cue sounds</div><div style="font-size:12px;color:var(--text2);">Short tones for timers and saved actions</div></div>
+        <button class="btn btn-small ${soundOn?'btn-primary':'btn-secondary'}" onclick="toggleSound()">${soundOn?'On':'Off'}</button>
       </div>
     </div>
-    <div class="card" style="margin-top:12px;">
-      <div class="setting-row"><div><div style="font-weight:600;">Export Data</div><div style="font-size:12px;color:var(--text2);">Download full log as JSON</div></div><button class="btn btn-small btn-secondary" onclick="exportData()">Export</button></div>
-      <div class="setting-row"><div><div style="font-weight:600;">Import Data</div><div style="font-size:12px;color:var(--text2);">Restore from a backup</div></div><button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button><input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"></div>
-      <div class="setting-row"><div><div style="font-weight:600;">Reset Rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to U1</div></div><button class="btn btn-small btn-secondary" onclick="resetRotation()">Reset</button></div>
-      <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase All Data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
+    <div class="block-label">Your data</div>
+    <div class="card">
+      <div class="setting-row"><div><div style="font-weight:600;">Export data</div><div style="font-size:12px;color:var(--text2);">Download full log as JSON</div></div><button class="btn btn-small btn-secondary" onclick="exportData()">Export</button></div>
     </div>
-    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Data</strong>: ${s.log.length} sessions \u00b7 schema v${s.schemaVersion}<br><strong>Storage</strong>: ~${(JSON.stringify(s).length/1024).toFixed(1)} KB<br><strong>Version</strong>: Train v4 (test build)</div></div>`;
+    <details style="margin-top:14px;">
+      <summary style="font-size:13px;color:var(--text3);cursor:pointer;font-weight:600;padding:4px 0;">Advanced</summary>
+      <div class="card" style="margin-top:8px;">
+        <div style="font-weight:700;margin-bottom:12px;">Google Sheets Sync</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Last sync: ${lastSyncDisplay}</div>
+        <input type="text" class="sync-url-input" id="sync-url-input" placeholder="Paste Apps Script URL here" value="${syncUrl}">
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button class="btn btn-small btn-primary" onclick="saveSyncUrl()">Save</button>
+          <button class="btn btn-small btn-secondary" onclick="testSync()">Test</button>
+          <button class="btn btn-small btn-secondary" onclick="syncToSheet()">Sync Now</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:8px;">
+        <div class="setting-row"><div><div style="font-weight:600;">Import data</div><div style="font-size:12px;color:var(--text2);">Restore from a backup</div></div><button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button><input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"></div>
+        <div class="setting-row"><div><div style="font-weight:600;">Reset rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to U1</div></div><button class="btn btn-small btn-secondary" onclick="resetRotation()">Reset</button></div>
+        <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
+      </div>
+    </details>
+    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Version</strong>: Train v4 (test build) \u00b7 ${s.log.length} sessions</div></div>`;
 }
+function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
 function saveSyncUrl(){ setSyncUrl(document.getElementById('sync-url-input').value.trim()); renderSettings(); updateSyncIndicator(getSyncUrl()?'none':''); }
 function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
 function importData(ev){ const f = ev.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = e=>{ try { const data = JSON.parse(e.target.result); if(data.log && Array.isArray(data.log)){ showModal('Import data?', `Replace current data with ${data.log.length} sessions from the backup?`, [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Import',cls:'btn-primary',action:()=>{ saveState(migrate(data)); hideModal(); renderSettings(); showScreen('home'); }} ]); } else alert('Invalid backup file.'); } catch(err){ alert('Could not read file.'); } }; r.readAsText(f); }
