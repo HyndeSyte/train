@@ -623,15 +623,62 @@ function resumeSession(){
   const s = getState();
   if(!s.activeSession){ renderHome(); return; }
   AS = s.activeSession;
-  // Reconcile a timer that expired while the app was closed.
+  // Reconcile a timer that expired while the app was closed. Cold resume never
+  // fires a cue (GO/RELEASE) — the user is already looking at the resume state,
+  // so surprise audio on page load would be worse than silence.
+  let reconciled = false;
   if(AS.timerEnd && Date.now() >= AS.timerEnd){
     const wasKind = AS.timerKind;
-    AS.timerEnd = null; AS.timerKind = null;
-    // A rest timer that finished while away resumes into the terminal rest-complete state
-    // (never auto-advances past the set the user hasn't started).
-    if(wasKind === 'rest' && AS.phase === 'rest') AS.phase = 'restComplete';
+    const expiredAt = AS.timerEnd;
+    clearTimerState();
+    if(wasKind === 'rest' && AS.phase === 'rest'){
+      // Rest finished while away → terminal rest-complete; wait for the user's tap.
+      AS.phase = 'restComplete';
+    } else if(wasKind === 'work' && AS.phase === 'work'){
+      // Hold finished while away. Treat it as a completed hold (mirrors
+      // onWorkTimerComplete), then place the user correctly relative to the rest
+      // that would have started at expiredAt — never a dead 'work' screen.
+      reconcileExpiredWork(expiredAt);
+    }
+    reconciled = true;
   }
+  if(reconciled) persistAS();
   enterSessionScreen();
+}
+
+// Cold-resume handler for a hold timer that expired while the app was closed.
+// Marks the set complete at full target, then branches on the rest window:
+// still-running rest → 'rest' with correct remaining; elapsed rest → 'restComplete';
+// no rest (final set/station or restSec 0) → advance. Plays no cue (cold resume).
+function reconcileExpiredWork(expiredAt){
+  const flow = currentFlow();
+  const st = flow[AS.cursor];
+  const ex = EXERCISE_LIBRARY[st.exId];
+  const rec = AS.records[st.uid];
+  rec.sets[AS.setIdx] = ex.repRange[1]; // full hold achieved
+  rec.setStatus[AS.setIdx] = 'done';
+  clearTimerState();
+  const restSec = REST_TIMES[st.blockType] || 0;
+  const moreSets = AS.setIdx + 1 < ex.sets;
+  const moreStations = AS.cursor + 1 < flow.length;
+  if(restSec > 0 && (moreSets || moreStations)){
+    const restEnd = expiredAt + restSec*1000;
+    if(Date.now() >= restEnd){
+      AS.phase = 'restComplete'; // rest already elapsed while away
+    } else {
+      AS.phase = 'rest';
+      AS.timerKind = 'rest';
+      AS.timerEnd = restEnd; // resume the rest already in progress, not a fresh one
+    }
+  } else {
+    // No rest after this set: advance the cursor exactly as advanceAfterSet would.
+    if(moreSets){
+      AS.setIdx++; AS.phase = 'view';
+    } else {
+      rec.status = rec.setStatus.every(x=>x==='skipped') ? 'skipped' : 'done';
+      AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
+    }
+  }
 }
 
 function enterSessionScreen(){
@@ -842,7 +889,7 @@ function finishDurationEarly(){
   stopTimerLoop();
   rec.sets[AS.setIdx] = elapsed;
   rec.setStatus[AS.setIdx] = 'done';
-  AS.timerEnd = null; AS.timerKind = null;
+  clearTimerState();
   cueLogged();
   beginRestOrAdvance(st, ex, rec);
 }
@@ -851,7 +898,7 @@ function onWorkTimerComplete(){
   rec.sets[AS.setIdx] = ex.repRange[1]; // full hold achieved
   rec.setStatus[AS.setIdx] = 'done';
   cueRelease();
-  AS.timerEnd = null; AS.timerKind = null;
+  clearTimerState();
   beginRestOrAdvance(st, ex, rec);
 }
 
@@ -871,7 +918,10 @@ function beginRestOrAdvance(st, ex, rec){
     advanceAfterSet();
   }
 }
-function endRestNow(){ stopTimerLoop(); AS.timerEnd=null; AS.timerKind=null; advanceAfterSet(); }
+// Clears every timer-related field. Used on every path that leaves a work/rest
+// timer so stale paused-remaining time can never resurface in a later phase.
+function clearTimerState(){ AS.timerEnd = null; AS.timerKind = null; AS.timerRemaining = null; }
+function endRestNow(){ stopTimerLoop(); clearTimerState(); advanceAfterSet(); }
 // Pause/resume for work and rest timers. Stores remaining ms so the absolute
 // timerEnd can be rebuilt on resume (survives the wall-clock model).
 function fmtRemaining(){
@@ -900,7 +950,7 @@ function resumeTimer(){
 // User-tapped advance from the terminal restComplete state.
 function startNextAfterRest(){ unlockAudio(); advanceAfterSet(); }
 // Rest timer expiring must NOT auto-advance. Play GO and wait for the user's tap.
-function onRestTimerComplete(){ cueGo(); AS.timerEnd=null; AS.timerKind=null; AS.phase='restComplete'; persistAS(); renderStation(); }
+function onRestTimerComplete(){ cueGo(); clearTimerState(); AS.phase='restComplete'; persistAS(); renderStation(); }
 
 function advanceAfterSet(){
   const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
@@ -918,7 +968,7 @@ function redoLastSet(){
   stopTimerLoop();
   const flow = currentFlow(); const st = flow[AS.cursor]; const rec = AS.records[st.uid];
   rec.sets[AS.setIdx] = 0; rec.setStatus[AS.setIdx] = 'pending';
-  AS.phase = 'view'; AS.timerEnd = null; AS.timerKind = null;
+  AS.phase = 'view'; clearTimerState();
   persistAS();
   renderStation();
 }
@@ -928,7 +978,7 @@ function skipCurrentSet(){
   stopTimerLoop();
   const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
   rec.sets[AS.setIdx] = 0; rec.setStatus[AS.setIdx] = 'skipped';
-  AS.timerEnd = null; AS.timerKind = null;
+  clearTimerState();
   if(AS.setIdx + 1 < ex.sets){ AS.setIdx++; AS.phase='view'; persistAS(); renderStation(); }
   else { advanceAfterSet(); }
 }
@@ -940,7 +990,7 @@ function skipExercise(){
   rec.setStatus = rec.setStatus.map(s=> s==='done' ? s : 'skipped');
   rec.sets = rec.sets.map((v,i)=> rec.setStatus[i]==='done' ? v : 0);
   rec.status = rec.setStatus.some(s=>s==='done') ? 'done' : 'skipped';
-  AS.timerEnd = null; AS.timerKind = null;
+  clearTimerState();
   AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
   persistAS();
   renderStation();
@@ -957,7 +1007,7 @@ function showRef(exId){
 
 function noteIssue(){
   const flow = currentFlow(); const st = flow[AS.cursor]; const rec = AS.records[st.uid];
-  const txt = prompt('Note an issue with this exercise (logged, not diagnosed):', rec.note || '');
+  const txt = prompt('Add a note for this set:', rec.note || '');
   if(txt === null) return;
   rec.note = txt.trim();
   rec.issueFlag = txt.trim() ? 'issue' : 'none';
@@ -1276,7 +1326,7 @@ function renderSettings(){
       </div>
       <div class="card" style="margin-top:8px;">
         <div class="setting-row"><div><div style="font-weight:600;">Import data</div><div style="font-size:12px;color:var(--text2);">Restore from a backup</div></div><button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button><input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"></div>
-        <div class="setting-row"><div><div style="font-weight:600;">Reset rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to U1</div></div><button class="btn btn-small btn-secondary" onclick="resetRotation()">Reset</button></div>
+        <div class="setting-row"><div><div style="font-weight:600;">Reset rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to U1</div></div><button class="btn btn-small btn-secondary" onclick="confirmResetRotation()">Reset</button></div>
         <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
       </div>
     </details>
@@ -1286,6 +1336,7 @@ function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
 function saveSyncUrl(){ setSyncUrl(document.getElementById('sync-url-input').value.trim()); renderSettings(); updateSyncIndicator(getSyncUrl()?'none':''); }
 function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
 function importData(ev){ const f = ev.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = e=>{ try { const data = JSON.parse(e.target.result); if(data.log && Array.isArray(data.log)){ showModal('Import data?', `Replace current data with ${data.log.length} sessions from the backup?`, [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Import',cls:'btn-primary',action:()=>{ saveState(migrate(data)); hideModal(); renderSettings(); showScreen('home'); }} ]); } else alert('Invalid backup file.'); } catch(err){ alert('Could not read file.'); } }; r.readAsText(f); }
+function confirmResetRotation(){ showModal('Reset rotation?', 'The next session returns to U1. Session history is not changed.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Reset',cls:'btn-danger',action:()=>{ hideModal(); resetRotation(); }} ]); }
 function resetRotation(){ const s = getState(); s.rotationIndex = 0; saveState(s); renderSettings(); }
 function confirmErase(){ showModal('Erase all data?', 'Permanently deletes all sessions, promotions, and progression. Cannot be undone.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Erase everything',cls:'btn-danger',action:()=>{ localStorage.removeItem('train_state'); AS=null; hideModal(); showScreen('home'); }} ]); }
 
