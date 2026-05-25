@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0a">
 <title>Train</title>
 <style>
@@ -37,7 +37,6 @@ html, body {
 .screen.active { display:flex; }
 .scroll { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; padding:10px 16px; }
 
-/* Header — sub-screens only */
 .header {
   display:flex; align-items:center; justify-content:space-between;
   padding:10px 16px; padding-top: calc(10px + var(--safe-top));
@@ -50,20 +49,17 @@ html, body {
 }
 .header-btn:active { color:var(--text); }
 
-/* Home — no header bar, content starts at safe area */
 .home-top {
   padding:6px 16px 0; padding-top: calc(6px + var(--safe-top)); flex-shrink:0;
   display:flex; align-items:center; justify-content:space-between;
 }
 .home-brand { font-size:13px; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; }
 
-/* Cards */
 .card {
   background: var(--surface); border:1px solid var(--border);
   border-radius: var(--radius); padding:14px; margin-bottom:10px; overflow:hidden;
 }
 
-/* Badges */
 .badge {
   display:inline-flex; align-items:center; padding:3px 10px; border-radius:6px;
   font-size:12px; font-weight:700; letter-spacing:0.5px; text-transform:uppercase;
@@ -72,10 +68,10 @@ html, body {
 .badge-u2 { background:#3b1f5e; color:#c084fc; }
 .badge-l1 { background:#1e3b1e; color:#4ade80; }
 .badge-l2 { background:#3b351e; color:#fbbf24; }
+.badge-form { background:#2a2a30; color:#a5b4fc; }
 
 .grip-dot { display:inline-block; width:8px; height:8px; border-radius:50%; vertical-align:middle; }
 
-/* Buttons */
 .btn {
   display:block; width:100%; padding:14px; border:none; border-radius:12px;
   font-family:var(--font); font-size:16px; font-weight:700;
@@ -87,21 +83,9 @@ html, body {
 .btn-small { padding:10px 16px; font-size:14px; width:auto; display:inline-block; }
 .btn-danger { background:#7f1d1d; color:#fca5a5; }
 
-/* Session title */
 .session-name { font-size:28px; font-weight:800; letter-spacing:-1px; line-height:1.1; margin:4px 0; }
 
-/* Streak — small fixed rounded squares */
-.streak-row { display:flex; gap:5px; flex-shrink:0; }
-.streak-dot {
-  width:18px; height:18px; flex:0 0 18px;
-  border-radius:4px; display:flex; align-items:center;
-  justify-content:center; font-size:7px; color:var(--text3); font-weight:700;
-}
-.streak-dot.done { background:var(--accent); color:#0a0a0a; }
-.streak-dot.empty { background:var(--surface2); }
-.streak-dot.today { box-shadow:0 0 0 1.5px var(--accent); }
 
-/* Nav */
 .nav {
   display:flex; border-top:1px solid var(--border); flex-shrink:0;
   padding: 0 12px; padding-bottom: calc(8px + var(--safe-bottom)); background:var(--surface);
@@ -115,61 +99,58 @@ html, body {
 .nav-btn.active { color:var(--accent); }
 .nav-icon { font-size:16px; line-height:1; }
 
-/* Session screen */
-.block-label {
-  font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
-  color:var(--text3); margin:20px 0 8px; padding-top:8px; border-top:1px solid var(--border);
-}
-.block-label:first-child { border-top:none; margin-top:8px; }
-.exercise-card {
-  background:var(--surface); border:1px solid var(--border); border-radius:12px;
-  padding:14px; margin-bottom:8px;
-}
-.exercise-name { font-size:16px; font-weight:600; margin-bottom:2px; }
-.exercise-detail { font-size:12px; color:var(--text2); margin-bottom:10px; }
-.exercise-note { font-size:11px; color:var(--text3); font-style:italic; margin-top:8px; line-height:1.4; }
+/* ---- Guided session flow ---- */
+.flow-wrap { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.flow-progress { display:flex; gap:3px; padding:10px 16px 4px; flex-shrink:0; }
+.flow-seg { flex:1; height:4px; border-radius:2px; background:var(--surface2); }
+.flow-seg.done { background:var(--accent); }
+.flow-seg.current { background:var(--warn); }
+.flow-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:8px 16px 16px; display:flex; flex-direction:column; }
+.flow-meta { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text3); margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+.flow-cue { font-size:12px; color:var(--text3); font-style:italic; margin-bottom:14px; line-height:1.4; }
+.flow-title { font-size:26px; font-weight:800; letter-spacing:-0.8px; line-height:1.1; margin-bottom:4px; }
+.flow-sub { font-size:13px; color:var(--text2); margin-bottom:16px; }
+.move-block { margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+.move-block:last-child { border-bottom:none; }
+.move-name { font-size:17px; font-weight:700; margin-bottom:6px; }
+.move-detail { font-size:14px; color:var(--text2); line-height:1.5; }
 
-/* Set logging */
-.sets-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-.set-input {
-  width:50px; height:46px; background:var(--surface2); border:1.5px solid var(--border);
-  border-radius:10px; color:var(--text); font-family:var(--font-mono);
-  font-size:20px; text-align:center; -webkit-appearance:none;
-}
-.set-input:focus { border-color:var(--accent); outline:none; }
-.set-input.hit { border-color:var(--hit); background:var(--accent-dim); }
-.set-label { font-size:10px; color:var(--text3); text-align:center; width:50px; }
-.target-label { font-size:13px; color:var(--text2); margin-left:auto; white-space:nowrap; }
+.timer-big { font-family:var(--font-mono); font-size:72px; font-weight:700; text-align:center; line-height:1; margin:18px 0; letter-spacing:-2px; }
+.timer-big.rest { color:var(--warn); }
+.timer-big.work { color:var(--accent); }
+.timer-big.done { color:var(--accent); }
+.timer-phase { text-align:center; font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text3); }
+.statebig-rc { font-size:34px; font-weight:800; text-align:center; letter-spacing:-1px; line-height:1.05; margin:22px 0 8px; color:var(--accent); }
 
-/* Rest timer */
-.rest-timer {
-  position:fixed; bottom:60px; left:0; right:0; z-index:100;
-  background:var(--surface); border-top:1px solid var(--border);
-  padding:12px 16px; display:none; align-items:center; gap:12px;
-}
-.rest-timer.visible { display:flex; }
-.rest-time { font-family:var(--font-mono); font-size:28px; font-weight:700; min-width:70px; }
-.rest-time.done { color:var(--accent); }
-.rest-label { font-size:12px; color:var(--text2); flex:1; }
-.rest-dismiss {
-  background:var(--surface2); border:1px solid var(--border); color:var(--text2);
-  padding:8px 14px; border-radius:8px; font-size:13px; cursor:pointer; font-family:var(--font);
-}
+.set-pills { display:flex; gap:6px; justify-content:center; margin:14px 0; flex-wrap:wrap; }
+.set-pill { width:34px; height:34px; border-radius:8px; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:13px; color:var(--text3); border:1px solid var(--border); }
+.set-pill.done { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
+.set-pill.hit { background:var(--accent); color:#0a0a0a; }
+.set-pill.skipped { background:var(--surface2); color:var(--text3); text-decoration:line-through; }
+.set-pill.current { border-color:var(--warn); color:var(--warn); }
 
-/* Promotion */
-.promo-card {
-  background:var(--accent-dim); border:1px solid var(--accent);
-  border-radius:var(--radius); padding:14px; margin-bottom:10px;
+.rep-input-big {
+  width:120px; height:80px; background:var(--surface2); border:2px solid var(--border);
+  border-radius:14px; color:var(--text); font-family:var(--font-mono);
+  font-size:44px; text-align:center; -webkit-appearance:none; display:block; margin:10px auto;
 }
-.promo-card h3 { color:var(--accent); font-size:14px; margin-bottom:4px; }
-.promo-card p { font-size:13px; color:var(--text2); margin-bottom:10px; }
-.promo-actions { display:flex; gap:8px; }
+.rep-input-big:focus { border-color:var(--accent); outline:none; }
+.target-pill { text-align:center; font-size:13px; color:var(--text2); margin-bottom:8px; }
+
+.flow-foot { flex-shrink:0; padding:12px 16px; padding-bottom: calc(12px + var(--safe-bottom)); border-top:1px solid var(--border); background:var(--surface); }
+.flow-actions-row { display:flex; gap:8px; margin-top:8px; }
+.mini-btn { flex:1; background:none; border:1px solid var(--border); color:var(--text3); font-size:12px; font-family:var(--font); padding:9px 4px; border-radius:8px; cursor:pointer; }
+.mini-btn:active { color:var(--text); }
+.mini-btn.warn { color:#fca5a5; border-color:#5a2222; }
+
+.note-field { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font); font-size:14px; padding:10px; -webkit-appearance:none; }
+.note-field:focus { border-color:var(--accent); outline:none; }
+
+.exercise-note { font-size:12px; color:var(--text3); font-style:italic; margin-top:10px; line-height:1.4; }
+.demo-link { color:var(--text3); font-size:13px; text-decoration:none; padding:4px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; display:inline-block; margin-top:10px; }
 
 /* History */
-.history-item {
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:12px; padding:14px; margin-bottom:8px; cursor:pointer;
-}
+.history-item { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:8px; cursor:pointer; }
 .history-date { font-size:13px; color:var(--text2); }
 .history-type { font-size:16px; font-weight:600; margin:4px 0; }
 .history-hits { font-size:12px; color:var(--accent); }
@@ -177,13 +158,17 @@ html, body {
 .history-item.expanded .history-detail { display:block; }
 .history-exercise { font-size:13px; margin-bottom:6px; }
 .history-exercise span { color:var(--text2); }
+.status-chip { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; padding:2px 7px; border-radius:5px; margin-left:6px; }
+.status-completed { background:var(--accent-dim); color:var(--accent); }
+.status-partial { background:var(--warn-dim); color:var(--warn); }
+.status-stopped { background:#5a2222; color:#fca5a5; }
 
 /* Progress */
 .progress-section { margin-bottom:24px; }
 .progress-section h2 { font-size:16px; font-weight:700; margin-bottom:12px; }
 .bar-chart { display:flex; align-items:flex-end; gap:4px; height:100px; }
 .bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
-.bar { width:100%; background:var(--accent-dim); border-radius:4px 4px 0 0; min-height:2px; transition:height 0.3s; }
+.bar { width:100%; background:var(--accent-dim); border-radius:4px 4px 0 0; min-height:2px; }
 .bar-label { font-size:9px; color:var(--text3); }
 .bar-value { font-size:10px; color:var(--text2); }
 .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -193,19 +178,22 @@ html, body {
 .promo-log-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
 .promo-log-item:last-child { border-bottom:none; }
 .promo-arrow { color:var(--accent); margin:0 6px; }
+.promo-card { background:var(--accent-dim); border:1px solid var(--accent); border-radius:var(--radius); padding:14px; margin-bottom:10px; }
+.promo-card h3 { color:var(--accent); font-size:14px; margin-bottom:4px; }
+.promo-card p { font-size:13px; color:var(--text2); margin-bottom:10px; }
+.promo-actions { display:flex; gap:8px; }
 
-/* Settings */
-.setting-row { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--border); }
+/* Settings / Reference */
+.setting-row { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--border); gap:10px; }
 .setting-row:last-child { border-bottom:none; }
-
-/* Reference */
 .ref-exercise { padding:10px 0; border-bottom:1px solid var(--border); }
 .ref-exercise:last-child { border-bottom:none; }
 .ref-name { font-size:15px; font-weight:600; }
 .ref-ladder { font-size:12px; color:var(--text2); margin-top:4px; }
 .ref-current { color:var(--accent); font-weight:600; }
+.block-label { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--text3); margin:20px 0 8px; padding-top:8px; border-top:1px solid var(--border); }
+.block-label:first-child { border-top:none; margin-top:8px; }
 
-/* Empty / Sync / Modal */
 .empty { text-align:center; padding:40px 20px; color:var(--text3); }
 .empty-icon { font-size:40px; margin-bottom:12px; }
 .sync-dot { width:6px; height:6px; border-radius:50%; display:inline-block; vertical-align:middle; }
@@ -218,10 +206,9 @@ html, body {
 .sync-url-input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--font-mono); font-size:12px; padding:10px; margin:8px 0; -webkit-appearance:none; }
 .sync-url-input:focus { border-color:var(--accent); outline:none; }
 .setup-steps { font-size:12px; color:var(--text2); line-height:1.8; }
-.setup-steps code { background:var(--surface2); padding:2px 6px; border-radius:4px; font-family:var(--font-mono); font-size:11px; }
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; display:none; align-items:flex-end; justify-content:center; }
 .modal-overlay.visible { display:flex; }
-.modal { background:var(--surface); border-radius:16px 16px 0 0; padding:24px 16px; width:100%; max-width:500px; }
+.modal { background:var(--surface); border-radius:16px 16px 0 0; padding:24px 16px; padding-bottom: calc(24px + var(--safe-bottom)); width:100%; max-width:500px; }
 .modal h3 { font-size:17px; margin-bottom:8px; }
 .modal p { font-size:14px; color:var(--text2); margin-bottom:16px; }
 .modal-actions { display:flex; gap:8px; }
@@ -230,155 +217,68 @@ html, body {
 </head>
 <body>
 
-<!-- ==================== HOME SCREEN ==================== -->
+<!-- ==================== HOME ==================== -->
 <div id="screen-home" class="screen active">
   <div class="home-top">
     <span class="home-brand">Train</span>
     <span id="sync-indicator" class="sync-status"></span>
   </div>
-  <div class="scroll">
-    <div id="home-content"></div>
-  </div>
+  <div class="scroll"><div id="home-content"></div></div>
   <nav class="nav">
-    <button class="nav-btn active" onclick="showScreen('home')">
-      <span class="nav-icon">&#9679;</span>Today
-    </button>
-    <button class="nav-btn" onclick="showScreen('history')">
-      <span class="nav-icon">&#9776;</span>History
-    </button>
-    <button class="nav-btn" onclick="showScreen('progress')">
-      <span class="nav-icon">&#9650;</span>Progress
-    </button>
-    <button class="nav-btn" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9733;</span>Exercises
-    </button>
-    <button class="nav-btn" onclick="showScreen('settings')">
-      <span class="nav-icon">&#9881;</span>Settings
-    </button>
+    <button class="nav-btn active" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
+    <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
+    <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
+    <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
 </div>
 
-<!-- ==================== SESSION SCREEN ==================== -->
+<!-- ==================== SESSION (guided flow) ==================== -->
 <div id="screen-session" class="screen">
   <div class="header">
-    <button class="header-btn" onclick="confirmExitSession()">&#8592; Back</button>
+    <button class="header-btn" onclick="confirmStopSession()">&#10005; Stop</button>
     <h1 id="session-title"></h1>
     <div id="session-grip"></div>
   </div>
-  <div class="scroll" id="session-content"></div>
-  <div style="padding:12px 16px; flex-shrink:0; border-top:1px solid var(--border);">
-    <div style="display:flex;gap:6px;margin-bottom:8px;">
-      <button class="feel-btn" data-feel="easy" onclick="setFeel('easy')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-family:var(--font);cursor:pointer;">Easy</button>
-      <button class="feel-btn" data-feel="solid" onclick="setFeel('solid')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-family:var(--font);cursor:pointer;">Solid</button>
-      <button class="feel-btn" data-feel="hard" onclick="setFeel('hard')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:13px;font-family:var(--font);cursor:pointer;">Hard</button>
-    </div>
-    <input type="text" id="session-notes" placeholder="Notes (optional)" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;padding:10px;margin-bottom:8px;-webkit-appearance:none;">
-    <button class="btn btn-primary" onclick="completeSession()">Complete Session</button>
-  </div>
-  <div class="rest-timer" id="rest-timer">
-    <div class="rest-time" id="rest-time">2:30</div>
-    <div class="rest-label" id="rest-label">Rest</div>
-    <button class="rest-dismiss" onclick="dismissTimer()">Skip</button>
+  <div class="flow-wrap">
+    <div class="flow-progress" id="flow-progress"></div>
+    <div class="flow-body" id="flow-body"></div>
+    <div class="flow-foot" id="flow-foot"></div>
   </div>
 </div>
 
-<!-- ==================== HISTORY SCREEN ==================== -->
+<!-- ==================== HISTORY ==================== -->
 <div id="screen-history" class="screen">
-  <div class="header">
-    <h1>History</h1>
-  </div>
+  <div class="header"><h1>History</h1></div>
   <div class="scroll" id="history-content"></div>
   <nav class="nav">
-    <button class="nav-btn" onclick="showScreen('home')">
-      <span class="nav-icon">&#9679;</span>Today
-    </button>
-    <button class="nav-btn active" onclick="showScreen('history')">
-      <span class="nav-icon">&#9776;</span>History
-    </button>
-    <button class="nav-btn" onclick="showScreen('progress')">
-      <span class="nav-icon">&#9650;</span>Progress
-    </button>
-    <button class="nav-btn" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9733;</span>Exercises
-    </button>
-    <button class="nav-btn" onclick="showScreen('settings')">
-      <span class="nav-icon">&#9881;</span>Settings
-    </button>
+    <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
+    <button class="nav-btn active" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
+    <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
+    <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
 </div>
 
-<!-- ==================== PROGRESS SCREEN ==================== -->
-<div id="screen-progress" class="screen">
-  <div class="header">
-    <h1>Progress</h1>
-  </div>
-  <div class="scroll" id="progress-content"></div>
-  <nav class="nav">
-    <button class="nav-btn" onclick="showScreen('home')">
-      <span class="nav-icon">&#9679;</span>Today
-    </button>
-    <button class="nav-btn" onclick="showScreen('history')">
-      <span class="nav-icon">&#9776;</span>History
-    </button>
-    <button class="nav-btn active" onclick="showScreen('progress')">
-      <span class="nav-icon">&#9650;</span>Progress
-    </button>
-    <button class="nav-btn" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9733;</span>Exercises
-    </button>
-    <button class="nav-btn" onclick="showScreen('settings')">
-      <span class="nav-icon">&#9881;</span>Settings
-    </button>
-  </nav>
-</div>
-
-<!-- ==================== REFERENCE SCREEN ==================== -->
+<!-- ==================== REFERENCE ==================== -->
 <div id="screen-reference" class="screen">
-  <div class="header">
-    <h1>Exercises</h1>
-  </div>
+  <div class="header"><h1>Exercises</h1></div>
   <div class="scroll" id="reference-content"></div>
   <nav class="nav">
-    <button class="nav-btn" onclick="showScreen('home')">
-      <span class="nav-icon">&#9679;</span>Today
-    </button>
-    <button class="nav-btn" onclick="showScreen('history')">
-      <span class="nav-icon">&#9776;</span>History
-    </button>
-    <button class="nav-btn" onclick="showScreen('progress')">
-      <span class="nav-icon">&#9650;</span>Progress
-    </button>
-    <button class="nav-btn active" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9733;</span>Exercises
-    </button>
-    <button class="nav-btn" onclick="showScreen('settings')">
-      <span class="nav-icon">&#9881;</span>Settings
-    </button>
+    <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
+    <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
+    <button class="nav-btn active" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
+    <button class="nav-btn" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
 </div>
 
-<!-- ==================== SETTINGS SCREEN ==================== -->
+<!-- ==================== SETTINGS ==================== -->
 <div id="screen-settings" class="screen">
-  <div class="header">
-    <h1>Settings</h1>
-  </div>
+  <div class="header"><h1>Settings</h1></div>
   <div class="scroll" id="settings-content"></div>
   <nav class="nav">
-    <button class="nav-btn" onclick="showScreen('home')">
-      <span class="nav-icon">&#9679;</span>Today
-    </button>
-    <button class="nav-btn" onclick="showScreen('history')">
-      <span class="nav-icon">&#9776;</span>History
-    </button>
-    <button class="nav-btn" onclick="showScreen('progress')">
-      <span class="nav-icon">&#9650;</span>Progress
-    </button>
-    <button class="nav-btn" onclick="showScreen('reference')">
-      <span class="nav-icon">&#9733;</span>Exercises
-    </button>
-    <button class="nav-btn active" onclick="showScreen('settings')">
-      <span class="nav-icon">&#9881;</span>Settings
-    </button>
+    <button class="nav-btn" onclick="showScreen('home')"><span class="nav-icon">&#9679;</span>Today</button>
+    <button class="nav-btn" onclick="showScreen('history')"><span class="nav-icon">&#9776;</span>History</button>
+    <button class="nav-btn" onclick="showScreen('reference')"><span class="nav-icon">&#9733;</span>Exercises</button>
+    <button class="nav-btn active" onclick="showScreen('settings')"><span class="nav-icon">&#9881;</span>Settings</button>
   </nav>
 </div>
 
@@ -392,652 +292,896 @@ html, body {
 </div>
 
 <script>
+"use strict";
 // ===================================================================
-// DATA MODEL
+// SCHEMA VERSION
 // ===================================================================
+const SCHEMA_VERSION = 4;
 
+// ===================================================================
+// EXERCISE LIBRARY
+// ===================================================================
 const EXERCISE_LIBRARY = {
-  // === U1 Exercises (Ring-dominant) ===
-  'ring-row': {
-    name: 'Ring Row', grip: 'high',
-    ladder: ['Inverted Row (feet down)', 'Ring Row (feet elevated)', 'Archer Ring Row', 'Front Lever Tuck Row'],
-    repRange: [5, 8], sets: 3, unit: 'reps',
-    note: 'Full range, slow eccentric. Control the bottom. Grip: heel of palm over ring, not fingers.',
-    demoUrl: 'https://www.youtube.com/results?search_query=ring+row+tutorial+form+calisthenics'
-  },
-  'ring-pushup': {
-    name: 'Ring Push-Up', grip: 'high',
-    ladder: ['Ring Push-Up', 'Ring Push-Up (feet elevated)', 'Ring Archer Push-Up', 'Ring Dip (partial)'],
-    repRange: [6, 10], sets: 3, unit: 'reps',
-    note: 'Turn rings out at top. Elbows at 45°. Grip: heel of palm over ring, not fingers.',
-    demoUrl: 'https://www.youtube.com/results?search_query=ring+push+up+tutorial+form'
-  },
-  'ring-support': {
-    name: 'Ring Support Hold', grip: 'high',
-    ladder: ['Ring Support Hold', 'Ring Support (turned out)', 'Ring L-Sit Support', 'Ring Support + Slow Turn'],
-    repRange: [15, 30], sets: 3, unit: 'sec',
-    note: 'Locked arms, rings turned out. Breathe. Grip: heel of palm over ring, not fingers.',
-    demoUrl: 'https://www.youtube.com/results?search_query=ring+support+hold+tutorial+turned+out'
-  },
-  'ring-curl': {
-    name: 'Ring Bicep Curl', grip: 'high',
-    ladder: ['Ring Curl (steep angle)', 'Ring Curl (moderate)', 'Ring Curl (low angle)', 'Ring Curl (feet elevated)'],
-    repRange: [8, 12], sets: 2, unit: 'reps',
-    note: 'Slow eccentric, strict body line. Grip: heel of palm over ring, not fingers.',
-    demoUrl: 'https://www.youtube.com/results?search_query=ring+bicep+curl+tutorial+bodyweight'
-  },
-  'ring-pullup': {
-    name: 'Ring Pull-Up', grip: 'high',
-    ladder: ['Ring Negative Pull-Up (5s)', 'Ring Pull-Up (band assist)', 'Ring Pull-Up', 'Ring L-Sit Pull-Up'],
-    repRange: [3, 6], sets: 3, unit: 'reps',
-    note: 'Rings allow natural wrist rotation — use it. Start from dead hang, pull to chest, slow negative. Grip: heel of palm over ring.',
-    travelAlt: 'Same — rings are portable.',
-    demoUrl: 'https://www.youtube.com/results?search_query=ring+pull+up+tutorial+form+calisthenics'
-  },
+  'ring-row': { name:'Ring Row', grip:'high', ladder:['Inverted Row (feet down)','Ring Row (feet elevated)','Archer Ring Row','Front Lever Tuck Row'], repRange:[5,8], sets:3, unit:'reps', note:'Full range, slow eccentric. Control the bottom. Heel of palm over the ring, not the fingers.', demoUrl:'https://www.youtube.com/results?search_query=ring+row+tutorial+form+calisthenics' },
+  'ring-pushup': { name:'Ring Push-Up', grip:'high', ladder:['Ring Push-Up','Ring Push-Up (feet elevated)','Ring Archer Push-Up','Ring Dip (partial)'], repRange:[6,10], sets:3, unit:'reps', note:'Turn the rings out at the top. Elbows at 45 degrees.', demoUrl:'https://www.youtube.com/results?search_query=ring+push+up+tutorial+form' },
+  'ring-support': { name:'Ring Support Hold', grip:'high', ladder:['Ring Support Hold','Ring Support (turned out)','Ring L-Sit Support','Ring Support + Slow Turn'], repRange:[15,30], sets:3, unit:'sec', note:'Locked arms, rings turned out. Breathe.', demoUrl:'https://www.youtube.com/results?search_query=ring+support+hold+tutorial+turned+out' },
+  'ring-curl': { name:'Ring Bicep Curl', grip:'high', ladder:['Ring Curl (steep angle)','Ring Curl (moderate)','Ring Curl (low angle)','Ring Curl (feet elevated)'], repRange:[8,12], sets:2, unit:'reps', note:'Slow eccentric, strict body line.', demoUrl:'https://www.youtube.com/results?search_query=ring+bicep+curl+tutorial+bodyweight' },
+  'ring-pullup': { name:'Ring Pull-Up', grip:'high', ladder:['Ring Negative Pull-Up (5s)','Ring Pull-Up (band assist)','Ring Pull-Up','Ring L-Sit Pull-Up'], repRange:[3,6], sets:3, unit:'reps', note:'Let the wrists rotate naturally. Dead hang to chest, slow negative.', demoUrl:'https://www.youtube.com/results?search_query=ring+pull+up+tutorial+form+calisthenics' },
 
-  // === U2 Exercises (Parallette/DB) ===
-  'para-pushup': {
-    name: 'Parallette Push-Up', grip: 'low',
-    ladder: ['Parallette Push-Up', 'Parallette Deficit Push-Up', 'Parallette Archer Push-Up', 'Parallette Planche Lean Push-Up'],
-    repRange: [6, 10], sets: 3, unit: 'reps',
-    note: 'Neutral grip. Full depth past handles.',
-    demoUrl: 'https://www.youtube.com/results?search_query=parallette+push+up+tutorial+form'
-  },
-  'db-press': {
-    name: 'DB Floor Press', grip: 'low',
-    ladder: ['DB Floor Press', 'DB Floor Press (slow ecc)', 'DB Floor Press (pause)', 'DB Single-Arm Floor Press'],
-    repRange: [8, 12], sets: 3, unit: 'reps',
-    note: '25lb DBs. Control the bottom, pause at chest.',
-    demoUrl: 'https://www.youtube.com/results?search_query=dumbbell+floor+press+tutorial+form'
-  },
-  'ring-face-pull': {
-    name: 'Ring Face Pull', grip: 'low',
-    ladder: ['Ring Y-Raise', 'Ring Face Pull', 'Ring Face Pull (feet up)', 'Ring Face Pull + Hold'],
-    repRange: [8, 12], sets: 3, unit: 'reps',
-    note: 'Light angle. Strict form, squeeze rear delts.',
-    demoUrl: 'https://www.youtube.com/results?search_query=ring+face+pull+tutorial+rear+delt'
-  },
-  'ab-wheel': {
-    name: 'Ab Wheel Rollout', grip: 'low',
-    ladder: ['Kneeling Partial Rollout', 'Kneeling Full Rollout', 'Kneeling Rollout + Pause', 'Standing Partial Rollout'],
-    repRange: [5, 10], sets: 3, unit: 'reps',
-    note: 'Hollow body throughout. Don\'t collapse lower back.',
-    demoUrl: 'https://www.youtube.com/results?search_query=ab+wheel+rollout+tutorial+form+core'
-  },
-  'pike-pushup': {
-    name: 'Pike Push-Up', grip: 'low',
-    ladder: ['Pike Push-Up', 'Pike Push-Up (elevated feet)', 'Parallette Pike Push-Up (deficit)', 'Wall HSPU Negative (5s)'],
-    repRange: [5, 8], sets: 3, unit: 'reps',
-    note: 'Overhead pressing pattern. Head passes between hands. 8ft ceiling is fine for parallette pike.',
-    travelAlt: 'Pike push-up on floor — no equipment needed.',
-    demoUrl: 'https://www.youtube.com/results?search_query=pike+push+up+tutorial+overhead+press+progression'
-  },
+  'para-pushup': { name:'Parallette Push-Up', grip:'low', ladder:['Parallette Push-Up','Parallette Deficit Push-Up','Parallette Archer Push-Up','Parallette Planche Lean Push-Up'], repRange:[6,10], sets:3, unit:'reps', note:'Neutral grip. Full depth past the handles.', demoUrl:'https://www.youtube.com/results?search_query=parallette+push+up+tutorial+form' },
+  'db-press': { name:'DB Floor Press', grip:'low', ladder:['DB Floor Press','DB Floor Press (slow ecc)','DB Floor Press (pause)','DB Single-Arm Floor Press'], repRange:[8,12], sets:3, unit:'reps', note:'25lb DBs. Control the bottom, pause at the chest.', demoUrl:'https://www.youtube.com/results?search_query=dumbbell+floor+press+tutorial+form' },
+  'ring-face-pull': { name:'Ring Face Pull', grip:'low', ladder:['Ring Y-Raise','Ring Face Pull','Ring Face Pull (feet up)','Ring Face Pull + Hold'], repRange:[8,12], sets:3, unit:'reps', note:'Light angle. Strict form, squeeze the rear delts.', demoUrl:'https://www.youtube.com/results?search_query=ring+face+pull+tutorial+rear+delt' },
+  'ab-wheel': { name:'Ab Wheel Rollout', grip:'low', ladder:['Kneeling Partial Rollout','Kneeling Full Rollout','Kneeling Rollout + Pause','Standing Partial Rollout'], repRange:[5,10], sets:3, unit:'reps', note:'Hollow body throughout. Do not let the lower back collapse.', demoUrl:'https://www.youtube.com/results?search_query=ab+wheel+rollout+tutorial+form+core' },
+  'pike-pushup': { name:'Pike Push-Up', grip:'low', ladder:['Pike Push-Up','Pike Push-Up (elevated feet)','Parallette Pike Push-Up (deficit)','Wall HSPU Negative (5s)'], repRange:[5,8], sets:3, unit:'reps', note:'Overhead pressing pattern. Head passes between the hands.', demoUrl:'https://www.youtube.com/results?search_query=pike+push+up+tutorial+overhead+press+progression' },
 
-  // === L1 Exercises (Hinge-primary) ===
-  'jefferson-curl': {
-    name: 'Jefferson Curl', grip: 'none',
-    ladder: ['BW Jefferson Curl', 'Light DB Jefferson Curl', 'DB Jefferson Curl (slow)', 'DB Jefferson Curl (deficit)'],
-    repRange: [5, 8], sets: 3, unit: 'reps',
-    note: 'Light weight. Vertebra by vertebra. Never rush.',
-    demoUrl: 'https://www.youtube.com/results?search_query=jefferson+curl+tutorial+form+spine'
-  },
-  'glute-bridge': {
-    name: 'Glute-Ham Bridge', grip: 'none',
-    ladder: ['Glute Bridge', 'Glute Bridge (feet elevated)', 'Single-Leg Glute Bridge', 'Single-Leg Bridge (elevated)'],
-    repRange: [8, 12], sets: 3, unit: 'reps',
-    note: 'Drive through heels. Squeeze at top.',
-    demoUrl: 'https://www.youtube.com/results?search_query=glute+bridge+tutorial+form+hip+thrust'
-  },
-  'single-leg-rdl': {
-    name: 'Single-Leg RDL', grip: 'none',
-    ladder: ['BW Single-Leg RDL', 'DB Single-Leg RDL', 'DB SL RDL (slow ecc)', 'DB SL RDL (deficit)'],
-    repRange: [6, 10], sets: 3, unit: 'reps/side',
-    note: 'Hinge at hip, not back. Light touch on wall for balance if needed. 25lb DB in opposite hand.',
-    travelAlt: 'BW single-leg RDL — no equipment needed.',
-    demoUrl: 'https://www.youtube.com/results?search_query=single+leg+RDL+dumbbell+tutorial+form+hinge'
-  },
-  'jump-rope': {
-    name: 'Jump Rope', grip: 'none',
-    ladder: ['Jump Rope 20s on/off', 'Jump Rope 30s on/off', 'Jump Rope 40s on/off', 'Jump Rope 30s on/15s off'],
-    repRange: [4, 6], sets: 1, unit: 'rounds',
-    note: 'Stay light on feet. Sub hill sprints outdoors.',
-    travelAlt: 'Hill sprints or burpees.',
-    demoUrl: 'https://www.youtube.com/results?search_query=jump+rope+technique+tutorial+form+beginners'
-  },
-  'hanging-knee-raise': {
-    name: 'Hanging Knee Raise', grip: 'none',
-    ladder: ['Hanging Tuck Knee Raise', 'Hanging Knee Raise', 'Hanging Knee Raise (slow)', 'Hanging Leg Raise'],
-    repRange: [6, 12], sets: 3, unit: 'reps',
-    note: 'From ring hang. Controlled negative — no swinging. Decompresses spine after hinge work. Grip: heel of palm over ring.',
-    travelAlt: 'Same — rings are portable.',
-    demoUrl: 'https://www.youtube.com/results?search_query=hanging+knee+raise+tutorial+form+no+swing'
-  },
+  'jefferson-curl': { name:'Jefferson Curl', grip:'none', ladder:['BW Jefferson Curl','Light DB Jefferson Curl','DB Jefferson Curl (slow)','DB Jefferson Curl (deficit)'], repRange:[5,8], sets:3, unit:'reps', note:'Light. Vertebra by vertebra. Never rush.', demoUrl:'https://www.youtube.com/results?search_query=jefferson+curl+tutorial+form+spine' },
+  'glute-bridge': { name:'Glute-Ham Bridge', grip:'none', ladder:['Glute Bridge','Glute Bridge (feet elevated)','Single-Leg Glute Bridge','Single-Leg Bridge (elevated)'], repRange:[8,12], sets:3, unit:'reps', note:'Drive through the heels. Squeeze at the top.', demoUrl:'https://www.youtube.com/results?search_query=glute+bridge+tutorial+form+hip+thrust' },
+  'single-leg-rdl': { name:'Single-Leg RDL', grip:'none', ladder:['BW Single-Leg RDL','DB Single-Leg RDL','DB SL RDL (slow ecc)','DB SL RDL (deficit)'], repRange:[6,10], sets:3, unit:'reps/side', note:'Hinge at the hip, not the back. Light touch on a wall for balance if needed.', demoUrl:'https://www.youtube.com/results?search_query=single+leg+RDL+dumbbell+tutorial+form+hinge' },
+  'jump-rope': { name:'Jump Rope', grip:'none', ladder:['Jump Rope 20s on/off','Jump Rope 30s on/off','Jump Rope 40s on/off','Jump Rope 30s on/15s off'], repRange:[4,6], sets:1, unit:'rounds', note:'Stay light on the feet. Sub hill sprints outdoors.', demoUrl:'https://www.youtube.com/results?search_query=jump+rope+technique+tutorial+form+beginners' },
+  'hanging-knee-raise': { name:'Hanging Knee Raise', grip:'low', ladder:['Hanging Tuck Knee Raise','Hanging Knee Raise','Hanging Knee Raise (slow)','Hanging Leg Raise'], repRange:[6,12], sets:3, unit:'reps', note:'From a ring hang. Controlled negative, no swinging. Decompresses the spine after hinge work.', demoUrl:'https://www.youtube.com/results?search_query=hanging+knee+raise+tutorial+form+no+swing' },
 
-  // === L2 Exercises (Squat-primary) ===
-  'split-squat': {
-    name: 'Bulgarian Split Squat', grip: 'none',
-    ladder: ['BW Split Squat', 'Bulgarian Split Squat', 'DB Bulgarian Split Squat', 'DB BSS (pause at bottom)'],
-    repRange: [6, 10], sets: 3, unit: 'reps/side',
-    note: 'Rear foot on bench/box. Upright torso.',
-    demoUrl: 'https://www.youtube.com/results?search_query=bulgarian+split+squat+tutorial+form+setup'
-  },
-  'step-lunge': {
-    name: 'Step-Through Lunge', grip: 'none',
-    ladder: ['Reverse Lunge', 'Step-Through Lunge', 'Step-Through + Balance Hold', 'Step-Through + Hop'],
-    repRange: [6, 10], sets: 3, unit: 'reps/side',
-    note: 'Balance pause at top of each rep.',
-    demoUrl: 'https://www.youtube.com/results?search_query=step+through+lunge+walking+lunge+tutorial+form'
-  },
-  'cossack-squat': {
-    name: 'Cossack Squat', grip: 'none',
-    ladder: ['Supported Cossack Squat', 'Cossack Squat', 'Cossack Squat (slow tempo)', 'Weighted Cossack Squat'],
-    repRange: [5, 8], sets: 3, unit: 'reps/side',
-    note: 'Lateral plane movement. Heel stays planted. Go only as deep as you can control. Builds hip mobility + lateral stability.',
-    travelAlt: 'BW Cossack squat — no equipment needed.',
-    demoUrl: 'https://www.youtube.com/results?search_query=cossack+squat+tutorial+hip+mobility+lateral'
-  },
-  'calf-raise': {
-    name: 'Calf Raises', grip: 'none',
-    ladder: ['Bilateral Calf Raise', 'Slow Bilateral (3s up/3s down)', 'Single-Leg Calf Raise', 'Single-Leg Slow Calf Raise'],
-    repRange: [12, 20], sets: 2, unit: 'reps',
-    note: 'Full ROM. Pause at top and bottom.',
-    demoUrl: 'https://www.youtube.com/results?search_query=calf+raise+tutorial+full+range+of+motion'
-  },
-  'hollow-body': {
-    name: 'Hollow Body Hold', grip: 'none',
-    ladder: ['Tuck Hollow Hold', 'Single-Leg Hollow Hold', 'Hollow Body Hold', 'Hollow Body Rock'],
-    repRange: [20, 40], sets: 3, unit: 'sec',
-    note: 'Lower back glued to floor. Breathe.',
-    demoUrl: 'https://www.youtube.com/results?search_query=hollow+body+hold+tutorial+calisthenics+core'
-  },
-
-  // === Mobility Movements ===
-  'wrist-prep': {
-    name: 'Wrist Prep Series', grip: 'none',
-    ladder: ['Wrist Prep'], repRange: [1,1], sets: 1, unit: 'min',
-    note: 'Extensions, flexions, circles. 2-3 min.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=wrist+mobility+warm+up+prep+series'
-  },
-  'shoulder-dislocate': {
-    name: 'Shoulder Dislocates', grip: 'none',
-    ladder: ['Shoulder Dislocates'], repRange: [8,12], sets: 2, unit: 'reps',
-    note: 'Slow, wide grip. Narrow over time.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=shoulder+dislocates+mobility+tutorial+stick'
-  },
-  'thoracic-ext': {
-    name: 'Thoracic Extension', grip: 'none',
-    ladder: ['Thoracic Extension'], repRange: [30,45], sets: 2, unit: 'sec',
-    note: 'Breathe into the stretch.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=thoracic+extension+mobility+tutorial+upper+back'
-  },
-  'hip-car': {
-    name: 'Hip CARs', grip: 'none',
-    ladder: ['Hip CARs'], repRange: [3,5], sets: 2, unit: 'reps/side',
-    note: 'Controlled, biggest circles possible.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=hip+CARs+controlled+articular+rotation+tutorial'
-  },
-  'deep-squat': {
-    name: 'Deep Squat Hold', grip: 'none',
-    ladder: ['Deep Squat Hold'], repRange: [30,60], sets: 2, unit: 'sec',
-    note: 'Support heels if needed. Breathe deep.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=deep+squat+hold+mobility+tutorial+ankles'
-  },
-  'couch-stretch': {
-    name: 'Couch Stretch', grip: 'none',
-    ladder: ['Couch Stretch'], repRange: [30,45], sets: 2, unit: 'sec/side',
-    note: 'Keep core engaged. Don\'t arch low back.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=couch+stretch+hip+flexor+quad+tutorial'
-  },
-  'skin-the-cat': {
-    name: 'German Hang / Skin the Cat', grip: 'high',
-    ladder: ['German Hang Hold', 'Slow Skin the Cat'], repRange: [3,5], sets: 2, unit: 'reps',
-    note: 'Shoulder mobility. Controlled throughout. Grip: heel of palm over ring.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=skin+the+cat+german+hang+rings+tutorial+shoulder'
-  },
-  'ext-rotation': {
-    name: 'External Rotation', grip: 'none',
-    ladder: ['Side-Lying External Rotation'], repRange: [8,12], sets: 2, unit: 'reps/side',
-    note: 'Side-lying, elbow at 90°. Slow, controlled. Pause at end range. Extra attention on RIGHT side — slow tempo, full range. Key for shoulder health & impingement prevention.', isMobility: true,
-    demoUrl: 'https://www.youtube.com/results?search_query=side+lying+external+rotation+shoulder+tutorial+cuff'
-  },
+  'split-squat': { name:'Bulgarian Split Squat', grip:'none', ladder:['BW Split Squat','Bulgarian Split Squat','DB Bulgarian Split Squat','DB BSS (pause at bottom)'], repRange:[6,10], sets:3, unit:'reps/side', note:'Rear foot on a bench or box. Upright torso.', demoUrl:'https://www.youtube.com/results?search_query=bulgarian+split+squat+tutorial+form+setup' },
+  'step-lunge': { name:'Step-Through Lunge', grip:'none', ladder:['Reverse Lunge','Step-Through Lunge','Step-Through + Balance Hold','Step-Through + Hop'], repRange:[6,10], sets:3, unit:'reps/side', note:'Balance pause at the top of each rep.', demoUrl:'https://www.youtube.com/results?search_query=step+through+lunge+walking+lunge+tutorial+form' },
+  'cossack-squat': { name:'Cossack Squat', grip:'none', ladder:['Supported Cossack Squat','Cossack Squat','Cossack Squat (slow tempo)','Weighted Cossack Squat'], repRange:[5,8], sets:3, unit:'reps/side', note:'Lateral plane. Heel stays planted. Go only as deep as you can control.', demoUrl:'https://www.youtube.com/results?search_query=cossack+squat+tutorial+hip+mobility+lateral' },
+  'calf-raise': { name:'Calf Raises', grip:'none', ladder:['Bilateral Calf Raise','Slow Bilateral (3s up/3s down)','Single-Leg Calf Raise','Single-Leg Slow Calf Raise'], repRange:[12,20], sets:2, unit:'reps', note:'Full ROM. Pause at the top and bottom.', demoUrl:'https://www.youtube.com/results?search_query=calf+raise+tutorial+full+range+of+motion' },
+  'hollow-body': { name:'Hollow Body Hold', grip:'none', ladder:['Tuck Hollow Hold','Single-Leg Hollow Hold','Hollow Body Hold','Hollow Body Rock'], repRange:[20,40], sets:3, unit:'sec', note:'Lower back glued to the floor. Breathe.', demoUrl:'https://www.youtube.com/results?search_query=hollow+body+hold+tutorial+calisthenics+core' }
 };
 
-// Session templates: mobility → anchor → builders (pair) → finisher
+// ===================================================================
+// THE FORM  (fixed universal mobility kata — 7 in-app screens)
+// blockType: form / stepType: guided. NOT logged as sets.
+// ===================================================================
+const FORM = {
+  name: 'Form',
+  screens: [
+    { id:'f1', title:'Root &amp; Prepare', cue:'Begin standing. Feet planted, hands rise from the sides.', movements:[
+      { name:'Root + Breath + Weight Shift', detail:'Grounded stance, toes spread, weight through the foot tripod \u2014 big-toe mound, little-toe mound, heel. Knees soft and tracking over the toes, pelvis quiet, ribs down, crown tall. Three slow breaths. Shift weight slowly between the feet, slow enough that balance is never stolen.' },
+      { name:'Wrist + Hand Wave \u2192 Centerline', detail:'Wrist circles, palm flex and extend, finger articulation. Finish with the hands drawn to the centerline near the sternum, elbows heavy, shoulders quiet.' },
+      { name:'Neck + Scapular Setting', detail:'Small controlled circles. Collarbones wide, traps quiet. Set the shoulders before anything goes overhead.' }
+    ]},
+    { id:'f2', title:'Spinal Wave', cue:'Stay tall. Let the reach grow out of quiet shoulders.', movements:[
+      { name:'Spinal Wave', detail:'Overhead reach, lateral lean, rotation through the torso. Five each direction. Full spinal length without forcing.' }
+    ]},
+    { id:'f3', title:'Low Lunge + Reach', cue:'Step one foot back slowly; descend with the exhale.', movements:[
+      { name:'Low Lunge + Reach', detail:'Step one foot back into a low lunge. Sink the hips, reach the same-side arm overhead, lengthen through the front of the trailing hip. Three to five per side. The bridge from standing to the floor.' }
+    ]},
+    { id:'f4', title:'Deep Squat Pry', cue:'Bring the front foot in to meet the other; sink into the bottom.', movements:[
+      { name:'Deep Squat Pry', detail:'Feet wide, sink to the bottom, elbows gently push the knees out. Explore and shift within the position. Thirty to forty-five seconds. A moving conversation with the bottom range.' }
+    ]},
+    { id:'f5', title:'90/90 Flow', cue:'Lower the seat to the floor; roll through one side, do not collapse back.', movements:[
+      { name:'90/90 Flow', detail:'Seated, dynamic transitions between internal and external rotation, tall spine. Five each direction. Active, not passive.' }
+    ]},
+    { id:'f6', title:'Hollow \u2194 Arch', cue:'Settle onto the back; organize hollow before adding tension.', movements:[
+      { name:'Hollow \u2194 Arch Tension', detail:'On the back, organize hollow \u2014 posterior tilt, ribs down, everything engaged. Flip prone into arch, full-body extension tension. Three to five deliberate transitions. The internal engine: controlled total-body tension, no wasted movement.' }
+    ]},
+    { id:'f7', title:'Bow &amp; Close', cue:'Press to hands and knees, rise slowly, then stack up into the bow.', movements:[
+      { name:'Jefferson Curl / Bow', detail:'Standing, fold vertebra by vertebra, head heavy, slow return. Five reps. Unloaded and breath-led \u2014 a bow into the work, not a hamstring stretch.' },
+      { name:'Closing Reach + Breath', detail:'Full overhead reach, pause, slow exhale as the arms lower. Three reps. The seal \u2014 it marks completion.' }
+    ]}
+  ]
+};
+
+// ===================================================================
+// SESSION TEMPLATES (working blocks; the Form replaces the old mobility primer)
+// ===================================================================
 const SESSION_TEMPLATES = {
-  U1: {
-    name: 'Ring Upper',
-    fullName: 'U1 — Ring-Dominant Upper',
-    grip: 'high',
-    blocks: [
-      { type: 'mobility', label: 'Mobility Primer', exercises: ['wrist-prep', 'shoulder-dislocate', 'ext-rotation', 'skin-the-cat'] },
-      { type: 'anchor', label: 'Anchor', exercises: ['ring-row'] },
-      { type: 'builder', label: 'Builders', exercises: ['ring-pullup', 'ring-pushup'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['ring-support', 'ring-curl'] },
-    ]
-  },
-  U2: {
-    name: 'Parallette/DB Upper',
-    fullName: 'U2 — Parallette & DB Upper',
-    grip: 'low',
-    blocks: [
-      { type: 'mobility', label: 'Mobility Primer', exercises: ['wrist-prep', 'thoracic-ext', 'ext-rotation'] },
-      { type: 'anchor', label: 'Anchor', exercises: ['para-pushup'] },
-      { type: 'builder', label: 'Builders', exercises: ['pike-pushup', 'db-press'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['ring-face-pull', 'ab-wheel'] },
-    ]
-  },
-  L1: {
-    name: 'Hinge Lower',
-    fullName: 'L1 — Hinge-Primary Lower',
-    grip: 'none',
-    blocks: [
-      { type: 'mobility', label: 'Mobility Primer', exercises: ['hip-car', 'deep-squat'] },
-      { type: 'anchor', label: 'Anchor', exercises: ['jefferson-curl'] },
-      { type: 'builder', label: 'Builders', exercises: ['single-leg-rdl', 'glute-bridge'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['jump-rope', 'hanging-knee-raise'] },
-    ]
-  },
-  L2: {
-    name: 'Squat Lower',
-    fullName: 'L2 — Squat-Primary Lower',
-    grip: 'none',
-    blocks: [
-      { type: 'mobility', label: 'Mobility Primer', exercises: ['couch-stretch', 'hip-car'] },
-      { type: 'anchor', label: 'Anchor', exercises: ['split-squat'] },
-      { type: 'builder', label: 'Builders', exercises: ['step-lunge', 'cossack-squat'] },
-      { type: 'finisher', label: 'Finisher', exercises: ['calf-raise', 'hollow-body'] },
-    ]
-  }
+  U1: { name:'Ring Upper', fullName:'U1 \u2014 Ring-Dominant Upper', grip:'high', blocks:[
+    { type:'anchor', label:'Anchor', exercises:['ring-row'] },
+    { type:'builder', label:'Builders', exercises:['ring-pullup','ring-pushup'] },
+    { type:'finisher', label:'Finisher', exercises:['ring-support','ring-curl'] }
+  ]},
+  U2: { name:'Parallette/DB Upper', fullName:'U2 \u2014 Parallette & DB Upper', grip:'low', blocks:[
+    { type:'anchor', label:'Anchor', exercises:['para-pushup'] },
+    { type:'builder', label:'Builders', exercises:['pike-pushup','db-press'] },
+    { type:'finisher', label:'Finisher', exercises:['ring-face-pull','ab-wheel'] }
+  ]},
+  L1: { name:'Hinge Lower', fullName:'L1 \u2014 Hinge-Primary Lower', grip:'low', blocks:[
+    { type:'anchor', label:'Anchor', exercises:['jefferson-curl'] },
+    { type:'builder', label:'Builders', exercises:['single-leg-rdl','glute-bridge'] },
+    { type:'finisher', label:'Finisher', exercises:['jump-rope','hanging-knee-raise'] }
+  ]},
+  L2: { name:'Squat Lower', fullName:'L2 \u2014 Squat-Primary Lower', grip:'none', blocks:[
+    { type:'anchor', label:'Anchor', exercises:['split-squat'] },
+    { type:'builder', label:'Builders', exercises:['step-lunge','cossack-squat'] },
+    { type:'finisher', label:'Finisher', exercises:['calf-raise','hollow-body'] }
+  ]}
 };
 
-const ROTATION = ['U1', 'L1', 'U2', 'L2'];
+const ROTATION = ['U1','L1','U2','L2'];
+const REST_TIMES = { form:0, anchor:150, builder:75, finisher:45 };
+const FORM_REST = 0; // Form screens are advance-only, no rest timer
 
-const REST_TIMES = {
-  mobility: 20,
-  anchor: 150,
-  builder: 75,
-  finisher: 45
-};
-
-const BLOCK_WORKING_TIME = {
-  mobility: 180,
-  anchor: 300,
-  builder: 360,
-  finisher: 180
-};
+function isDurationUnit(unit){ return unit === 'sec'; }
 
 // ===================================================================
-// STATE MANAGEMENT
+// STATE
 // ===================================================================
+function loadRaw(){ try { const r = localStorage.getItem('train_state'); return r ? JSON.parse(r) : null; } catch(e){ return null; } }
+function saveState(s){ try { localStorage.setItem('train_state', JSON.stringify(s)); } catch(e){ console.error('save failed', e); } }
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem('train_state');
-    return raw ? JSON.parse(raw) : null;
-  } catch(e) { return null; }
-}
-
-function saveState(state) {
-  localStorage.setItem('train_state', JSON.stringify(state));
-}
-
-// ===================================================================
-// GOOGLE SHEETS SYNC
-// ===================================================================
-
-function getSyncUrl() {
-  try { return localStorage.getItem('train_sync_url') || ''; } catch(e) { return ''; }
-}
-
-function setSyncUrl(url) {
-  localStorage.setItem('train_sync_url', url.trim());
-}
-
-function updateSyncIndicator(status) {
-  const el = document.getElementById('sync-indicator');
-  if (!el) return;
-  const url = getSyncUrl();
-  if (!url) {
-    el.innerHTML = '';
-    return;
+function migrate(state){
+  if(!state) return null;
+  // Bring any older state up to current schema without losing history.
+  if(!state.schemaVersion || state.schemaVersion < 4){
+    state.schemaVersion = SCHEMA_VERSION;
   }
-  const labels = { synced: 'Synced', syncing: 'Syncing...', error: 'Sync failed', none: '' };
-  el.innerHTML = `<span class="sync-dot ${status}"></span>${labels[status] || ''}`;
-}
-
-async function syncToSheet() {
-  const url = getSyncUrl();
-  if (!url) return;
-  updateSyncIndicator('syncing');
-  try {
-    const state = loadState();
-    if (!state) return;
-
-    const logRows = state.log.map(entry => {
-      const rows = [];
-      if (entry.exercises) {
-        Object.entries(entry.exercises).forEach(([exId, reps]) => {
-          const ex = EXERCISE_LIBRARY[exId];
-          const varIdx = state.exerciseVariations[exId] || 0;
-          const varName = ex ? ex.ladder[Math.min(varIdx, ex.ladder.length - 1)] : exId;
-          const hit = ex ? reps.every(r => r >= ex.repRange[1]) : false;
-          rows.push({
-            date: entry.date,
-            session: entry.sessionType,
-            exercise: ex ? ex.name : exId,
-            variation: varName,
-            sets: reps,
-            hit: hit,
-            duration: entry.duration || 0,
-            feel: entry.feel || '',
-            notes: entry.notes || ''
-          });
-        });
-      }
-      if (entry.skipped) {
-        entry.skipped.forEach(exId => {
-          const ex = EXERCISE_LIBRARY[exId];
-          rows.push({
-            date: entry.date,
-            session: entry.sessionType,
-            exercise: ex ? ex.name : exId,
-            variation: 'SKIPPED',
-            sets: [],
-            hit: false,
-            duration: entry.duration || 0,
-            feel: entry.feel || '',
-            notes: entry.notes || ''
-          });
-        });
-      }
-      return rows;
-    }).flat();
-
-    const payload = {
-      state: state,
-      logRows: logRows,
-      lastLogCount: state.log.length
-    };
-
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload),
-      mode: 'no-cors'
-    });
-    updateSyncIndicator('synced');
-    localStorage.setItem('train_last_sync', new Date().toISOString());
-  } catch(e) {
-    console.error('Sync push failed:', e);
-    updateSyncIndicator('error');
-  }
-}
-
-async function pullFromSheet() {
-  const url = getSyncUrl();
-  if (!url) return false;
-  updateSyncIndicator('syncing');
-  try {
-    const resp = await fetch(url + '?action=pull', { mode: 'cors' });
-    if (!resp.ok) throw new Error('Pull failed');
-    const data = await resp.json();
-    if (data && data.log && Array.isArray(data.log)) {
-      const local = loadState();
-      if (!local || local.log.length < data.log.length) {
-        saveState(data);
-        updateSyncIndicator('synced');
-        return true;
-      }
-    }
-    updateSyncIndicator('synced');
-    return false;
-  } catch(e) {
-    console.error('Sync pull failed:', e);
-    updateSyncIndicator('error');
-    return false;
-  }
-}
-
-async function testSync() {
-  const url = getSyncUrl();
-  if (!url) { alert('Enter a sync URL first.'); return; }
-  updateSyncIndicator('syncing');
-  try {
-    const resp = await fetch(url + '?action=ping', { mode: 'cors' });
-    const text = await resp.text();
-    if (text.includes('ok') || text.includes('pong')) {
-      updateSyncIndicator('synced');
-      alert('Connected! Sync is working.');
-      syncToSheet();
-    } else {
-      updateSyncIndicator('error');
-      alert('Unexpected response. Check the URL and redeploy the script.');
-    }
-  } catch(e) {
-    updateSyncIndicator('error');
-    alert('Could not connect. Make sure:\n1. The URL starts with https://script.google.com/\n2. The script is deployed as "Anyone"\n3. You have internet access');
-  }
-}
-
-function getState() {
-  let state = loadState();
-  if (!state) {
-    state = {
-      rotationIndex: 0,
-      log: [],
-      promotions: {},
-      promotionLog: [],
-      exerciseVariations: {}
-    };
-    saveState(state);
-  }
-  if (!state.promotions) state.promotions = {};
-  if (!state.promotionLog) state.promotionLog = [];
-  if (!state.exerciseVariations) state.exerciseVariations = {};
-  if (!state.log) state.log = [];
+  if(!state.promotions) state.promotions = {};
+  if(!state.promotionLog) state.promotionLog = [];
+  if(!state.exerciseVariations) state.exerciseVariations = {};
+  if(!state.log) state.log = [];
+  if(!('activeSession' in state)) state.activeSession = null;
   return state;
 }
 
-function getCurrentVariation(exerciseId) {
-  const state = getState();
-  return state.exerciseVariations[exerciseId] || 0;
+function getState(){
+  let s = migrate(loadRaw());
+  if(!s){
+    s = { schemaVersion:SCHEMA_VERSION, rotationIndex:0, log:[], promotions:{}, promotionLog:{}, exerciseVariations:{}, activeSession:null };
+    s.promotionLog = [];
+    saveState(s);
+  }
+  return s;
 }
 
-function getVariationName(exerciseId) {
-  const ex = EXERCISE_LIBRARY[exerciseId];
-  const idx = getCurrentVariation(exerciseId);
-  return ex.ladder[Math.min(idx, ex.ladder.length - 1)];
-}
+function getCurrentVariation(exId){ return getState().exerciseVariations[exId] || 0; }
+function getVariationName(exId){ const ex = EXERCISE_LIBRARY[exId]; const i = getCurrentVariation(exId); return ex.ladder[Math.min(i, ex.ladder.length-1)]; }
 
 // ===================================================================
-// PROMOTION LOGIC
+// PROMOTION
 // ===================================================================
-
-function checkHit(exerciseId, reps) {
-  const ex = EXERCISE_LIBRARY[exerciseId];
-  if (!reps || reps.length === 0) return false;
-  const target = ex.repRange[1];
-  return reps.every(r => r >= target);
+function checkHit(exId, reps){
+  const ex = EXERCISE_LIBRARY[exId];
+  if(!ex || !reps || reps.length === 0) return false;
+  const valid = reps.filter(r => r > 0);
+  if(valid.length === 0) return false;
+  return valid.length === ex.sets && valid.every(r => r >= ex.repRange[1]);
 }
-
-function getPromotionState(exerciseId) {
-  const state = getState();
-  return state.promotions[exerciseId] || { consecutiveHits: 0 };
+function getPromotionState(exId){ return getState().promotions[exId] || { consecutiveHits:0 }; }
+function updatePromotionTracking(exId, wasHit){
+  const s = getState();
+  if(!s.promotions[exId]) s.promotions[exId] = { consecutiveHits:0 };
+  s.promotions[exId].consecutiveHits = wasHit ? s.promotions[exId].consecutiveHits + 1 : 0;
+  saveState(s);
 }
-
-function updatePromotionTracking(exerciseId, wasHit) {
-  const state = getState();
-  if (!state.promotions[exerciseId]) {
-    state.promotions[exerciseId] = { consecutiveHits: 0 };
-  }
-  if (wasHit) {
-    state.promotions[exerciseId].consecutiveHits++;
-  } else {
-    state.promotions[exerciseId].consecutiveHits = 0;
-  }
-  saveState(state);
-}
-
-function isReadyToPromote(exerciseId) {
-  const state = getState();
-  const promo = state.promotions[exerciseId];
-  if (!promo) return false;
-  const ex = EXERCISE_LIBRARY[exerciseId];
-  const currentVar = getCurrentVariation(exerciseId);
-  if (currentVar >= ex.ladder.length - 1) return false;
+function isReadyToPromote(exId){
+  const s = getState(); const promo = s.promotions[exId]; if(!promo) return false;
+  const ex = EXERCISE_LIBRARY[exId];
+  if(getCurrentVariation(exId) >= ex.ladder.length - 1) return false;
   return promo.consecutiveHits >= 2;
 }
+function promoteExercise(exId){
+  const s = getState(); const ex = EXERCISE_LIBRARY[exId]; const oldV = getCurrentVariation(exId);
+  if(oldV >= ex.ladder.length - 1) return;
+  const newV = oldV + 1;
+  s.exerciseVariations[exId] = newV;
+  s.promotions[exId] = { consecutiveHits:0 };
+  s.promotionLog.push({ exerciseId:exId, from:ex.ladder[oldV], to:ex.ladder[newV], date:new Date().toISOString().split('T')[0] });
+  saveState(s);
+}
 
-function promoteExercise(exerciseId) {
-  const state = getState();
-  const ex = EXERCISE_LIBRARY[exerciseId];
-  const oldVar = getCurrentVariation(exerciseId);
-  if (oldVar >= ex.ladder.length - 1) return;
-  const newVar = oldVar + 1;
-  state.exerciseVariations[exerciseId] = newVar;
-  state.promotions[exerciseId] = { consecutiveHits: 0 };
-  state.promotionLog.push({
-    exerciseId,
-    from: ex.ladder[oldVar],
-    to: ex.ladder[newVar],
-    date: new Date().toISOString().split('T')[0]
+// ===================================================================
+// VOLUME
+// ===================================================================
+function estimateDuration(type){
+  const t = SESSION_TEMPLATES[type]; let sec = 7*60; // Form ~7 min
+  t.blocks.forEach(b=> b.exercises.forEach(exId=>{
+    const ex = EXERCISE_LIBRARY[exId];
+    const work = isDurationUnit(ex.unit) ? ex.repRange[1] : 30;
+    sec += ex.sets * (work + REST_TIMES[b.type]);
+  }));
+  return Math.round(sec/60);
+}
+
+// ===================================================================
+// SYNC (unchanged transport; Apps Script backup)
+// ===================================================================
+function getSyncUrl(){ try { return localStorage.getItem('train_sync_url') || ''; } catch(e){ return ''; } }
+function setSyncUrl(u){ localStorage.setItem('train_sync_url', u.trim()); }
+function updateSyncIndicator(status){
+  const el = document.getElementById('sync-indicator'); if(!el) return;
+  if(!getSyncUrl()){ el.innerHTML=''; return; }
+  const labels = { synced:'Synced', syncing:'Syncing...', error:'Sync failed', none:'' };
+  el.innerHTML = `<span class="sync-dot ${status}"></span>${labels[status]||''}`;
+}
+async function syncToSheet(){
+  const url = getSyncUrl(); if(!url) return;
+  updateSyncIndicator('syncing');
+  try {
+    const s = getState();
+    const logRows = s.log.map(entry=>{
+      const rows = [];
+      if(entry.exercises) Object.entries(entry.exercises).forEach(([exId,reps])=>{
+        const ex = EXERCISE_LIBRARY[exId];
+        const varIdx = s.exerciseVariations[exId] || 0;
+        rows.push({ date:entry.date, session:entry.sessionType, exercise:ex?ex.name:exId, variation:ex?ex.ladder[Math.min(varIdx,ex.ladder.length-1)]:exId, sets:reps, hit:checkHit(exId,reps), duration:entry.duration||0, feel:entry.sessionStatus||'', notes:entry.notes||'' });
+      });
+      if(entry.skipped) entry.skipped.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; rows.push({ date:entry.date, session:entry.sessionType, exercise:ex?ex.name:exId, variation:'SKIPPED', sets:[], hit:false, duration:entry.duration||0, feel:entry.sessionStatus||'', notes:entry.notes||'' }); });
+      return rows;
+    }).flat();
+    await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify({ state:s, logRows, lastLogCount:s.log.length }), mode:'no-cors' });
+    updateSyncIndicator('synced');
+    localStorage.setItem('train_last_sync', new Date().toISOString());
+  } catch(e){ console.error('sync push failed', e); updateSyncIndicator('error'); }
+}
+async function pullFromSheet(){
+  const url = getSyncUrl(); if(!url) return false;
+  updateSyncIndicator('syncing');
+  try {
+    const resp = await fetch(url + '?action=pull', { mode:'cors' });
+    if(!resp.ok) throw new Error('pull failed');
+    const data = await resp.json();
+    if(data && data.log && Array.isArray(data.log)){
+      const local = getState();
+      if(!local.log.length || local.log.length < data.log.length){ saveState(migrate(data)); updateSyncIndicator('synced'); return true; }
+    }
+    updateSyncIndicator('synced'); return false;
+  } catch(e){ console.error('sync pull failed', e); updateSyncIndicator('error'); return false; }
+}
+async function testSync(){
+  const url = getSyncUrl(); if(!url){ alert('Enter a sync URL first.'); return; }
+  updateSyncIndicator('syncing');
+  try {
+    const resp = await fetch(url + '?action=ping', { mode:'cors' });
+    const text = await resp.text();
+    if(text.includes('ok') || text.includes('pong')){ updateSyncIndicator('synced'); alert('Connected. Sync is working.'); syncToSheet(); }
+    else { updateSyncIndicator('error'); alert('Unexpected response. Check the URL and redeploy the script.'); }
+  } catch(e){ updateSyncIndicator('error'); alert('Could not connect. Check the URL, that the script is deployed for "Anyone", and your connection.'); }
+}
+
+// ===================================================================
+// AUDIO (Web Audio; unlocked on a user gesture)
+// ===================================================================
+let audioCtx = null;
+function unlockAudio(){
+  try {
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  } catch(e){ /* audio unavailable; fall back to vibrate only */ }
+}
+function tone(freq, start, dur, vol){
+  if(!audioCtx) return;
+  const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+  o.type = 'sine'; o.frequency.value = freq;
+  o.connect(g); g.connect(audioCtx.destination);
+  const t0 = audioCtx.currentTime + start;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol||0.25, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+// Sound on/off (persisted). Default on.
+function soundEnabled(){ try { return localStorage.getItem('train_sound_off') !== '1'; } catch(e){ return true; } }
+function setSoundEnabled(on){ try { localStorage.setItem('train_sound_off', on ? '0' : '1'); } catch(e){} }
+
+// Waveform-capable tone. Mirrors tone() but lets a cue pick its timbre.
+function toneW(freq, start, dur, vol, type){
+  if(!audioCtx || !soundEnabled()) return;
+  const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+  o.type = type || 'sine'; o.frequency.value = freq;
+  o.connect(g); g.connect(audioCtx.destination);
+  const t0 = audioCtx.currentTime + start;
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol||0.25, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.start(t0); o.stop(t0 + dur + 0.02);
+}
+function buzz(pattern){ if(soundEnabled() && navigator.vibrate) navigator.vibrate(pattern); }
+
+// ---- The six locked cues (vocabulary fixed 2026-05-24) ----
+// Rising family (GO / STARTED / SESSION DONE) separated by note count + interval.
+// Singles (LOGGED / NOTED) separated by pitch. Shapes carry meaning; on/off only.
+function cueGo(){ unlockAudio(); toneW(523,0,0.13,0.30,'triangle'); toneW(784,0.12,0.20,0.34,'triangle'); buzz([90,60,130]); }        // rest over -> go
+function cueRelease(){ unlockAudio(); toneW(784,0,0.16,0.26,'sine'); toneW(523,0.16,0.22,0.26,'sine'); buzz([140,80,140]); }       // hold up -> come off
+function cueStarted(){ unlockAudio(); toneW(587,0,0.09,0.20,'sine'); toneW(740,0.10,0.12,0.22,'sine'); buzz(50); }                 // hold timing started
+function cueLogged(){ unlockAudio(); toneW(587,0,0.14,0.24,'triangle'); buzz(40); }                                               // set saved
+function cueSessionDone(){ unlockAudio(); toneW(523,0,0.14,0.28,'triangle'); toneW(659,0.14,0.14,0.30,'triangle'); toneW(784,0.30,0.26,0.32,'triangle'); buzz([110,70,110,70,150]); } // workout complete
+function cueNoted(){ unlockAudio(); toneW(392,0,0.16,0.20,'sine'); buzz(30); }                                                    // skip / issue logged
+
+// ===================================================================
+// SESSION STATE MACHINE
+// ===================================================================
+// activeSession (persisted in state.activeSession):
+// { schemaVersion, type, startTime, cursor, phase, setIdx, timerEnd, timerKind,
+//   records:{ uid:{ kind, exId?, sets:[], setStatus:[], status, issueFlag, note, quality, painFree } },
+//   sessionNote, issues:[] }
+let timerRAF = null;
+let AS = null; // in-memory mirror of activeSession
+
+function buildFlow(type){
+  const t = SESSION_TEMPLATES[type];
+  const flow = [];
+  FORM.screens.forEach((s,i)=> flow.push({ kind:'form', uid:'form-'+s.id, screenIdx:i }));
+  t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label })));
+  return flow;
+}
+
+function persistAS(){ const s = getState(); s.activeSession = AS; saveState(s); }
+
+function startSession(type){
+  unlockAudio();
+  const flow = buildFlow(type);
+  AS = {
+    schemaVersion: SCHEMA_VERSION,
+    type, startTime: Date.now(),
+    cursor: 0, phase: 'view', setIdx: 0,
+    timerEnd: null, timerKind: null,
+    records: {}, sessionNote: '', issues: []
+  };
+  flow.forEach(st=>{
+    if(st.kind === 'exercise'){
+      const ex = EXERCISE_LIBRARY[st.exId];
+      AS.records[st.uid] = { kind:'exercise', exId:st.exId, sets:new Array(ex.sets).fill(0), setStatus:new Array(ex.sets).fill('pending'), status:'pending', issueFlag:'none', note:'', quality:'unknown', painFree:'unknown' };
+    } else {
+      AS.records[st.uid] = { kind:'form', status:'pending' };
+    }
   });
-  saveState(state);
+  persistAS();
+  enterSessionScreen();
 }
 
-// ===================================================================
-// SESSION DURATION ESTIMATE
-// ===================================================================
+function resumeSession(){
+  const s = getState();
+  if(!s.activeSession){ renderHome(); return; }
+  AS = s.activeSession;
+  // Reconcile a timer that expired while the app was closed. Cold resume never
+  // fires a cue (GO/RELEASE) — the user is already looking at the resume state,
+  // so surprise audio on page load would be worse than silence.
+  let reconciled = false;
+  if(AS.timerEnd && Date.now() >= AS.timerEnd){
+    const wasKind = AS.timerKind;
+    const expiredAt = AS.timerEnd;
+    clearTimerState();
+    if(wasKind === 'rest' && AS.phase === 'rest'){
+      // Rest finished while away → terminal rest-complete; wait for the user's tap.
+      AS.phase = 'restComplete';
+    } else if(wasKind === 'work' && AS.phase === 'work'){
+      // Hold finished while away. Treat it as a completed hold (mirrors
+      // onWorkTimerComplete), then place the user correctly relative to the rest
+      // that would have started at expiredAt — never a dead 'work' screen.
+      reconcileExpiredWork(expiredAt);
+    }
+    reconciled = true;
+  }
+  if(reconciled) persistAS();
+  enterSessionScreen();
+}
 
-function estimateSessionDuration(sessionType) {
-  const template = SESSION_TEMPLATES[sessionType];
-  let totalSeconds = 0;
-  template.blocks.forEach(block => {
-    block.exercises.forEach(exId => {
-      const ex = EXERCISE_LIBRARY[exId];
-      const sets = ex.sets;
-      const workingTimePerSet = ex.unit === 'sec' ? ex.repRange[1] : 30;
-      const restPerSet = REST_TIMES[block.type];
-      totalSeconds += sets * (workingTimePerSet + restPerSet);
-    });
+// Cold-resume handler for a hold timer that expired while the app was closed.
+// Marks the set complete at full target, then branches on the rest window:
+// still-running rest → 'rest' with correct remaining; elapsed rest → 'restComplete';
+// no rest (final set/station or restSec 0) → advance. Plays no cue (cold resume).
+function reconcileExpiredWork(expiredAt){
+  const flow = currentFlow();
+  const st = flow[AS.cursor];
+  const ex = EXERCISE_LIBRARY[st.exId];
+  const rec = AS.records[st.uid];
+  rec.sets[AS.setIdx] = ex.repRange[1]; // full hold achieved
+  rec.setStatus[AS.setIdx] = 'done';
+  clearTimerState();
+  const restSec = REST_TIMES[st.blockType] || 0;
+  const moreSets = AS.setIdx + 1 < ex.sets;
+  const moreStations = AS.cursor + 1 < flow.length;
+  if(restSec > 0 && (moreSets || moreStations)){
+    const restEnd = expiredAt + restSec*1000;
+    if(Date.now() >= restEnd){
+      AS.phase = 'restComplete'; // rest already elapsed while away
+    } else {
+      AS.phase = 'rest';
+      AS.timerKind = 'rest';
+      AS.timerEnd = restEnd; // resume the rest already in progress, not a fresh one
+    }
+  } else {
+    // No rest after this set: advance the cursor exactly as advanceAfterSet would.
+    if(moreSets){
+      AS.setIdx++; AS.phase = 'view';
+    } else {
+      rec.status = rec.setStatus.every(x=>x==='skipped') ? 'skipped' : 'done';
+      AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
+    }
+  }
+}
+
+function enterSessionScreen(){
+  const t = SESSION_TEMPLATES[AS.type];
+  document.getElementById('session-title').textContent = t.name;
+  const gc = t.grip === 'high' ? 'var(--grip-high)' : t.grip === 'low' ? 'var(--grip-low)' : 'var(--grip-none)';
+  document.getElementById('session-grip').innerHTML = `<span class="grip-dot" style="background:${gc}"></span>`;
+  showScreen('session');
+  renderStation();
+}
+
+function currentFlow(){ return buildFlow(AS.type); }
+
+function renderProgressBar(){
+  const flow = currentFlow();
+  const wrap = document.getElementById('flow-progress');
+  wrap.innerHTML = flow.map((st,i)=>{
+    let cls = 'flow-seg';
+    if(i < AS.cursor) cls += ' done';
+    else if(i === AS.cursor) cls += ' current';
+    return `<div class="${cls}"></div>`;
+  }).join('');
+}
+
+function renderStation(){
+  if(!AS){ showScreen('home'); return; }
+  const flow = currentFlow();
+  if(AS.cursor >= flow.length){ renderCompletion(); return; }
+  renderProgressBar();
+  const st = flow[AS.cursor];
+  if(st.kind === 'form') renderFormStation(st);
+  else renderExerciseStation(st);
+}
+
+// ---- FORM STATION ----
+function renderFormStation(st){
+  const screen = FORM.screens[st.screenIdx];
+  const body = document.getElementById('flow-body');
+  const movesHtml = screen.movements.map(m=>`
+    <div class="move-block">
+      <div class="move-name">${m.name}</div>
+      <div class="move-detail">${m.detail}</div>
+    </div>`).join('');
+  body.innerHTML = `
+    <div class="flow-meta"><span class="badge badge-form">Form</span> Screen ${st.screenIdx+1} of ${FORM.screens.length}</div>
+    ${screen.cue ? `<div class="flow-cue">${screen.cue}</div>` : ''}
+    <div class="flow-title">${screen.title}</div>
+    <div style="margin-top:14px;">${movesHtml}</div>`;
+  const foot = document.getElementById('flow-foot');
+  const isLast = st.screenIdx === FORM.screens.length - 1;
+  foot.innerHTML = `
+    <button class="btn btn-primary" onclick="advanceForm()">${isLast ? 'Begin Training' : 'Next'}</button>
+    <div class="flow-actions-row">
+      <button class="mini-btn" onclick="skipFormScreen()">Skip screen</button>
+      <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+    </div>`;
+}
+function advanceForm(){ unlockAudio(); const flow = currentFlow(); AS.records[flow[AS.cursor].uid].status = 'done'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
+function skipFormScreen(){ cueNoted(); const flow = currentFlow(); AS.records[flow[AS.cursor].uid].status = 'skipped'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
+
+// ---- EXERCISE STATION ----
+function renderExerciseStation(st){
+  const ex = EXERCISE_LIBRARY[st.exId];
+  const rec = AS.records[st.uid];
+  const varName = getVariationName(st.exId);
+  const isDur = isDurationUnit(ex.unit);
+  const top = ex.repRange[1];
+  const body = document.getElementById('flow-body');
+  const foot = document.getElementById('flow-foot');
+
+  // set pills
+  const pills = rec.sets.map((v,i)=>{
+    let cls = 'set-pill';
+    if(rec.setStatus[i] === 'skipped') cls += ' skipped';
+    else if(rec.setStatus[i] === 'done'){ cls += (v >= top && v > 0) ? ' hit' : ' done'; }
+    if(i === AS.setIdx && AS.phase !== 'rest') cls += ' current';
+    const label = rec.setStatus[i] === 'skipped' ? '\u2013' : (rec.setStatus[i] === 'done' ? v : (i+1));
+    return `<div class="${cls}">${label}</div>`;
+  }).join('');
+
+  const head = `
+    <div class="flow-meta">
+      <span class="badge badge-${AS.type.toLowerCase()}">${st.blockLabel}</span>
+      Set ${Math.min(AS.setIdx+1, ex.sets)} of ${ex.sets}
+    </div>
+    <div class="flow-title">${varName}</div>
+    <div class="flow-sub">${ex.name} &middot; target ${ex.repRange[0]}\u2013${ex.repRange[1]} ${ex.unit}</div>
+    <div class="set-pills">${pills}</div>`;
+
+  if(AS.phase === 'restComplete'){
+    // Terminal rest state: timer hit zero, GO already played. Wait for the user.
+    body.innerHTML = head + `
+      <div class="statebig-rc">Rest complete</div>
+      <div class="exercise-note" style="text-align:center;">Next: ${restNextLabel(st, ex)}</div>`;
+    foot.innerHTML = `
+      <button class="btn btn-primary" onclick="startNextAfterRest()">Start Next Set</button>
+      <div class="flow-actions-row">
+        <button class="mini-btn" onclick="redoLastSet()">Redo last set</button>
+        <button class="mini-btn" onclick="noteIssue()">Note</button>
+        <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+      </div>`;
+    return;
+  }
+
+  if(AS.phase === 'rest' || AS.phase === 'restPaused'){
+    const paused = AS.phase === 'restPaused';
+    // Rest timer view (chains after a logged/duration set)
+    body.innerHTML = head + `
+      <div class="timer-phase">${paused ? 'Rest paused' : 'Rest'}</div>
+      <div class="timer-big rest" id="timer-display">${paused ? fmtRemaining() : '--'}</div>
+      <div class="exercise-note">Next: ${restNextLabel(st, ex)}</div>`;
+    foot.innerHTML = `
+      <button class="btn btn-primary" onclick="endRestNow()">Skip rest \u2192 Next</button>
+      <div class="flow-actions-row">
+        <button class="mini-btn" onclick="${paused ? 'resumeTimer()' : 'pauseTimer()'}">${paused ? 'Resume' : 'Pause'}</button>
+        <button class="mini-btn" onclick="noteIssue()">Note issue</button>
+        <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+      </div>`;
+    if(!paused) startTimerLoop();
+    return;
+  }
+
+  if(isDur && (AS.phase === 'work' || AS.phase === 'workPaused')){
+    const paused = AS.phase === 'workPaused';
+    body.innerHTML = head + `
+      <div class="timer-phase">${paused ? 'Paused' : 'Hold'}</div>
+      <div class="timer-big work" id="timer-display">${paused ? fmtRemaining() : '--'}</div>
+      <div class="exercise-note">${ex.note}</div>`;
+    foot.innerHTML = `
+      <button class="btn btn-primary" onclick="${paused ? 'resumeTimer()' : 'pauseTimer()'}">${paused ? 'Resume' : 'Pause'}</button>
+      <div class="flow-actions-row">
+        <button class="mini-btn" onclick="finishDurationEarly()">End set early</button>
+        <button class="mini-btn" onclick="skipCurrentSet()">Skip set</button>
+        <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+      </div>`;
+    if(!paused) startTimerLoop();
+    return;
+  }
+
+  // phase === 'view' / 'ready' / 'log'
+  if(isDur){
+    // duration set ready
+    body.innerHTML = head + `
+      <div class="target-pill">Hold for ${top} ${ex.unit}</div>
+      <div class="exercise-note">${ex.note}</div>
+      <button class="demo-link" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
+    foot.innerHTML = `
+      <button class="btn btn-primary" onclick="startDurationSet()">Start hold</button>
+      <div class="flow-actions-row">
+        <button class="mini-btn" onclick="skipCurrentSet()">Skip set</button>
+        <button class="mini-btn" onclick="skipExercise()">Skip exercise</button>
+        <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+      </div>`;
+  } else {
+    // rep set ready/log
+    const cur = rec.sets[AS.setIdx] || '';
+    body.innerHTML = head + `
+      <div class="target-pill">Target ${ex.repRange[0]}\u2013${ex.repRange[1]} ${ex.unit}</div>
+      <input class="rep-input-big" id="rep-input" type="number" inputmode="numeric" pattern="[0-9]*" value="${cur}" placeholder="0" onfocus="this.select()">
+      <div class="exercise-note">${ex.note}</div>
+      <button class="demo-link" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
+    foot.innerHTML = `
+      <button class="btn btn-primary" onclick="logRepSet()">Log set</button>
+      <div class="flow-actions-row">
+        <button class="mini-btn" onclick="skipCurrentSet()">Skip set</button>
+        <button class="mini-btn" onclick="skipExercise()">Skip exercise</button>
+        <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+      </div>`;
+  }
+}
+
+function restNextLabel(st, ex){
+  // What comes after this rest?
+  if(AS.setIdx + 1 < ex.sets) return `${getVariationName(st.exId)} \u2014 set ${AS.setIdx + 2}`;
+  const flow = currentFlow();
+  const next = flow[AS.cursor + 1];
+  if(!next) return 'Finish session';
+  if(next.kind === 'form') return `Form \u2014 ${FORM.screens[next.screenIdx].title}`;
+  return getVariationName(next.exId);
+}
+
+// ---- rep set ----
+function logRepSet(){
+  unlockAudio();
+  const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
+  const input = document.getElementById('rep-input');
+  const val = parseInt(input && input.value, 10) || 0;
+  rec.sets[AS.setIdx] = val;
+  rec.setStatus[AS.setIdx] = 'done';
+  cueLogged();
+  beginRestOrAdvance(st, ex, rec);
+}
+
+// ---- duration set ----
+function startDurationSet(){
+  unlockAudio();
+  const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId];
+  AS.phase = 'work';
+  AS.timerKind = 'work';
+  AS.timerEnd = Date.now() + ex.repRange[1]*1000;
+  cueStarted();
+  persistAS();
+  renderStation();
+}
+function finishDurationEarly(){
+  const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
+  const elapsed = Math.max(1, ex.repRange[1] - Math.max(0, Math.round((AS.timerEnd - Date.now())/1000)));
+  stopTimerLoop();
+  rec.sets[AS.setIdx] = elapsed;
+  rec.setStatus[AS.setIdx] = 'done';
+  clearTimerState();
+  cueLogged();
+  beginRestOrAdvance(st, ex, rec);
+}
+function onWorkTimerComplete(){
+  const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
+  rec.sets[AS.setIdx] = ex.repRange[1]; // full hold achieved
+  rec.setStatus[AS.setIdx] = 'done';
+  cueRelease();
+  clearTimerState();
+  beginRestOrAdvance(st, ex, rec);
+}
+
+function beginRestOrAdvance(st, ex, rec){
+  const restSec = REST_TIMES[st.blockType] || 0;
+  // If there are more sets or another station, run a rest timer; otherwise advance.
+  const moreSets = AS.setIdx + 1 < ex.sets;
+  const flow = currentFlow();
+  const moreStations = AS.cursor + 1 < flow.length;
+  if(restSec > 0 && (moreSets || moreStations)){
+    AS.phase = 'rest';
+    AS.timerKind = 'rest';
+    AS.timerEnd = Date.now() + restSec*1000;
+    persistAS();
+    renderStation();
+  } else {
+    advanceAfterSet();
+  }
+}
+// Clears every timer-related field. Used on every path that leaves a work/rest
+// timer so stale paused-remaining time can never resurface in a later phase.
+function clearTimerState(){ AS.timerEnd = null; AS.timerKind = null; AS.timerRemaining = null; }
+function endRestNow(){ stopTimerLoop(); clearTimerState(); advanceAfterSet(); }
+// Pause/resume for work and rest timers. Stores remaining ms so the absolute
+// timerEnd can be rebuilt on resume (survives the wall-clock model).
+function fmtRemaining(){
+  const ms = (AS && AS.timerRemaining != null) ? AS.timerRemaining
+           : (AS && AS.timerEnd ? Math.max(0, AS.timerEnd - Date.now()) : 0);
+  const sec = Math.max(0, Math.round(ms/1000));
+  return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+}
+function pauseTimer(){
+  if(!AS || !AS.timerEnd) return;
+  stopTimerLoop();
+  AS.timerRemaining = Math.max(0, AS.timerEnd - Date.now());
+  AS.timerEnd = null;
+  AS.phase = (AS.phase === 'rest') ? 'restPaused' : 'workPaused';
+  persistAS();
+  renderStation();
+}
+function resumeTimer(){
+  if(!AS || AS.timerRemaining == null) return;
+  AS.timerEnd = Date.now() + AS.timerRemaining;
+  AS.timerRemaining = null;
+  AS.phase = (AS.phase === 'restPaused') ? 'rest' : 'work';
+  persistAS();
+  renderStation();
+}
+// User-tapped advance from the terminal restComplete state.
+function startNextAfterRest(){ unlockAudio(); advanceAfterSet(); }
+// Rest timer expiring must NOT auto-advance. Play GO and wait for the user's tap.
+function onRestTimerComplete(){ cueGo(); clearTimerState(); AS.phase='restComplete'; persistAS(); renderStation(); }
+
+function advanceAfterSet(){
+  const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
+  if(AS.setIdx + 1 < ex.sets){
+    AS.setIdx++; AS.phase = 'view';
+  } else {
+    rec.status = rec.setStatus.every(s=>s==='skipped') ? 'skipped' : 'done';
+    AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
+  }
+  persistAS();
+  renderStation();
+}
+
+function redoLastSet(){
+  stopTimerLoop();
+  const flow = currentFlow(); const st = flow[AS.cursor]; const rec = AS.records[st.uid];
+  rec.sets[AS.setIdx] = 0; rec.setStatus[AS.setIdx] = 'pending';
+  AS.phase = 'view'; clearTimerState();
+  persistAS();
+  renderStation();
+}
+
+function skipCurrentSet(){
+  cueNoted();
+  stopTimerLoop();
+  const flow = currentFlow(); const st = flow[AS.cursor]; const ex = EXERCISE_LIBRARY[st.exId]; const rec = AS.records[st.uid];
+  rec.sets[AS.setIdx] = 0; rec.setStatus[AS.setIdx] = 'skipped';
+  clearTimerState();
+  if(AS.setIdx + 1 < ex.sets){ AS.setIdx++; AS.phase='view'; persistAS(); renderStation(); }
+  else { advanceAfterSet(); }
+}
+
+function skipExercise(){
+  cueNoted();
+  stopTimerLoop();
+  const flow = currentFlow(); const st = flow[AS.cursor]; const rec = AS.records[st.uid];
+  rec.setStatus = rec.setStatus.map(s=> s==='done' ? s : 'skipped');
+  rec.sets = rec.sets.map((v,i)=> rec.setStatus[i]==='done' ? v : 0);
+  rec.status = rec.setStatus.some(s=>s==='done') ? 'done' : 'skipped';
+  clearTimerState();
+  AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
+  persistAS();
+  renderStation();
+}
+
+// Non-blocking reference: shows the Tier-3 text cue in a modal. No external
+// navigation, no session-state or timer change. Media arrives in the curation pass.
+function showRef(exId){
+  const ex = EXERCISE_LIBRARY[exId]; if(!ex) return;
+  showModal(getVariationName(exId), ex.note || 'Text cue coming soon.', [
+    { text:'Close', cls:'btn-secondary', action:()=>hideModal() }
+  ]);
+}
+
+function noteIssue(){
+  const flow = currentFlow(); const st = flow[AS.cursor]; const rec = AS.records[st.uid];
+  const txt = prompt('Add a note for this set:', rec.note || '');
+  if(txt === null) return;
+  rec.note = txt.trim();
+  rec.issueFlag = txt.trim() ? 'issue' : 'none';
+  if(txt.trim()){ AS.issues.push({ exId: st.exId || null, note: txt.trim() }); cueNoted(); }
+  persistAS();
+}
+
+// ---- TIMER LOOP (absolute-time based; survives backgrounding) ----
+function startTimerLoop(){
+  stopTimerLoop();
+  const tick = ()=>{
+    if(!AS || !AS.timerEnd){ return; }
+    const remaining = Math.max(0, Math.round((AS.timerEnd - Date.now())/1000));
+    const el = document.getElementById('timer-display');
+    if(el){ const m = Math.floor(remaining/60), s = remaining%60; el.textContent = m + ':' + String(s).padStart(2,'0'); }
+    if(remaining <= 0){
+      stopTimerLoop();
+      const kind = AS.timerKind;
+      if(kind === 'work') onWorkTimerComplete();
+      else if(kind === 'rest') onRestTimerComplete();
+      return;
+    }
+    timerRAF = setTimeout(tick, 250);
+  };
+  tick();
+}
+function stopTimerLoop(){ if(timerRAF){ clearTimeout(timerRAF); timerRAF = null; } }
+
+// ---- STOP / COMPLETE ----
+function confirmStopSession(){
+  showModal('Stop session?', 'Anything completed so far will be saved. The rest is marked unfinished.', [
+    { text:'Keep going', cls:'btn-secondary', action:()=>hideModal() },
+    { text:'Stop & save', cls:'btn-danger', action:()=>{ hideModal(); finalizeSession('stopped'); } }
+  ]);
+}
+
+function renderCompletion(){
+  stopTimerLoop();
+  renderProgressBar();
+  const flow = currentFlow();
+  let done=0, skipped=0, exTotal=0;
+  flow.forEach(st=>{ if(st.kind==='exercise'){ exTotal++; const r=AS.records[st.uid]; if(r.status==='skipped' || r.setStatus.every(s=>s==='skipped')) skipped++; else done++; } });
+  const body = document.getElementById('flow-body');
+  body.innerHTML = `
+    <div class="flow-meta"><span class="badge badge-${AS.type.toLowerCase()}">${AS.type}</span> Session review</div>
+    <div class="flow-title">Nice work.</div>
+    <div class="flow-sub">${done} completed &middot; ${skipped} skipped of ${exTotal} exercises. The Form is done too.</div>
+    <div style="margin-top:14px;">
+      <div class="move-name" style="font-size:14px;margin-bottom:8px;">Anything to note? (optional)</div>
+      <textarea class="note-field" id="session-note" rows="3" placeholder="How it felt, anything to remember\u2026">${AS.sessionNote||''}</textarea>
+    </div>`;
+  const foot = document.getElementById('flow-foot');
+  foot.innerHTML = `<button class="btn btn-primary" onclick="finalizeSession('completed')">Complete Session</button>`;
+}
+
+function finalizeSession(statusReason){
+  stopTimerLoop();
+  if(!AS){ showScreen('home'); return; }
+  const noteEl = document.getElementById('session-note');
+  if(noteEl) AS.sessionNote = noteEl.value.trim();
+
+  const flow = currentFlow();
+  const s = getState();
+  const today = new Date().toISOString().split('T')[0];
+
+  const exercises = {}; const skipped = []; const exerciseMeta = {};
+  let anyDone = false, anySkipped = false;
+  flow.forEach(st=>{
+    if(st.kind !== 'exercise') return;
+    const rec = AS.records[st.uid];
+    const doneSets = rec.setStatus.map((status,i)=> status==='done' ? rec.sets[i] : null).filter(v=>v!==null);
+    const wasSkippedWhole = rec.setStatus.every(x=>x==='skipped') || (rec.status==='skipped' && doneSets.length===0);
+    if(wasSkippedWhole || doneSets.length===0){ skipped.push(st.exId); anySkipped = true; }
+    else {
+      exercises[st.exId] = rec.sets.map((v,i)=> rec.setStatus[i]==='done' ? v : 0);
+      anyDone = true;
+      if(rec.setStatus.some(x=>x==='skipped')) anySkipped = true;
+    }
+    // reserved fields preserved (hidden)
+    exerciseMeta[st.exId] = { setStatus:rec.setStatus, issueFlag:rec.issueFlag, note:rec.note||'', quality:rec.quality, painFree:rec.painFree };
   });
-  return Math.round(totalSeconds / 60);
-}
 
-// ===================================================================
-// STREAK / STATS
-// ===================================================================
+  let sessionStatus;
+  if(statusReason === 'stopped') sessionStatus = 'stopped';
+  else sessionStatus = anySkipped ? 'partial' : 'completed';
 
-function getLast7DaysStreak() {
-  const state = getState();
-  const today = new Date();
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split('T')[0];
-    const dayLabel = ['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()];
-    const trained = state.log.some(e => e.date === dateStr);
-    const isToday = i === 0;
-    days.push({ dateStr, dayLabel, trained, isToday });
-  }
-  return days;
-}
+  const entry = {
+    date: today, sessionType: AS.type,
+    exercises, skipped: skipped.length ? skipped : undefined,
+    sessionStatus, exerciseMeta,
+    issues: AS.issues.length ? AS.issues : undefined,
+    notes: AS.sessionNote || undefined,
+    duration: Math.round((Date.now() - AS.startTime)/60000)
+  };
+  s.log.push(entry);
 
-function getWeeklyVolume(weeks) {
-  const state = getState();
-  const result = [];
-  const today = new Date();
-  for (let w = weeks - 1; w >= 0; w--) {
-    const weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - (w * 7 + today.getDay()));
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    const startStr = weekStart.toISOString().split('T')[0];
-    const endStr = weekEnd.toISOString().split('T')[0];
-    let sessions = 0;
-    let totalSets = 0;
-    state.log.forEach(entry => {
-      if (entry.date >= startStr && entry.date <= endStr) {
-        sessions++;
-        if (entry.exercises) {
-          Object.values(entry.exercises).forEach(sets => {
-            totalSets += sets.filter(s => s > 0).length;
-          });
-        }
-      }
+  // Promotion tracking only for genuinely completed exercises (not skipped, not on a stopped session).
+  if(statusReason !== 'stopped'){
+    Object.entries(exercises).forEach(([exId, reps])=>{
+      if(EXERCISE_LIBRARY[exId]) updatePromotionTracking(exId, checkHit(exId, reps));
     });
-    result.push({ week: weeks - w, sessions, totalSets, startStr });
   }
-  return result;
+
+  // Advance rotation only when the session actually ran to the end.
+  if(statusReason === 'completed') s.rotationIndex = (s.rotationIndex + 1) % 4;
+
+  s.activeSession = null;
+  saveState(s);
+  AS = null;
+  if(statusReason === 'completed') cueSessionDone();
+  syncToSheet();
+  showScreen('home');
 }
 
 // ===================================================================
 // NAVIGATION
 // ===================================================================
-
 let currentScreen = 'home';
-let activeSession = null;
-let timerInterval = null;
-
-function showScreen(name) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-' + name).classList.add('active');
+function showScreen(name){
+  if(name !== 'session') stopTimerLoop();
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
   currentScreen = name;
-
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  const navMap = { home:'today', history:'history', progress:'progress', reference:'exercises', settings:'settings' };
-  const match = navMap[name] || name;
-  document.querySelectorAll('.nav-btn').forEach(b => {
-    if (b.textContent.trim().toLowerCase().includes(match)) b.classList.add('active');
-  });
-
-  if (name === 'home') renderHome();
-  if (name === 'history') renderHistory();
-  if (name === 'progress') renderProgress();
-  if (name === 'reference') renderReference();
-  if (name === 'settings') renderSettings();
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const map = { home:'today', history:'history', reference:'exercises', settings:'settings' };
+  document.querySelectorAll('.nav-btn').forEach(b=>{ if(b.textContent.trim().toLowerCase().includes(map[name]||name)) b.classList.add('active'); });
+  if(name==='home') renderHome();
+  if(name==='history') renderHistory();
+  if(name==='reference') renderReference();
+  if(name==='settings') renderSettings();
 }
 
 // ===================================================================
-// HOME SCREEN
+// HOME
 // ===================================================================
+function renderHome(){
+  const s = getState();
+  const nextType = ROTATION[s.rotationIndex % 4];
+  const t = SESSION_TEMPLATES[nextType];
+  const est = estimateDuration(nextType);
+  const gc = t.grip==='high'?'var(--grip-high)':t.grip==='low'?'var(--grip-low)':'var(--grip-none)';
 
-function renderHome() {
-  const state = getState();
-  const nextType = ROTATION[state.rotationIndex % 4];
-  const template = SESSION_TEMPLATES[nextType];
-  const streak = getLast7DaysStreak();
-  const estimate = estimateSessionDuration(nextType);
-  const gripColor = template.grip === 'high' ? 'var(--grip-high)' : template.grip === 'low' ? 'var(--grip-low)' : 'var(--grip-none)';
+  // RESUME GUARD: an active session takes over Home entirely. No start path,
+  // no Today card, no promotions competing with the in-progress decision.
+  if(s.activeSession){
+    const rt = SESSION_TEMPLATES[s.activeSession.type];
+    document.getElementById('home-content').innerHTML = `
+      <div class="promo-card">
+        <h3>&#9656; Session in progress</h3>
+        <p>${rt ? rt.name : s.activeSession.type} \u2014 pick up where you left off.</p>
+        <div class="promo-actions">
+          <button class="btn btn-small btn-primary" onclick="resumeSession()">Resume Session</button>
+          <button class="btn btn-small btn-secondary" onclick="discardActiveSession()">Discard Session</button>
+        </div>
+      </div>`;
+    return;
+  }
 
+  // Promotions
   let promoHtml = '';
-  const allExercises = getAllSessionExercises();
-  allExercises.forEach(exId => {
-    if (isReadyToPromote(exId)) {
-      const ex = EXERCISE_LIBRARY[exId];
-      const currentIdx = getCurrentVariation(exId);
-      const nextVar = ex.ladder[currentIdx + 1];
-      const currentVar = ex.ladder[currentIdx];
+  getAllSessionExercises().forEach(exId=>{
+    if(isReadyToPromote(exId)){
+      const ex = EXERCISE_LIBRARY[exId]; const i = getCurrentVariation(exId);
       promoHtml += `
         <div class="promo-card">
-          <h3>&#9650; Ready to Promote</h3>
-          <p>${ex.name}: ${currentVar} &#8594; ${nextVar}</p>
+          <h3>&#9650; Ready to progress</h3>
+          <p>${ex.name}: ${ex.ladder[i]} &#8594; ${ex.ladder[i+1]}</p>
           <div class="promo-actions">
             <button class="btn btn-small btn-primary" onclick="handlePromote('${exId}')">Advance</button>
-            <button class="btn btn-small btn-secondary" onclick="dismissPromo('${exId}')">Not Yet</button>
+            <button class="btn btn-small btn-secondary" onclick="dismissPromo('${exId}')">Not yet</button>
           </div>
         </div>`;
     }
   });
-
-  const streakHtml = streak.map(d => {
-    let cls = d.trained ? 'done' : 'empty';
-    if (d.isToday) cls += ' today';
-    return `<div class="streak-dot ${cls}">${d.dayLabel}</div>`;
-  }).join('');
-
-  const sessionsThisWeek = streak.filter(d => d.trained).length;
 
   document.getElementById('home-content').innerHTML = `
     ${promoHtml}
@@ -1045,810 +1189,192 @@ function renderHome() {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <div style="display:flex;align-items:center;gap:6px;">
           <span class="badge badge-${nextType.toLowerCase()}">${nextType}</span>
-          <span class="grip-dot" style="background:${gripColor}"></span>
-          <span style="font-size:11px;color:var(--text3);">${template.grip}</span>
+          <span class="grip-dot" style="background:${gc}"></span>
+          <span style="font-size:11px;color:var(--text3);">${t.grip} grip</span>
         </div>
-        <span style="font-size:11px;color:var(--text3);">~${estimate} min</span>
+        <span style="font-size:11px;color:var(--text3);">~${est} min</span>
       </div>
-      <div class="session-name">${template.name}</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 12px;">
-        <div class="streak-row">${streakHtml}</div>
-        <span style="font-size:11px;color:var(--text3);font-weight:600;">${sessionsThisWeek}/7</span>
-      </div>
-      <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Session</button>
+      <div class="session-name">${t.name}</div>
+      <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Today's Session</button>
+      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;">Opens with the Form</div>
     </div>
-    ${state.log.length > 0 ? renderLastSession(state) : ''}
-    ${renderSessionPreview(nextType)}
-  `;
+    ${s.log.length ? renderLastSession(s) : ''}
+    ${renderSessionPreview(nextType)}`;
 }
 
-function renderLastSession(state) {
-  const last = state.log[state.log.length - 1];
-  if (!last) return '';
-  const hitCount = last.exercises ? Object.entries(last.exercises).filter(([id, reps]) => checkHit(id, reps)).length : 0;
+function renderLastSession(s){
+  const last = s.log[s.log.length-1]; if(!last) return '';
+  const hitCount = last.exercises ? Object.entries(last.exercises).filter(([id,r])=>checkHit(id,r)).length : 0;
   const totalEx = last.exercises ? Object.keys(last.exercises).length : 0;
-  return `
-    <div class="card" style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;">
-      <div style="font-size:12px;color:var(--text2);">Last: <strong style="color:var(--text);">${SESSION_TEMPLATES[last.sessionType]?.name || last.sessionType}</strong></div>
-      <div style="font-size:11px;color:var(--text2);">${last.date.slice(5)} &middot; ${hitCount}/${totalEx} HITs${last.feel ? ' &middot; ' + last.feel : ''}</div>
-    </div>`;
-}
-
-function renderSessionPreview(sessionType) {
-  const template = SESSION_TEMPLATES[sessionType];
-  let inner = '';
-  template.blocks.forEach(block => {
-    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${block.label}</div>`;
-    block.exercises.forEach(exId => {
-      const ex = EXERCISE_LIBRARY[exId];
-      const isMob = ex.isMobility;
-      const varName = isMob ? ex.name : getVariationName(exId);
-      const detail = isMob ? '' : ` <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>`;
-      inner += `<div style="font-size:14px;padding:2px 0;line-height:1.4;">${varName}${detail}</div>`;
-    });
-  });
-  return `<div class="card">
-    <details open>
-      <summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;font-weight:600;">
-        Session Preview <span style="font-size:11px;color:var(--text3);font-weight:400;">&#9662;</span>
-      </summary>
-      <div style="margin-top:6px;">${inner}</div>
-    </details>
+  const stat = last.sessionStatus || 'completed';
+  return `<div class="card" style="padding:8px 12px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="font-size:12px;color:var(--text2);">Last: <strong style="color:var(--text);">${SESSION_TEMPLATES[last.sessionType]?.name||last.sessionType}</strong></div>
+    <div style="font-size:11px;color:var(--text2);">${last.date.slice(5)} &middot; ${hitCount}/${totalEx} HITs<span class="status-chip status-${stat}">${stat}</span></div>
   </div>`;
 }
 
-function getAllSessionExercises() {
-  const all = new Set();
-  Object.values(SESSION_TEMPLATES).forEach(t => {
-    t.blocks.forEach(b => b.exercises.forEach(e => {
-      if (!EXERCISE_LIBRARY[e].isMobility) all.add(e);
-    }));
+function renderSessionPreview(type){
+  const t = SESSION_TEMPLATES[type];
+  let inner = `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">Form</div>
+    <div style="font-size:14px;padding:2px 0;line-height:1.4;">7 screens \u2014 root, spine, hips, floor tension, bow</div>`;
+  t.blocks.forEach(b=>{
+    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${b.label}</div>`;
+    b.exercises.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; inner += `<div style="font-size:14px;padding:2px 0;line-height:1.4;">${getVariationName(exId)} <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span></div>`; });
   });
-  return [...all];
+  return `<div class="card"><details open><summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;font-weight:600;">Session preview</summary><div style="margin-top:6px;">${inner}</div></details></div>`;
 }
 
-function handlePromote(exId) {
-  promoteExercise(exId);
-  syncToSheet();
-  renderHome();
-}
-
-function dismissPromo(exId) {
-  const state = getState();
-  state.promotions[exId] = { consecutiveHits: 0 };
-  saveState(state);
-  renderHome();
-}
-
-// ===================================================================
-// SESSION SCREEN
-// ===================================================================
-
-function startSession(type) {
-  const template = SESSION_TEMPLATES[type];
-  activeSession = {
-    type,
-    template,
-    reps: {},
-    skipped: {},
-    feel: null,
-    startTime: Date.now()
-  };
-
-  template.blocks.forEach(block => {
-    block.exercises.forEach(exId => {
-      const ex = EXERCISE_LIBRARY[exId];
-      activeSession.reps[exId] = new Array(ex.sets).fill(0);
-    });
-  });
-
-  document.getElementById('session-title').textContent = template.name;
-  const gripColor = template.grip === 'high' ? 'var(--grip-high)' : template.grip === 'low' ? 'var(--grip-low)' : 'var(--grip-none)';
-  document.getElementById('session-grip').innerHTML = `<span class="grip-dot" style="background:${gripColor}"></span>`;
-
-  document.querySelectorAll('.feel-btn').forEach(b => {
-    b.style.borderColor = 'var(--border)';
-    b.style.color = 'var(--text2)';
-    b.style.background = 'var(--surface2)';
-  });
-  const notesEl = document.getElementById('session-notes');
-  if (notesEl) notesEl.value = '';
-
-  renderSessionContent();
-  showScreen('session');
-}
-
-function setFeel(feel) {
-  activeSession.feel = feel;
-  document.querySelectorAll('.feel-btn').forEach(b => {
-    const isActive = b.dataset.feel === feel;
-    b.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
-    b.style.color = isActive ? 'var(--accent)' : 'var(--text2)';
-    b.style.background = isActive ? 'var(--accent-dim)' : 'var(--surface2)';
-  });
-}
-
-function renderSessionContent() {
-  const { template } = activeSession;
-  let html = '';
-
-  template.blocks.forEach(block => {
-    html += `<div class="block-label">${block.label}</div>`;
-
-    block.exercises.forEach(exId => {
-      const ex = EXERCISE_LIBRARY[exId];
-      const varName = getVariationName(exId);
-      const isMob = ex.isMobility;
-      const reps = activeSession.reps[exId];
-      const topRange = ex.repRange[1];
-      const isSkipped = activeSession.skipped && activeSession.skipped[exId];
-
-      // Demo link — small ▶ icon, only if demoUrl exists
-      const demoLink = ex.demoUrl
-        ? `<a href="${ex.demoUrl}" target="_blank" rel="noopener"
-            style="color:var(--text3);font-size:15px;text-decoration:none;padding:2px 4px;line-height:1;flex-shrink:0;"
-            title="Watch demo">&#9654;</a>`
-        : '';
-
-      let setsHtml = '';
-      if (!isSkipped && (!isMob || ex.sets > 1)) {
-        const setInputs = [];
-        for (let s = 0; s < ex.sets; s++) {
-          const val = reps[s] || '';
-          const isHit = reps[s] >= topRange && reps[s] > 0;
-          setInputs.push(`
-            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
-              <div class="set-label">S${s+1}</div>
-              <input type="number" inputmode="numeric" pattern="[0-9]*"
-                class="set-input ${isHit ? 'hit' : ''}"
-                value="${val || ''}"
-                data-ex="${exId}" data-set="${s}"
-                onfocus="this.select()"
-                onchange="logRep(this)"
-                onblur="logRep(this)">
-            </div>`);
-        }
-        setsHtml = `
-          <div class="sets-row">
-            ${setInputs.join('')}
-            <div class="target-label">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit}</div>
-          </div>`;
-      } else if (!isSkipped) {
-        setsHtml = `<div style="font-size:12px;color:var(--text2);">${ex.repRange[0] === 1 && ex.unit === 'min' ? '2-3 min' : ex.repRange[0]+'-'+ex.repRange[1]+' '+ex.unit}</div>`;
-      }
-
-      const skipBtn = !isMob && !isSkipped ? `<button style="background:none;border:none;color:var(--text3);font-size:11px;padding:4px 0;cursor:pointer;font-family:var(--font);" onclick="skipExercise('${exId}')">Skip</button>` : '';
-      const unskipBtn = isSkipped ? `<button style="background:none;border:none;color:var(--accent);font-size:11px;padding:4px 0;cursor:pointer;font-family:var(--font);" onclick="unskipExercise('${exId}')">Undo skip</button>` : '';
-
-      html += `
-        <div class="exercise-card" style="${isSkipped ? 'opacity:0.4;' : ''}">
-          <div style="display:flex;justify-content:space-between;align-items:start;">
-            <div style="flex:1;min-width:0;">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
-                <div class="exercise-name" style="margin-bottom:0;">${isMob ? ex.name : varName}</div>
-                ${demoLink}
-              </div>
-              ${!isMob ? `<div class="exercise-detail">${ex.name} progression</div>` : ''}
-            </div>
-            <div style="flex-shrink:0;margin-left:8px;">${skipBtn}${unskipBtn}</div>
-          </div>
-          ${isSkipped ? '<div style="font-size:12px;color:var(--text3);margin:4px 0;">Skipped</div>' : setsHtml}
-          <div class="exercise-note">${ex.note}</div>
-        </div>`;
-    });
-  });
-
-  document.getElementById('session-content').innerHTML = html;
-}
-
-function skipExercise(exId) {
-  if (!activeSession.skipped) activeSession.skipped = {};
-  activeSession.skipped[exId] = true;
-  activeSession.reps[exId] = activeSession.reps[exId].map(() => 0);
-  renderSessionContent();
-}
-
-function unskipExercise(exId) {
-  if (activeSession.skipped) delete activeSession.skipped[exId];
-  renderSessionContent();
-}
-
-function logRep(input) {
-  const exId = input.dataset.ex;
-  const setIdx = parseInt(input.dataset.set);
-  const val = parseInt(input.value) || 0;
-  activeSession.reps[exId][setIdx] = val;
-
-  const ex = EXERCISE_LIBRARY[exId];
-  const topRange = ex.repRange[1];
-  input.classList.toggle('hit', val >= topRange && val > 0);
-
-  const block = activeSession.template.blocks.find(b => b.exercises.includes(exId));
-  if (block && val > 0) {
-    startRestTimer(REST_TIMES[block.type], block.label);
-  }
-}
-
-// ===================================================================
-// REST TIMER
-// ===================================================================
-
-function startRestTimer(seconds, label) {
-  clearInterval(timerInterval);
-  const timerEl = document.getElementById('rest-timer');
-  const timeEl = document.getElementById('rest-time');
-  const labelEl = document.getElementById('rest-label');
-  timerEl.classList.add('visible');
-  labelEl.textContent = label + ' rest';
-  timeEl.classList.remove('done');
-
-  let remaining = seconds;
-  updateTimerDisplay(remaining, timeEl);
-
-  timerInterval = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      clearInterval(timerInterval);
-      timeEl.textContent = 'GO';
-      timeEl.classList.add('done');
-      if (navigator.vibrate) navigator.vibrate(200);
-      setTimeout(() => { timerEl.classList.remove('visible'); }, 3000);
-    } else {
-      updateTimerDisplay(remaining, timeEl);
-    }
-  }, 1000);
-}
-
-function updateTimerDisplay(seconds, el) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  el.textContent = m + ':' + String(s).padStart(2, '0');
-}
-
-function dismissTimer() {
-  clearInterval(timerInterval);
-  document.getElementById('rest-timer').classList.remove('visible');
-}
-
-// ===================================================================
-// COMPLETE SESSION
-// ===================================================================
-
-function completeSession() {
-  if (!activeSession) return;
-  const state = getState();
-  const today = new Date().toISOString().split('T')[0];
-
-  const exercises = {};
-  const skipped = [];
-  Object.entries(activeSession.reps).forEach(([exId, reps]) => {
-    if (!EXERCISE_LIBRARY[exId].isMobility) {
-      if (activeSession.skipped && activeSession.skipped[exId]) {
-        skipped.push(exId);
-      } else {
-        exercises[exId] = reps;
-      }
-    }
-  });
-
-  const notesEl = document.getElementById('session-notes');
-  const notes = notesEl ? notesEl.value.trim() : '';
-  const feel = activeSession.feel || null;
-
-  const entry = {
-    date: today,
-    sessionType: activeSession.type,
-    exercises,
-    skipped: skipped.length > 0 ? skipped : undefined,
-    feel,
-    notes: notes || undefined,
-    duration: Math.round((Date.now() - activeSession.startTime) / 60000)
-  };
-  state.log.push(entry);
-
-  Object.entries(exercises).forEach(([exId, reps]) => {
-    const hit = checkHit(exId, reps);
-    updatePromotionTracking(exId, hit);
-  });
-
-  state.rotationIndex = (state.rotationIndex + 1) % 4;
-  saveState(state);
-
-  syncToSheet();
-
-  activeSession = null;
-  dismissTimer();
-  showScreen('home');
-}
-
-function confirmExitSession() {
-  showModal(
-    'Exit Session?',
-    'Your progress for this session won\'t be saved.',
-    [
-      { text: 'Cancel', cls: 'btn-secondary', action: () => hideModal() },
-      { text: 'Exit', cls: 'btn-danger', action: () => { activeSession = null; dismissTimer(); hideModal(); showScreen('home'); } }
-    ]
-  );
-}
-
-// ===================================================================
-// HISTORY SCREEN
-// ===================================================================
-
-function renderHistory() {
-  const state = getState();
-  if (state.log.length === 0) {
-    document.getElementById('history-content').innerHTML = `
-      <div class="empty"><div class="empty-icon">&#128203;</div>No sessions yet.<br>Complete your first session to see history.</div>`;
-    return;
-  }
-
-  const html = [...state.log].reverse().map((entry, i) => {
-    const idx = state.log.length - 1 - i;
-    const template = SESSION_TEMPLATES[entry.sessionType];
-    const hitCount = entry.exercises ? Object.entries(entry.exercises).filter(([id, reps]) => checkHit(id, reps)).length : 0;
-    const totalEx = entry.exercises ? Object.keys(entry.exercises).length : 0;
-
-    let detailHtml = '';
-    if (entry.exercises) {
-      Object.entries(entry.exercises).forEach(([exId, reps]) => {
-        const ex = EXERCISE_LIBRARY[exId];
-        const hit = checkHit(exId, reps);
-        detailHtml += `<div class="history-exercise">
-          ${hit ? '&#9632;' : '&#9633;'} ${ex ? ex.name : exId}: <span>${reps.join(', ')}</span>
-        </div>`;
-      });
-    }
-    if (entry.skipped && entry.skipped.length > 0) {
-      entry.skipped.forEach(exId => {
-        const ex = EXERCISE_LIBRARY[exId];
-        detailHtml += `<div class="history-exercise" style="color:var(--text3);">&#8212; ${ex ? ex.name : exId}: <span>skipped</span></div>`;
-      });
-    }
-    if (entry.notes) {
-      detailHtml += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">"${entry.notes}"</div>`;
-    }
-
-    const feelLabel = entry.feel ? ` &middot; ${entry.feel}` : '';
-
-    return `
-      <div class="history-item" onclick="this.classList.toggle('expanded')">
-        <div class="history-date">${formatDate(entry.date)}${entry.duration ? ' &middot; ' + entry.duration + ' min' : ''}${feelLabel}</div>
-        <div class="history-type">
-          <span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span>
-          ${template ? template.name : ''}
-        </div>
-        <div class="history-hits">${hitCount}/${totalEx} HITs${entry.skipped && entry.skipped.length > 0 ? ' &middot; ' + entry.skipped.length + ' skipped' : ''}</div>
-        <div class="history-detail">${detailHtml}</div>
-      </div>`;
-  }).join('');
-
-  document.getElementById('history-content').innerHTML = html;
-}
-
-function formatDate(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00');
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
-}
-
-// ===================================================================
-// PROGRESS SCREEN
-// ===================================================================
-
-function renderProgress() {
-  const state = getState();
-  const weeklyData = getWeeklyVolume(8);
-  const totalSessions = state.log.length;
-  const totalPromotions = state.promotionLog ? state.promotionLog.length : 0;
-
-  const last4 = weeklyData.slice(-4);
-  const avgSessions = last4.length > 0 ? (last4.reduce((a,b) => a + b.sessions, 0) / last4.length).toFixed(1) : '0';
-
-  let totalHits = 0;
-  state.log.forEach(entry => {
-    if (entry.exercises) {
-      Object.entries(entry.exercises).forEach(([id, reps]) => {
-        if (checkHit(id, reps)) totalHits++;
-      });
-    }
-  });
-
-  const maxSessions = Math.max(...weeklyData.map(w => w.sessions), 4);
-  const barsHtml = weeklyData.map(w => {
-    const height = w.sessions > 0 ? Math.max((w.sessions / maxSessions) * 80, 4) : 2;
-    return `
-      <div class="bar-col">
-        <div class="bar-value">${w.sessions || ''}</div>
-        <div class="bar" style="height:${height}px;"></div>
-        <div class="bar-label">W${w.week}</div>
-      </div>`;
-  }).join('');
-
-  const maxVol = Math.max(...weeklyData.map(w => w.totalSets), 20);
-  const volBarsHtml = weeklyData.map(w => {
-    const height = w.totalSets > 0 ? Math.max((w.totalSets / maxVol) * 80, 4) : 2;
-    return `
-      <div class="bar-col">
-        <div class="bar-value">${w.totalSets || ''}</div>
-        <div class="bar" style="height:${height}px;background:var(--warn-dim);"></div>
-        <div class="bar-label">W${w.week}</div>
-      </div>`;
-  }).join('');
-
-  let promoLogHtml = '';
-  if (state.promotionLog && state.promotionLog.length > 0) {
-    promoLogHtml = state.promotionLog.slice(-10).reverse().map(p => `
-      <div class="promo-log-item">
-        <span>${p.from} <span class="promo-arrow">&#8594;</span> ${p.to}</span>
-        <span style="color:var(--text3);font-size:12px;">${p.date}</span>
-      </div>`).join('');
-  } else {
-    promoLogHtml = '<div style="color:var(--text3);font-size:13px;padding:12px 0;">No promotions yet.</div>';
-  }
-
-  document.getElementById('progress-content').innerHTML = `
-    <div class="stat-grid">
-      <div class="stat-box">
-        <div class="stat-num">${totalSessions}</div>
-        <div class="stat-label">Total Sessions</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num">${avgSessions}</div>
-        <div class="stat-label">Avg/Week (4wk)</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num">${totalHits}</div>
-        <div class="stat-label">Total HITs</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num">${totalPromotions}</div>
-        <div class="stat-label">Promotions</div>
-      </div>
-    </div>
-
-    <div class="progress-section" style="margin-top:20px;">
-      <h2>Sessions / Week</h2>
-      <div class="bar-chart">${barsHtml}</div>
-    </div>
-
-    <div class="progress-section">
-      <h2>Total Sets / Week</h2>
-      <div class="bar-chart">${volBarsHtml}</div>
-    </div>
-
-    <div class="progress-section">
-      <h2>Promotion Log</h2>
-      <div class="card">${promoLogHtml}</div>
-    </div>
-  `;
-}
-
-// ===================================================================
-// REFERENCE SCREEN
-// ===================================================================
-
-function renderReference() {
-  const categories = [
-    { label: 'U1 — Ring Upper', ids: ['ring-row', 'ring-pullup', 'ring-pushup', 'ring-support', 'ring-curl'] },
-    { label: 'U2 — Parallette/DB', ids: ['para-pushup', 'pike-pushup', 'db-press', 'ring-face-pull', 'ab-wheel'] },
-    { label: 'L1 — Hinge Lower', ids: ['jefferson-curl', 'single-leg-rdl', 'glute-bridge', 'jump-rope', 'hanging-knee-raise'] },
-    { label: 'L2 — Squat Lower', ids: ['split-squat', 'step-lunge', 'cossack-squat', 'calf-raise', 'hollow-body'] },
-  ];
-
-  let html = '';
-  categories.forEach(cat => {
-    html += `<div class="block-label">${cat.label}</div>`;
-    cat.ids.forEach(exId => {
-      const ex = EXERCISE_LIBRARY[exId];
-      const currentIdx = getCurrentVariation(exId);
-      const ladderHtml = ex.ladder.map((v, i) => {
-        if (i === currentIdx) return `<span class="ref-current">${v}</span>`;
-        if (i < currentIdx) return `<span style="text-decoration:line-through;color:var(--text3);">${v}</span>`;
-        return `<span style="color:var(--text3);">${v}</span>`;
-      }).join(' &#8594; ');
-
-      const promoState = getPromotionState(exId);
-      const hitIndicator = promoState.consecutiveHits > 0
-        ? ` &middot; <span style="color:var(--accent);">${promoState.consecutiveHits}/2 HITs</span>`
-        : '';
-
-      const demoLink = ex.demoUrl
-        ? `<a href="${ex.demoUrl}" target="_blank" rel="noopener"
-            style="color:var(--text3);font-size:11px;text-decoration:none;padding:3px 8px;
-            background:var(--surface2);border-radius:6px;border:1px solid var(--border);
-            white-space:nowrap;flex-shrink:0;">&#9654; Demo</a>`
-        : '';
-
-      html += `
-        <div class="ref-exercise">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;">
-            <div class="ref-name" style="margin-bottom:0;">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets} sets</span>${hitIndicator}</div>
-            ${demoLink}
-          </div>
-          <div class="ref-ladder">${ladderHtml}</div>
-        </div>`;
-    });
-  });
-
-  document.getElementById('reference-content').innerHTML = html;
-}
-
-// ===================================================================
-// SETTINGS SCREEN
-// ===================================================================
-
-function renderSettings() {
-  const state = getState();
-  const syncUrl = getSyncUrl();
-  const lastSync = localStorage.getItem('train_last_sync');
-  const lastSyncDisplay = lastSync ? new Date(lastSync).toLocaleString() : 'Never';
-  document.getElementById('settings-content').innerHTML = `
-    <div class="card">
-      <div style="font-weight:700;margin-bottom:12px;">Google Sheets Sync</div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">
-        Last sync: ${lastSyncDisplay}
-      </div>
-      <input type="text" class="sync-url-input" id="sync-url-input"
-        placeholder="Paste Apps Script URL here"
-        value="${syncUrl}">
-      <div style="display:flex;gap:8px;margin-top:4px;">
-        <button class="btn btn-small btn-primary" onclick="saveSyncUrl()">Save</button>
-        <button class="btn btn-small btn-secondary" onclick="testSync()">Test</button>
-        <button class="btn btn-small btn-secondary" onclick="syncToSheet()">Sync Now</button>
-      </div>
-      ${!syncUrl ? `
-      <details style="margin-top:12px;">
-        <summary style="font-size:13px;color:var(--accent);cursor:pointer;">Setup Guide (one-time, ~5 min)</summary>
-        <div class="setup-steps" style="margin-top:10px;">
-          1. Open <strong>Google Sheets</strong> and create a new blank sheet<br>
-          2. Click <strong>Extensions &rarr; Apps Script</strong><br>
-          3. Delete everything in the editor<br>
-          4. Paste the sync script (tap <strong>Copy Script</strong> below)<br>
-          5. Click <strong>Deploy &rarr; New deployment</strong><br>
-          6. Set type to <strong>Web app</strong><br>
-          7. Set "Who has access" to <strong>Anyone</strong><br>
-          8. Click <strong>Deploy</strong> and <strong>Authorize</strong> when prompted<br>
-          9. Copy the <strong>Web app URL</strong> and paste it above<br>
-          10. Tap <strong>Test</strong> to verify<br><br>
-          The script creates two tabs: <strong>Sync</strong> (JSON backup for restore) and <strong>Log</strong> (human-readable training history with one row per exercise).
-        </div>
-        <button class="btn btn-small btn-secondary" style="margin-top:10px;" onclick="copySyncScript()">Copy Script</button>
-      </details>` : ''}
-    </div>
-
-    <div class="card" style="margin-top:12px;">
-      <div class="setting-row">
-        <div>
-          <div style="font-weight:600;">Export Data</div>
-          <div style="font-size:12px;color:var(--text2);">Download full training log as JSON</div>
-        </div>
-        <button class="btn btn-small btn-secondary" onclick="exportData()">Export</button>
-      </div>
-      <div class="setting-row">
-        <div>
-          <div style="font-weight:600;">Import Data</div>
-          <div style="font-size:12px;color:var(--text2);">Restore from a previous export</div>
-        </div>
-        <button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button>
-        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
-      </div>
-      <div class="setting-row">
-        <div>
-          <div style="font-weight:600;">Reset Rotation</div>
-          <div style="font-size:12px;color:var(--text2);">Set next session to U1</div>
-        </div>
-        <button class="btn btn-small btn-secondary" onclick="resetRotation()">Reset</button>
-      </div>
-      <div class="setting-row">
-        <div>
-          <div style="font-weight:600;color:#ef4444;">Erase All Data</div>
-          <div style="font-size:12px;color:var(--text2);">Permanently delete everything</div>
-        </div>
-        <button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button>
-      </div>
-    </div>
-    <div class="card" style="margin-top:12px;">
-      <div style="font-size:13px;color:var(--text3);">
-        <strong>Data</strong>: ${state.log.length} sessions logged<br>
-        <strong>Storage</strong>: ~${(JSON.stringify(state).length / 1024).toFixed(1)} KB used<br>
-        <strong>Version</strong>: Train v3.1
-      </div>
-    </div>
-    <div class="card" style="margin-top:12px;">
-      <div style="font-size:12px;color:var(--text3);line-height:1.6;">
-        <strong>Rest Timers</strong><br>
-        Mobility: 20s &middot; Anchor: 2:30 &middot; Builders: 1:15 &middot; Finisher: 45s<br><br>
-        <strong>Promotion Rule</strong><br>
-        Hit top of rep range on ALL sets for 2 consecutive same-type sessions &#8594; promotion prompt appears on Home.
-      </div>
-    </div>
-  `;
-}
-
-function saveSyncUrl() {
-  const url = document.getElementById('sync-url-input').value.trim();
-  setSyncUrl(url);
-  renderSettings();
-  updateSyncIndicator(url ? 'none' : '');
-}
-
-function copySyncScript() {
-  const script = `function doPost(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var payload = JSON.parse(e.postData.contents);
-
-  // --- Sync tab: store full JSON state for restore ---
-  var syncSheet = ss.getSheetByName('Sync');
-  if (!syncSheet) syncSheet = ss.insertSheet('Sync');
-  syncSheet.getRange('A1').setValue(JSON.stringify(payload.state));
-  syncSheet.getRange('A2').setValue(new Date().toISOString());
-
-  // --- Log tab: write human-readable rows ---
-  var logSheet = ss.getSheetByName('Log');
-  if (!logSheet) {
-    logSheet = ss.insertSheet('Log');
-    logSheet.appendRow(['Date','Session','Exercise','Variation','S1','S2','S3','HIT','Duration (min)','Feel','Notes']);
-    logSheet.getRange('1:1').setFontWeight('bold');
-    logSheet.setFrozenRows(1);
-  }
-
-  // Clear and rewrite all log rows (simple, no drift)
-  var lastRow = logSheet.getLastRow();
-  if (lastRow > 1) logSheet.getRange(2, 1, lastRow - 1, 11).clearContent();
-
-  var rows = payload.logRows || [];
-  if (rows.length > 0) {
-    var data = rows.map(function(r) {
-      var sets = r.sets || [];
-      return [
-        r.date,
-        r.session,
-        r.exercise,
-        r.variation,
-        sets[0] || '',
-        sets[1] || '',
-        sets[2] || '',
-        r.hit ? 'HIT' : '',
-        r.duration || '',
-        r.feel || '',
-        r.notes || ''
-      ];
-    });
-    logSheet.getRange(2, 1, data.length, 11).setValues(data);
-  }
-
-  return ContentService.createTextOutput(JSON.stringify({status:'ok'}))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function doGet(e) {
-  var action = (e && e.parameter && e.parameter.action) || 'pull';
-  if (action === 'ping') {
-    return ContentService.createTextOutput(JSON.stringify({status:'ok',pong:true}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sync');
-  if (!sheet) {
-    return ContentService.createTextOutput(JSON.stringify({status:'empty'}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-  var data = sheet.getRange('A1').getValue();
-  if (!data) {
-    return ContentService.createTextOutput(JSON.stringify({status:'empty'}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-  return ContentService.createTextOutput(data)
-    .setMimeType(ContentService.MimeType.JSON);
-}`;
-  navigator.clipboard.writeText(script).then(() => {
-    alert('Script copied! Paste it into the Apps Script editor.');
-  }).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = script;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    alert('Script copied! Paste it into the Apps Script editor.');
-  });
-}
-
-function exportData() {
-  const state = getState();
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `train-backup-${new Date().toISOString().split('T')[0]}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function importData(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (data.log && Array.isArray(data.log)) {
-        showModal('Import Data?', `This will replace your current data with ${data.log.length} sessions from the backup.`, [
-          { text: 'Cancel', cls: 'btn-secondary', action: () => hideModal() },
-          { text: 'Import', cls: 'btn-primary', action: () => { saveState(data); hideModal(); renderSettings(); showScreen('home'); } }
-        ]);
-      } else {
-        alert('Invalid backup file.');
-      }
-    } catch(e) { alert('Could not read file.'); }
-  };
-  reader.readAsText(file);
-}
-
-function resetRotation() {
-  const state = getState();
-  state.rotationIndex = 0;
-  saveState(state);
-  renderSettings();
-}
-
-function confirmErase() {
-  showModal('Erase All Data?', 'This will permanently delete all sessions, promotions, and progression. This cannot be undone.', [
-    { text: 'Cancel', cls: 'btn-secondary', action: () => hideModal() },
-    { text: 'Erase Everything', cls: 'btn-danger', action: () => {
-      localStorage.removeItem('train_state');
-      hideModal();
-      showScreen('home');
-    }}
+function getAllSessionExercises(){ const all = new Set(); Object.values(SESSION_TEMPLATES).forEach(t=>t.blocks.forEach(b=>b.exercises.forEach(e=>all.add(e)))); return [...all]; }
+function handlePromote(exId){ promoteExercise(exId); syncToSheet(); renderHome(); }
+function dismissPromo(exId){ const s = getState(); s.promotions[exId] = { consecutiveHits:0 }; saveState(s); renderHome(); }
+function discardActiveSession(){
+  showModal('Discard session?', 'The in-progress session will be deleted. Completed history is not affected.', [
+    { text:'Keep', cls:'btn-secondary', action:()=>hideModal() },
+    { text:'Discard', cls:'btn-danger', action:()=>{ const s=getState(); s.activeSession=null; saveState(s); AS=null; hideModal(); renderHome(); } }
   ]);
 }
 
 // ===================================================================
+// HISTORY
+// ===================================================================
+function renderHistory(){
+  const s = getState();
+  if(!s.log.length){ document.getElementById('history-content').innerHTML = `<div class="empty"><div class="empty-icon">&#128203;</div>No sessions yet.<br>Complete your first session to see history.</div>`; return; }
+  const html = [...s.log].reverse().map(entry=>{
+    const t = SESSION_TEMPLATES[entry.sessionType];
+    const hitCount = entry.exercises ? Object.entries(entry.exercises).filter(([id,r])=>checkHit(id,r)).length : 0;
+    const totalEx = entry.exercises ? Object.keys(entry.exercises).length : 0;
+    let detail = '';
+    if(entry.exercises) Object.entries(entry.exercises).forEach(([exId,reps])=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise">${checkHit(exId,reps)?'&#9632;':'&#9633;'} ${ex?ex.name:exId}: <span>${reps.join(', ')}</span></div>`; });
+    if(entry.skipped) entry.skipped.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise" style="color:var(--text3);">&#8212; ${ex?ex.name:exId}: <span>skipped</span></div>`; });
+    if(entry.issues) entry.issues.forEach(it=>{ detail += `<div class="history-exercise" style="color:var(--warn);">! ${it.note}</div>`; });
+    if(entry.notes) detail += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">\u201c${entry.notes}\u201d</div>`;
+    const stat = entry.sessionStatus || 'completed';
+    return `<div class="history-item" onclick="this.classList.toggle('expanded')">
+      <div class="history-date">${formatDate(entry.date)}${entry.duration?' &middot; '+entry.duration+' min':''}</div>
+      <div class="history-type"><span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span> ${t?t.name:''}<span class="status-chip status-${stat}">${stat}</span></div>
+      <div class="history-hits">${hitCount}/${totalEx} HITs${entry.skipped&&entry.skipped.length?' &middot; '+entry.skipped.length+' skipped':''}</div>
+      <div class="history-detail">${detail}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('history-content').innerHTML = html;
+}
+function formatDate(ds){ const d = new Date(ds+'T12:00:00'); return `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}, ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getDate()}`; }
+
+// ===================================================================
+// REFERENCE
+// ===================================================================
+function renderReference(){
+  const cats = [
+    { label:'The Form (mobility kata)', form:true },
+    { label:'U1 \u2014 Ring Upper', ids:['ring-row','ring-pullup','ring-pushup','ring-support','ring-curl'] },
+    { label:'U2 \u2014 Parallette/DB', ids:['para-pushup','pike-pushup','db-press','ring-face-pull','ab-wheel'] },
+    { label:'L1 \u2014 Hinge Lower', ids:['jefferson-curl','single-leg-rdl','glute-bridge','jump-rope','hanging-knee-raise'] },
+    { label:'L2 \u2014 Squat Lower', ids:['split-squat','step-lunge','cossack-squat','calf-raise','hollow-body'] }
+  ];
+  let html = '';
+  cats.forEach(cat=>{
+    html += `<div class="block-label">${cat.label}</div>`;
+    if(cat.form){
+      FORM.screens.forEach((sc,i)=>{ html += `<div class="ref-exercise"><div class="ref-name">${i+1}. ${sc.title}</div><div class="ref-ladder">${sc.movements.map(m=>m.name).join(' &middot; ')}</div></div>`; });
+      return;
+    }
+    cat.ids.forEach(exId=>{
+      const ex = EXERCISE_LIBRARY[exId]; const i = getCurrentVariation(exId);
+      const ladder = ex.ladder.map((v,idx)=>{ if(idx===i) return `<span class="ref-current">${v}</span>`; if(idx<i) return `<span style="text-decoration:line-through;color:var(--text3);">${v}</span>`; return `<span style="color:var(--text3);">${v}</span>`; }).join(' &#8594; ');
+      const promo = getPromotionState(exId);
+      const hit = promo.consecutiveHits>0 ? ` &middot; <span style="color:var(--accent);">${promo.consecutiveHits}/2 HITs</span>` : '';
+      const demo = '';
+      html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>${hit}</div>${demo}</div><div class="ref-ladder">${ladder}</div></div>`;
+    });
+  });
+  document.getElementById('reference-content').innerHTML = html;
+}
+
+// ===================================================================
+// SETTINGS
+// ===================================================================
+function renderSettings(){
+  const s = getState();
+  const syncUrl = getSyncUrl();
+  const lastSync = localStorage.getItem('train_last_sync');
+  const lastSyncDisplay = lastSync ? new Date(lastSync).toLocaleString() : 'Never';
+  const soundOn = soundEnabled();
+  document.getElementById('settings-content').innerHTML = `
+    <div class="block-label" style="margin-top:8px;">Sound cues</div>
+    <div class="card">
+      <div class="setting-row">
+        <div><div style="font-weight:600;">Cue sounds</div><div style="font-size:12px;color:var(--text2);">Short tones for timers and saved actions</div></div>
+        <button class="btn btn-small ${soundOn?'btn-primary':'btn-secondary'}" onclick="toggleSound()">${soundOn?'On':'Off'}</button>
+      </div>
+    </div>
+    <div class="block-label">Your data</div>
+    <div class="card">
+      <div class="setting-row"><div><div style="font-weight:600;">Export data</div><div style="font-size:12px;color:var(--text2);">Download full log as JSON</div></div><button class="btn btn-small btn-secondary" onclick="exportData()">Export</button></div>
+    </div>
+    <details style="margin-top:14px;">
+      <summary style="font-size:13px;color:var(--text3);cursor:pointer;font-weight:600;padding:4px 0;">Advanced</summary>
+      <div class="card" style="margin-top:8px;">
+        <div style="font-weight:700;margin-bottom:12px;">Google Sheets Sync</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Last sync: ${lastSyncDisplay}</div>
+        <input type="text" class="sync-url-input" id="sync-url-input" placeholder="Paste Apps Script URL here" value="${syncUrl}">
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button class="btn btn-small btn-primary" onclick="saveSyncUrl()">Save</button>
+          <button class="btn btn-small btn-secondary" onclick="testSync()">Test</button>
+          <button class="btn btn-small btn-secondary" onclick="syncToSheet()">Sync Now</button>
+        </div>
+      </div>
+      <div class="card" style="margin-top:8px;">
+        <div class="setting-row"><div><div style="font-weight:600;">Import data</div><div style="font-size:12px;color:var(--text2);">Restore from a backup</div></div><button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button><input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"></div>
+        <div class="setting-row"><div><div style="font-weight:600;">Reset rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to U1</div></div><button class="btn btn-small btn-secondary" onclick="confirmResetRotation()">Reset</button></div>
+        <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
+      </div>
+    </details>
+    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Version</strong>: Train v4 \u00b7 ${s.log.length} sessions</div></div>`;
+}
+function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
+function saveSyncUrl(){ setSyncUrl(document.getElementById('sync-url-input').value.trim()); renderSettings(); updateSyncIndicator(getSyncUrl()?'none':''); }
+function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
+function importData(ev){ const f = ev.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = e=>{ try { const data = JSON.parse(e.target.result); if(data.log && Array.isArray(data.log)){ showModal('Import data?', `Replace current data with ${data.log.length} sessions from the backup?`, [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Import',cls:'btn-primary',action:()=>{ saveState(migrate(data)); hideModal(); renderSettings(); showScreen('home'); }} ]); } else alert('Invalid backup file.'); } catch(err){ alert('Could not read file.'); } }; r.readAsText(f); }
+function confirmResetRotation(){ showModal('Reset rotation?', 'The next session returns to U1. Session history is not changed.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Reset',cls:'btn-danger',action:()=>{ hideModal(); resetRotation(); }} ]); }
+function resetRotation(){ const s = getState(); s.rotationIndex = 0; saveState(s); renderSettings(); }
+function confirmErase(){ showModal('Erase all data?', 'Permanently deletes all sessions, promotions, and progression. Cannot be undone.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Erase everything',cls:'btn-danger',action:()=>{ localStorage.removeItem('train_state'); AS=null; hideModal(); showScreen('home'); }} ]); }
+
+// ===================================================================
 // MODAL
 // ===================================================================
-
-function showModal(title, body, buttons) {
+function showModal(title, body, buttons){
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').textContent = body;
-  document.getElementById('modal-actions').innerHTML = buttons.map(b =>
-    `<button class="btn ${b.cls}" id="modal-btn-${b.text.replace(/\s/g,'')}">${b.text}</button>`
-  ).join('');
-  buttons.forEach(b => {
-    document.getElementById('modal-btn-' + b.text.replace(/\s/g,'')).onclick = b.action;
-  });
+  document.getElementById('modal-actions').innerHTML = buttons.map(b=>`<button class="btn ${b.cls}" id="mb-${b.text.replace(/\s/g,'')}">${b.text}</button>`).join('');
+  buttons.forEach(b=>{ const el = document.getElementById('mb-'+b.text.replace(/\s/g,'')); if(el) el.onclick = b.action; });
   document.getElementById('modal').classList.add('visible');
 }
-
-function hideModal() {
-  document.getElementById('modal').classList.remove('visible');
-}
+function hideModal(){ document.getElementById('modal').classList.remove('visible'); }
 
 // ===================================================================
 // INIT
 // ===================================================================
-
-document.addEventListener('DOMContentLoaded', async () => {
-  const local = loadState();
-  if (getSyncUrl()) {
-    if (!local || local.log.length === 0) {
-      const restored = await pullFromSheet();
-      if (restored) {
-        console.log('Data restored from Google Sheet');
-      }
-    } else {
-      updateSyncIndicator('synced');
-    }
+document.addEventListener('DOMContentLoaded', async ()=>{
+  const s = getState();
+  if(getSyncUrl()){
+    if(!s.log.length && !s.activeSession){ await pullFromSheet(); } else { updateSyncIndicator('synced'); }
   }
   renderHome();
 });
 
-// Prevent pull-to-refresh
-document.body.addEventListener('touchmove', function(e) {
-  if (e.target.closest('.scroll')) return;
-  e.preventDefault();
-}, { passive: false });
+// Re-sync timer display when returning to the app (handles backgrounding/lock).
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && currentScreen === 'session' && AS && AS.timerEnd){
+    if(Date.now() >= AS.timerEnd){
+      const kind = AS.timerKind; stopTimerLoop();
+      if(kind === 'work') onWorkTimerComplete(); else if(kind === 'rest') onRestTimerComplete();
+    } else { startTimerLoop(); }
+  }
+});
+
+// Prevent pull-to-refresh except inside scrollable areas.
+document.body.addEventListener('touchmove', function(e){ if(e.target.closest('.scroll') || e.target.closest('.flow-body')) return; e.preventDefault(); }, { passive:false });
 </script>
 </body>
 </html>
