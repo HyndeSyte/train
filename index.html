@@ -398,9 +398,6 @@ function migrate(state){
   if(!state.schemaVersion || state.schemaVersion < 4){
     state.schemaVersion = 4;
   }
-  if(!state.promotions) state.promotions = {};
-  if(!state.promotionLog) state.promotionLog = [];
-  if(!state.exerciseVariations) state.exerciseVariations = {};
   if(!state.log) state.log = [];
   if(!('activeSession' in state)) state.activeSession = null;
   // v4 ring-spine rotation: drop any in-progress session keyed to a retired session type
@@ -425,9 +422,21 @@ function migrate(state){
     state.progressionEngineVersion = 2;
     state.schemaVersion = SCHEMA_VERSION;
   }
-  // anchorProgress will hold per-slot scoreboard state for the two heavy ring anchors,
-  // keyed by buildFlow's deterministic slotId. NOTHING reads it yet (commit 1 is infra only).
   if(!state.anchorProgress) state.anchorProgress = {};
+
+  // ---- v5 LEGACY QUARANTINE (Chunk 2, commit 3) ----
+  // The old binary HIT/ladder fields are moved under state.legacy and removed from the top
+  // level, in the SAME commit that cuts over every reader to the new engine. Any reader that
+  // still reaches for a top-level promotion field will now throw loudly (caught and surfaced)
+  // instead of silently rendering stale/contradictory progression. One-way; idempotent.
+  if(state.promotions !== undefined || state.exerciseVariations !== undefined || state.promotionLog !== undefined){
+    state.legacy = state.legacy || {};
+    if(state.promotions !== undefined){ state.legacy.promotions = state.promotions; delete state.promotions; }
+    if(state.exerciseVariations !== undefined){ state.legacy.exerciseVariations = state.exerciseVariations; delete state.exerciseVariations; }
+    if(state.promotionLog !== undefined){ state.legacy.promotionLog = state.promotionLog; delete state.promotionLog; }
+  }
+  if(!state.legacy) state.legacy = { promotions:{}, exerciseVariations:{}, promotionLog:[] };
+  if(!state.legacy.exerciseVariations) state.legacy.exerciseVariations = {};
   return state;
 }
 
@@ -442,13 +451,13 @@ const HEAVY_ANCHOR_SLOTS = {
 function getState(){
   let s = migrate(loadRaw());
   if(!s){
-    s = { schemaVersion:SCHEMA_VERSION, progressionEngineVersion:2, rotationIndex:0, log:[], promotions:{}, promotionLog:[], exerciseVariations:{}, anchorProgress:{}, activeSession:null };
+    s = { schemaVersion:SCHEMA_VERSION, progressionEngineVersion:2, rotationIndex:0, log:[], anchorProgress:{}, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, activeSession:null };
     saveState(s);
   }
   return s;
 }
 
-function getCurrentVariation(exId){ return getState().exerciseVariations[exId] || 0; }
+function getCurrentVariation(exId){ const s = getState(); return (s.legacy && s.legacy.exerciseVariations && s.legacy.exerciseVariations[exId]) || 0; }
 function getVariationName(exId){ const ex = EXERCISE_LIBRARY[exId]; const i = getCurrentVariation(exId); return ex.ladder[Math.min(i, ex.ladder.length-1)]; }
 
 // ===================================================================
@@ -461,27 +470,100 @@ function checkHit(exId, reps){
   if(valid.length === 0) return false;
   return valid.length === ex.sets && valid.every(r => r >= ex.repRange[1]);
 }
-function getPromotionState(exId){ return getState().promotions[exId] || { consecutiveHits:0 }; }
-function updatePromotionTracking(exId, wasHit){
-  const s = getState();
-  if(!s.promotions[exId]) s.promotions[exId] = { consecutiveHits:0 };
-  s.promotions[exId].consecutiveHits = wasHit ? s.promotions[exId].consecutiveHits + 1 : 0;
-  saveState(s);
-}
-function isReadyToPromote(exId){
-  const s = getState(); const promo = s.promotions[exId]; if(!promo) return false;
+// ===================================================================
+// ANCHOR PROGRESSION ENGINE v2 (total quality reps; Chunk 2, commit 3)
+// ===================================================================
+// Scoreboard for the two heavy ring anchors only (HEAVY_ANCHOR_SLOTS). Progression is
+// TOTAL QUALITY REPS across all anchor sets, with a +2 credited-reps/week cap. Raw reps
+// are never destroyed (history keeps them); the cap lives only in the credited number.
+//
+// anchorProgress[slotId] = {
+//   exId, label,
+//   lastRawQualityReps,            // most recent session's raw total (display truth)
+//   creditedQualityReps,           // capped running figure the target is based on (null = establish baseline)
+//   previousCreditedQualityReps,   // prior credited (for "+N this week" verdicts)
+//   creditCapped,                  // was the most recent credit capped by the +2 rule
+//   externalLoad, loadUnit,        // added load on the same movement (backpack/band)
+//   variationId,                   // slot-scoped variation (ladder is reference only)
+//   lastDate
+// }
+const WEEKLY_CREDIT_CAP = 2;       // max credited-rep gain per session (target-sanity, not tendon)
+const LOAD_STEP_LB = 5;            // default load step when the top total is owned
+
+// Top total for an anchor slot = sets * top-of-rep-range (e.g. 4 x 6 = 24 for pull).
+function anchorTopTotal(exId){
   const ex = EXERCISE_LIBRARY[exId];
-  if(getCurrentVariation(exId) >= ex.ladder.length - 1) return false;
-  return promo.consecutiveHits >= 2;
+  return ex.sets * ex.repRange[1];
 }
-function promoteExercise(exId){
-  const s = getState(); const ex = EXERCISE_LIBRARY[exId]; const oldV = getCurrentVariation(exId);
-  if(oldV >= ex.ladder.length - 1) return;
-  const newV = oldV + 1;
-  s.exerciseVariations[exId] = newV;
-  s.promotions[exId] = { consecutiveHits:0 };
-  s.promotionLog.push({ exerciseId:exId, from:ex.ladder[oldV], to:ex.ladder[newV], date:new Date().toISOString().split('T')[0] });
-  saveState(s);
+
+// Apply scoring for one finalized log entry into the in-memory next-state. Pure w.r.t.
+// `next` (mutates only next.anchorProgress). Builder work never scores — only performed[]
+// items flagged progressionType:'heavyAnchor' whose slotId is a known HEAVY_ANCHOR_SLOT.
+function applyAnchorProgressionV2(next, entry){
+  if(!next.anchorProgress) next.anchorProgress = {};
+  if(!entry || !Array.isArray(entry.performed)) return;
+  entry.performed.forEach(p=>{
+    if(p.progressionType !== 'heavyAnchor') return;          // only heavy anchors score
+    if(!HEAVY_ANCHOR_SLOTS[p.slotId]) return;                // only the two known scoreboard slots
+    const ex = EXERCISE_LIBRARY[p.exId]; if(!ex) return;
+    // INCOMPLETE GUARD: require all anchor sets present and done (no skipped, full set count).
+    if(p.skipped) return;
+    const reps = Array.isArray(p.reps) ? p.reps : [];
+    const doneReps = reps.filter(r=> typeof r === 'number' && r > 0);
+    if(doneReps.length < ex.sets) return;                    // not all sets logged -> no scoring
+
+    const rawQualityReps = doneReps.reduce((a,b)=>a+b, 0);
+    const prog = next.anchorProgress[p.slotId] || {
+      exId: p.exId, label: (HEAVY_ANCHOR_SLOTS[p.slotId].label || p.exId),
+      lastRawQualityReps: null, creditedQualityReps: null, previousCreditedQualityReps: null,
+      creditCapped: false, externalLoad: 0, loadUnit: 'lb', variationId: null, lastDate: null
+    };
+    const prevCredited = (typeof prog.creditedQualityReps === 'number') ? prog.creditedQualityReps : null;
+
+    let credited, creditCapped = false;
+    if(prevCredited === null){
+      // Establishing a baseline (first session, or just after a load step-up).
+      credited = rawQualityReps;
+    } else {
+      const capped = Math.min(rawQualityReps, prevCredited + WEEKLY_CREDIT_CAP);
+      credited = Math.max(capped, prevCredited);             // never decrease credited on a down day
+      creditCapped = rawQualityReps > prevCredited + WEEKLY_CREDIT_CAP;
+    }
+
+    prog.previousCreditedQualityReps = prevCredited;
+    prog.lastRawQualityReps = rawQualityReps;
+    prog.creditedQualityReps = credited;
+    prog.creditCapped = creditCapped;
+    prog.lastDate = entry.date;
+
+    // TOP-OF-RANGE STEP-UP: once credited owns the top total, add load and re-baseline.
+    // creditedQualityReps=null => next completed session establishes the baseline at new load.
+    const top = anchorTopTotal(p.exId);
+    if(typeof prog.creditedQualityReps === 'number' && prog.creditedQualityReps >= top){
+      prog.externalLoad = (prog.externalLoad || 0) + LOAD_STEP_LB;
+      prog.previousCreditedQualityReps = prog.creditedQualityReps;
+      prog.creditedQualityReps = null;     // re-establish baseline at the new load
+      prog.steppedUp = true;
+    } else {
+      prog.steppedUp = false;
+    }
+
+    next.anchorProgress[p.slotId] = prog;
+  });
+}
+
+// Human-readable verdict for the most recent result on an anchor slot (used by renderHome).
+// Kept minimal here; Chunk 3 owns the richer display + closing-in meter.
+function anchorVerdict(prog){
+  if(!prog) return '';
+  if(prog.steppedUp) return 'Top reached \u2014 load added. Establish your baseline next time.';
+  if(prog.creditedQualityReps === null) return 'New load. Establish your baseline.';
+  const prev = prog.previousCreditedQualityReps;
+  if(typeof prev !== 'number') return `Baseline set: ${prog.lastRawQualityReps} total.`;
+  const gain = prog.creditedQualityReps - prev;
+  if(gain > 0) return `+${gain} credited${prog.creditCapped ? ' (big day \u2014 capped at +'+WEEKLY_CREDIT_CAP+')' : ''}. Banked.`;
+  if(prog.lastRawQualityReps >= prev) return 'Matched last time. Hold the line.';
+  return 'Down a little \u2014 credited holds.';
 }
 
 // ===================================================================
@@ -517,7 +599,7 @@ async function syncToSheet(){
       const rows = [];
       if(entry.exercises) Object.entries(entry.exercises).forEach(([exId,reps])=>{
         const ex = EXERCISE_LIBRARY[exId];
-        const varIdx = s.exerciseVariations[exId] || 0;
+        const varIdx = (s.legacy && s.legacy.exerciseVariations && s.legacy.exerciseVariations[exId]) || 0;
         rows.push({ date:entry.date, session:entry.sessionType, exercise:ex?ex.name:exId, variation:ex?ex.ladder[Math.min(varIdx,ex.ladder.length-1)]:exId, sets:reps, hit:checkHit(exId,reps), duration:entry.duration||0, feel:entry.sessionStatus||'', notes:entry.notes||'' });
       });
       if(entry.skipped) entry.skipped.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; rows.push({ date:entry.date, session:entry.sessionType, exercise:ex?ex.name:exId, variation:'SKIPPED', sets:[], hit:false, duration:entry.duration||0, feel:entry.sessionStatus||'', notes:entry.notes||'' }); });
@@ -1146,13 +1228,10 @@ function finalizeSession(statusReason){
     const next = getState();
     next.log.push(entry);
 
-    // Promotion tracking only for genuinely completed exercises (not skipped, not on a stopped
-    // session). UNCHANGED behavior — still the old HIT engine off the still-top-level fields.
-    // (Commit 3 replaces this block with the total-quality-reps engine.)
+    // ANCHOR SCORING (v2): total-quality-reps engine, heavy anchors only. Builder work
+    // never scores (keyed by slotId+progressionType, not exId). Skipped on a stopped session.
     if(statusReason !== 'stopped'){
-      Object.entries(exercises).forEach(([exId, reps])=>{
-        if(EXERCISE_LIBRARY[exId]) updatePromotionTracking(exId, checkHit(exId, reps));
-      });
+      applyAnchorProgressionV2(next, entry);
     }
 
     // Advance rotation only when the session actually ran to the end.
@@ -1225,25 +1304,13 @@ function renderHome(){
     return;
   }
 
-  // Promotions
-  let promoHtml = '';
-  getAllSessionExercises().forEach(exId=>{
-    if(isReadyToPromote(exId)){
-      const ex = EXERCISE_LIBRARY[exId]; const i = getCurrentVariation(exId);
-      promoHtml += `
-        <div class="promo-card">
-          <h3>&#9650; Ready to progress</h3>
-          <p>${ex.name}: ${ex.ladder[i]} &#8594; ${ex.ladder[i+1]}</p>
-          <div class="promo-actions">
-            <button class="btn btn-small btn-primary" onclick="handlePromote('${exId}')">Advance</button>
-            <button class="btn btn-small btn-secondary" onclick="dismissPromo('${exId}')">Not yet</button>
-          </div>
-        </div>`;
-    }
-  });
+  // Anchor scoreboard (minimal readout; Chunk 3 adds the closing-in meter + richer verdict).
+  // Shows the two heavy ring anchors' last result + today's beat-this target, read from
+  // anchorProgress (the v2 engine's output). No manual promote prompts in v2.
+  const anchorHtml = renderAnchorScoreboard(s);
 
   document.getElementById('home-content').innerHTML = `
-    ${promoHtml}
+    ${anchorHtml}
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <div style="display:flex;align-items:center;gap:6px;">
@@ -1284,8 +1351,30 @@ function renderSessionPreview(type){
 }
 
 function getAllSessionExercises(){ const all = new Set(); Object.values(SESSION_TEMPLATES).forEach(t=>t.blocks.forEach(b=>b.exercises.forEach(e=>all.add(e)))); return [...all]; }
-function handlePromote(exId){ promoteExercise(exId); syncToSheet(); renderHome(); }
-function dismissPromo(exId){ const s = getState(); s.promotions[exId] = { consecutiveHits:0 }; saveState(s); renderHome(); }
+// Minimal anchor scoreboard for Home: per heavy anchor, last total + today's target +
+// short verdict. Reads anchorProgress only. Chunk 3 will add the closing-in meter.
+function renderAnchorScoreboard(s){
+  const ap = s.anchorProgress || {};
+  let html = '';
+  Object.keys(HEAVY_ANCHOR_SLOTS).forEach(slotId=>{
+    const meta = HEAVY_ANCHOR_SLOTS[slotId];
+    const prog = ap[slotId];
+    if(!prog || (prog.lastRawQualityReps == null && prog.creditedQualityReps == null)) return; // nothing logged yet
+    const ex = EXERCISE_LIBRARY[meta.exId];
+    const top = ex.sets * ex.repRange[1];
+    const loadStr = prog.externalLoad ? ` +${prog.externalLoad}${prog.loadUnit||'lb'}` : '';
+    const base = (typeof prog.creditedQualityReps === 'number') ? prog.creditedQualityReps
+               : (typeof prog.previousCreditedQualityReps === 'number' ? prog.previousCreditedQualityReps : prog.lastRawQualityReps);
+    const target = (prog.creditedQualityReps === null) ? 'establish baseline' : `beat ${base} / ${top}`;
+    const verdict = anchorVerdict(prog);
+    html += `
+      <div class="promo-card">
+        <h3>${meta.label}${loadStr}</h3>
+        <p>Last: <strong style="color:var(--text);">${prog.lastRawQualityReps==null?'\u2014':prog.lastRawQualityReps} total</strong> &middot; Today: ${target}${verdict?`<br><span style="color:var(--text3);">${verdict}</span>`:''}</p>
+      </div>`;
+  });
+  return html;
+}
 function discardActiveSession(){
   showModal('Discard session?', 'The in-progress session will be deleted. Completed history is not affected.', [
     { text:'Keep', cls:'btn-secondary', action:()=>hideModal() },
@@ -1324,6 +1413,7 @@ function formatDate(ds){ const d = new Date(ds+'T12:00:00'); return `${['Sun','M
 // REFERENCE
 // ===================================================================
 function renderReference(){
+  const s = getState();
   const cats = [
     { label:'The Form (mobility kata)', form:true },
     { label:'Heavy Rings: Pull', ids:['ring-pullup','ring-row','ring-pushup','ring-support'] },
@@ -1343,9 +1433,11 @@ function renderReference(){
     cat.ids.forEach(exId=>{
       const ex = EXERCISE_LIBRARY[exId]; if(!ex) return; const i = getCurrentVariation(exId);
       const ladder = ex.ladder.map((v,idx)=>{ if(idx===i) return `<span class="ref-current">${v}</span>`; if(idx<i) return `<span style="text-decoration:line-through;color:var(--text3);">${v}</span>`; return `<span style="color:var(--text3);">${v}</span>`; }).join(' &#8594; ');
-      const promo = getPromotionState(exId);
-      const hit = promo.consecutiveHits>0 ? ` &middot; <span style="color:var(--accent);">${promo.consecutiveHits}/2 HITs</span>` : '';
-      html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>${hit}</div></div><div class="ref-ladder">${ladder}</div></div>`;
+      // Anchor slots show their v2 scoreboard total; others just show the ladder (reference only).
+      const apEntry = (exId==='ring-pullup' && s.anchorProgress) ? s.anchorProgress['RP_anchor_ring-pullup']
+                    : (exId==='ring-pushup' && s.anchorProgress) ? s.anchorProgress['RPush_anchor_ring-pushup'] : null;
+      const anchorTag = (apEntry && apEntry.lastRawQualityReps!=null) ? ` &middot; <span style="color:var(--accent);">${apEntry.lastRawQualityReps} total${apEntry.externalLoad?` +${apEntry.externalLoad}${apEntry.loadUnit||'lb'}`:''}</span>` : '';
+      html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>${anchorTag}</div></div><div class="ref-ladder">${ladder}</div></div>`;
     });
   });
   document.getElementById('reference-content').innerHTML = html;
