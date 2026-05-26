@@ -1094,57 +1094,91 @@ function finalizeSession(statusReason){
   const noteEl = document.getElementById('session-note');
   if(noteEl) AS.sessionNote = noteEl.value.trim();
 
-  const flow = currentFlow();
-  const s = getState();
-  const today = new Date().toISOString().split('T')[0];
+  // TRANSACTIONAL FINALIZE (Chunk 2, commit 2):
+  // Build the entire next state in memory, validate it, then save ONCE and render.
+  // On any throw, we neither save nor advance rotation — the in-progress session is
+  // left intact so the user can retry, rather than half-committing.
+  try {
+    const flow = currentFlow();
+    const today = new Date().toISOString().split('T')[0];
 
-  const exercises = {}; const skipped = []; const exerciseMeta = {};
-  let anyDone = false, anySkipped = false;
-  flow.forEach(st=>{
-    if(st.kind !== 'exercise') return;
-    const rec = AS.records[st.uid];
-    const doneSets = rec.setStatus.map((status,i)=> status==='done' ? rec.sets[i] : null).filter(v=>v!==null);
-    const wasSkippedWhole = rec.setStatus.every(x=>x==='skipped') || (rec.status==='skipped' && doneSets.length===0);
-    if(wasSkippedWhole || doneSets.length===0){ skipped.push(st.exId); anySkipped = true; }
-    else {
-      exercises[st.exId] = rec.sets.map((v,i)=> rec.setStatus[i]==='done' ? v : 0);
-      anyDone = true;
-      if(rec.setStatus.some(x=>x==='skipped')) anySkipped = true;
-    }
-    // reserved fields preserved (hidden)
-    exerciseMeta[st.exId] = { setStatus:rec.setStatus, issueFlag:rec.issueFlag, note:rec.note||'', quality:rec.quality, painFree:rec.painFree };
-  });
-
-  let sessionStatus;
-  if(statusReason === 'stopped') sessionStatus = 'stopped';
-  else sessionStatus = anySkipped ? 'partial' : 'completed';
-
-  const entry = {
-    date: today, sessionType: AS.type,
-    exercises, skipped: skipped.length ? skipped : undefined,
-    sessionStatus, exerciseMeta,
-    issues: AS.issues.length ? AS.issues : undefined,
-    notes: AS.sessionNote || undefined,
-    duration: Math.round((Date.now() - AS.startTime)/60000)
-  };
-  s.log.push(entry);
-
-  // Promotion tracking only for genuinely completed exercises (not skipped, not on a stopped session).
-  if(statusReason !== 'stopped'){
-    Object.entries(exercises).forEach(([exId, reps])=>{
-      if(EXERCISE_LIBRARY[exId]) updatePromotionTracking(exId, checkHit(exId, reps));
+    // Build the slot-aware performed/skipped records from flow metadata (added in commit 1).
+    // performed[] preserves slotId + exId + role + progressionType + reps for each exercise
+    // (the durable shape commit 3's scoring engine reads). exercises{exId:[reps]} and
+    // skipped[] are kept in parallel for backward-compatible reads (history/sync/renderers).
+    const exercises = {}; const skipped = []; const exerciseMeta = {}; const performed = [];
+    let anyDone = false, anySkipped = false;
+    flow.forEach(st=>{
+      if(st.kind !== 'exercise') return;
+      const rec = AS.records[st.uid];
+      const role = (st.progressionType === 'heavyAnchor') ? 'anchor' : (st.blockType || 'builder');
+      const doneSets = rec.setStatus.map((status,i)=> status==='done' ? rec.sets[i] : null).filter(v=>v!==null);
+      const wasSkippedWhole = rec.setStatus.every(x=>x==='skipped') || (rec.status==='skipped' && doneSets.length===0);
+      const reps = rec.sets.map((v,i)=> rec.setStatus[i]==='done' ? v : 0);
+      if(wasSkippedWhole || doneSets.length===0){
+        skipped.push(st.exId); anySkipped = true;
+        performed.push({ slotId: st.slotId, exId: st.exId, role, progressionType: st.progressionType || 'loose', reps, skipped: true });
+      } else {
+        exercises[st.exId] = reps;
+        anyDone = true;
+        if(rec.setStatus.some(x=>x==='skipped')) anySkipped = true;
+        performed.push({ slotId: st.slotId, exId: st.exId, role, progressionType: st.progressionType || 'loose', reps });
+      }
+      // reserved fields preserved (hidden)
+      exerciseMeta[st.exId] = { setStatus:rec.setStatus, issueFlag:rec.issueFlag, note:rec.note||'', quality:rec.quality, painFree:rec.painFree };
     });
+
+    let sessionStatus;
+    if(statusReason === 'stopped') sessionStatus = 'stopped';
+    else sessionStatus = anySkipped ? 'partial' : 'completed';
+
+    const entry = {
+      date: today, sessionType: AS.type, logSchemaVersion: 2,
+      exercises, skipped: skipped.length ? skipped : undefined,
+      performed,
+      sessionStatus, exerciseMeta,
+      issues: AS.issues.length ? AS.issues : undefined,
+      notes: AS.sessionNote || undefined,
+      duration: Math.round((Date.now() - AS.startTime)/60000)
+    };
+
+    // Build next state in memory (do not mutate live state until validated).
+    const next = getState();
+    next.log.push(entry);
+
+    // Promotion tracking only for genuinely completed exercises (not skipped, not on a stopped
+    // session). UNCHANGED behavior — still the old HIT engine off the still-top-level fields.
+    // (Commit 3 replaces this block with the total-quality-reps engine.)
+    if(statusReason !== 'stopped'){
+      Object.entries(exercises).forEach(([exId, reps])=>{
+        if(EXERCISE_LIBRARY[exId]) updatePromotionTracking(exId, checkHit(exId, reps));
+      });
+    }
+
+    // Advance rotation only when the session actually ran to the end.
+    if(statusReason === 'completed') next.rotationIndex = (next.rotationIndex + 1) % ROTATION.length;
+
+    next.activeSession = null;
+
+    // Validate before committing: log grew by exactly one, rotation index in range,
+    // active session cleared. If anything is off, throw — nothing is saved, rotation
+    // does not advance, the in-progress session stays put.
+    if(!Array.isArray(next.log) || next.log.length < 1) throw new Error('finalize: log invalid');
+    if(typeof next.rotationIndex !== 'number' || next.rotationIndex < 0 || next.rotationIndex >= ROTATION.length) throw new Error('finalize: rotationIndex out of range');
+    if(next.activeSession !== null) throw new Error('finalize: activeSession not cleared');
+
+    saveState(next);   // single write
+    AS = null;
+    if(statusReason === 'completed') cueSessionDone();
+    syncToSheet();
+    showScreen('home');
+  } catch(err){
+    // Do NOT save, do NOT advance rotation, do NOT null AS — leave the session resumable.
+    console.error('finalizeSession aborted; no state saved', err);
+    showModal('Could not finish session', 'Something went wrong saving this session, so nothing was changed. Your in-progress session is still here \u2014 try finishing again.', [
+      { text:'OK', cls:'btn-secondary', action:()=>hideModal() }
+    ]);
   }
-
-  // Advance rotation only when the session actually ran to the end.
-  if(statusReason === 'completed') s.rotationIndex = (s.rotationIndex + 1) % ROTATION.length;
-
-  s.activeSession = null;
-  saveState(s);
-  AS = null;
-  if(statusReason === 'completed') cueSessionDone();
-  syncToSheet();
-  showScreen('home');
 }
 
 // ===================================================================
