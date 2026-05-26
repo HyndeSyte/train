@@ -147,7 +147,7 @@ html, body {
 .note-field:focus { border-color:var(--accent); outline:none; }
 
 .exercise-note { font-size:12px; color:var(--text3); font-style:italic; margin-top:10px; line-height:1.4; }
-.demo-link { color:var(--text3); font-size:13px; text-decoration:none; padding:4px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; display:inline-block; margin-top:10px; }
+.ref-btn { color:var(--text3); font-size:13px; text-decoration:none; padding:4px 10px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; display:inline-block; margin-top:10px; }
 
 /* History */
 .history-item { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:8px; cursor:pointer; }
@@ -300,29 +300,29 @@ const SCHEMA_VERSION = 5;
 // EXERCISE LIBRARY
 // ===================================================================
 const EXERCISE_LIBRARY = {
-  'ring-row': { name:'Ring Row', grip:'high', ladder:['Inverted Row (feet down)','Ring Row (feet elevated)','Archer Ring Row','Front Lever Tuck Row'], repRange:[5,8], sets:3, unit:'reps', note:'Full range, slow eccentric. Control the bottom. Heel of palm over the ring, not the fingers.' },
-  'ring-pushup': { name:'Ring Push-Up', grip:'high', ladder:['Ring Push-Up','Ring Push-Up (feet elevated)','Ring Archer Push-Up','Ring Dip (partial)'], repRange:[5,8], sets:4, unit:'reps', note:'Turn the rings out at the top. Elbows at 45 degrees.' },
-  'ring-support': { name:'Ring Support Hold', grip:'high', ladder:['Ring Support Hold','Ring Support (turned out)','Ring L-Sit Support','Ring Support + Slow Turn'], repRange:[15,30], sets:3, unit:'sec', note:'Locked arms, rings turned out. Breathe.' },
-  'ring-curl': { name:'Ring Bicep Curl', grip:'high', ladder:['Ring Curl (steep angle)','Ring Curl (moderate)','Ring Curl (low angle)','Ring Curl (feet elevated)'], repRange:[8,12], sets:2, unit:'reps', note:'Slow eccentric, strict body line.' },
-  'ring-pullup': { name:'Ring Pull-Up', grip:'high', ladder:['Ring Negative Pull-Up (5s)','Ring Pull-Up (band assist)','Ring Pull-Up','Ring L-Sit Pull-Up'], repRange:[3,6], sets:4, unit:'reps', note:'Let the wrists rotate naturally. Dead hang to chest, slow negative.' },
+  'ring-row': { name:'Ring Row', grip:'high', ladder:['Inverted Row (feet down)','Ring Row (feet elevated)','Archer Ring Row','Front Lever Tuck Row'], repRange:[5,8], sets:3, unit:'reps', reference:{ status:'text', cue:'Full range, slow eccentric. Control the bottom. Heel of palm over the ring, not the fingers.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'ring-pushup': { name:'Ring Push-Up', grip:'high', ladder:['Ring Push-Up','Ring Push-Up (feet elevated)','Ring Archer Push-Up','Ring Dip (partial)'], repRange:[5,8], sets:4, unit:'reps', reference:{ status:'text', cue:'Turn the rings out at the top. Elbows at 45 degrees.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'ring-support': { name:'Ring Support Hold', grip:'high', ladder:['Ring Support Hold','Ring Support (turned out)','Ring L-Sit Support','Ring Support + Slow Turn'], repRange:[15,30], sets:3, unit:'sec', reference:{ status:'text', cue:'Locked arms, rings turned out. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'ring-curl': { name:'Ring Bicep Curl', grip:'high', ladder:['Ring Curl (steep angle)','Ring Curl (moderate)','Ring Curl (low angle)','Ring Curl (feet elevated)'], repRange:[8,12], sets:2, unit:'reps', reference:{ status:'text', cue:'Slow eccentric, strict body line.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'ring-pullup': { name:'Ring Pull-Up', grip:'high', ladder:['Ring Negative Pull-Up (5s)','Ring Pull-Up (band assist)','Ring Pull-Up','Ring L-Sit Pull-Up'], repRange:[3,6], sets:4, unit:'reps', reference:{ status:'text', cue:'Let the wrists rotate naturally. Dead hang to chest, slow negative.', mediaUrl:null, mediaType:null, sourceLabel:null } },
 
-  'para-pushup': { name:'Parallette Push-Up', grip:'low', ladder:['Parallette Push-Up','Parallette Deficit Push-Up','Parallette Archer Push-Up','Parallette Planche Lean Push-Up'], repRange:[6,10], sets:3, unit:'reps', note:'Neutral grip. Full depth past the handles.' },
-  'db-press': { name:'DB Floor Press', grip:'low', ladder:['DB Floor Press','DB Floor Press (slow ecc)','DB Floor Press (pause)','DB Single-Arm Floor Press'], repRange:[8,12], sets:3, unit:'reps', note:'25lb DBs. Control the bottom, pause at the chest.' },
-  'ring-face-pull': { name:'Ring Face Pull', grip:'low', ladder:['Ring Y-Raise','Ring Face Pull','Ring Face Pull (feet up)','Ring Face Pull + Hold'], repRange:[8,12], sets:3, unit:'reps', note:'Light angle. Strict form, squeeze the rear delts.' },
-  'ab-wheel': { name:'Ab Wheel Rollout', grip:'low', ladder:['Kneeling Partial Rollout','Kneeling Full Rollout','Kneeling Rollout + Pause','Standing Partial Rollout'], repRange:[5,10], sets:3, unit:'reps', note:'Hollow body throughout. Do not let the lower back collapse.' },
-  'pike-pushup': { name:'Pike Push-Up', grip:'low', ladder:['Pike Push-Up','Pike Push-Up (elevated feet)','Parallette Pike Push-Up (deficit)','Wall HSPU Negative (5s)'], repRange:[5,8], sets:3, unit:'reps', note:'Overhead pressing pattern. Head passes between the hands.' },
+  'para-pushup': { name:'Parallette Push-Up', grip:'low', ladder:['Parallette Push-Up','Parallette Deficit Push-Up','Parallette Archer Push-Up','Parallette Planche Lean Push-Up'], repRange:[6,10], sets:3, unit:'reps', reference:{ status:'text', cue:'Neutral grip. Full depth past the handles.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'db-press': { name:'DB Floor Press', grip:'low', ladder:['DB Floor Press','DB Floor Press (slow ecc)','DB Floor Press (pause)','DB Single-Arm Floor Press'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'25lb DBs. Control the bottom, pause at the chest.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'ring-face-pull': { name:'Ring Face Pull', grip:'low', ladder:['Ring Y-Raise','Ring Face Pull','Ring Face Pull (feet up)','Ring Face Pull + Hold'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Light angle. Strict form, squeeze the rear delts.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'ab-wheel': { name:'Ab Wheel Rollout', grip:'low', ladder:['Kneeling Partial Rollout','Kneeling Full Rollout','Kneeling Rollout + Pause','Standing Partial Rollout'], repRange:[5,10], sets:3, unit:'reps', reference:{ status:'text', cue:'Hollow body throughout. Do not let the lower back collapse.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'pike-pushup': { name:'Pike Push-Up', grip:'low', ladder:['Pike Push-Up','Pike Push-Up (elevated feet)','Parallette Pike Push-Up (deficit)','Wall HSPU Negative (5s)'], repRange:[5,8], sets:3, unit:'reps', reference:{ status:'text', cue:'Overhead pressing pattern. Head passes between the hands.', mediaUrl:null, mediaType:null, sourceLabel:null } },
 
-  'jefferson-curl': { name:'Jefferson Curl', grip:'none', ladder:['BW Jefferson Curl','Light DB Jefferson Curl','DB Jefferson Curl (slow)','DB Jefferson Curl (deficit)'], repRange:[5,8], sets:3, unit:'reps', note:'Light. Vertebra by vertebra. Never rush.' },
-  'glute-bridge': { name:'Glute-Ham Bridge', grip:'none', ladder:['Glute Bridge','Glute Bridge (feet elevated)','Single-Leg Glute Bridge','Single-Leg Bridge (elevated)'], repRange:[8,12], sets:3, unit:'reps', note:'Drive through the heels. Squeeze at the top.' },
-  'single-leg-rdl': { name:'Single-Leg RDL', grip:'none', ladder:['BW Single-Leg RDL','DB Single-Leg RDL','DB SL RDL (slow ecc)','DB SL RDL (deficit)'], repRange:[6,10], sets:3, unit:'reps/side', note:'Hinge at the hip, not the back. Light touch on a wall for balance if needed.' },
-  'jump-rope': { name:'Jump Rope', grip:'none', ladder:['Jump Rope 20s on/off','Jump Rope 30s on/off','Jump Rope 40s on/off','Jump Rope 30s on/15s off'], repRange:[4,6], sets:1, unit:'rounds', note:'Stay light on the feet. Sub hill sprints outdoors.' },
-  'hanging-knee-raise': { name:'Hanging Knee Raise', grip:'low', ladder:['Hanging Tuck Knee Raise','Hanging Knee Raise','Hanging Knee Raise (slow)','Hanging Leg Raise'], repRange:[6,12], sets:3, unit:'reps', note:'From a ring hang. Controlled negative, no swinging. Decompresses the spine after hinge work.' },
+  'jefferson-curl': { name:'Jefferson Curl', grip:'none', ladder:['BW Jefferson Curl','Light DB Jefferson Curl','DB Jefferson Curl (slow)','DB Jefferson Curl (deficit)'], repRange:[5,8], sets:3, unit:'reps', reference:{ status:'text', cue:'Light. Vertebra by vertebra. Never rush.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'glute-bridge': { name:'Glute-Ham Bridge', grip:'none', ladder:['Glute Bridge','Glute Bridge (feet elevated)','Single-Leg Glute Bridge','Single-Leg Bridge (elevated)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Drive through the heels. Squeeze at the top.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'single-leg-rdl': { name:'Single-Leg RDL', grip:'none', ladder:['BW Single-Leg RDL','DB Single-Leg RDL','DB SL RDL (slow ecc)','DB SL RDL (deficit)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Hinge at the hip, not the back. Light touch on a wall for balance if needed.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'jump-rope': { name:'Jump Rope', grip:'none', ladder:['Jump Rope 20s on/off','Jump Rope 30s on/off','Jump Rope 40s on/off','Jump Rope 30s on/15s off'], repRange:[4,6], sets:1, unit:'rounds', reference:{ status:'text', cue:'Stay light on the feet. Sub hill sprints outdoors.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'hanging-knee-raise': { name:'Hanging Knee Raise', grip:'low', ladder:['Hanging Tuck Knee Raise','Hanging Knee Raise','Hanging Knee Raise (slow)','Hanging Leg Raise'], repRange:[6,12], sets:3, unit:'reps', reference:{ status:'text', cue:'From a ring hang. Controlled negative, no swinging. Decompresses the spine after hinge work.', mediaUrl:null, mediaType:null, sourceLabel:null } },
 
-  'split-squat': { name:'Bulgarian Split Squat', grip:'none', ladder:['BW Split Squat','Bulgarian Split Squat','DB Bulgarian Split Squat','DB BSS (pause at bottom)'], repRange:[6,10], sets:3, unit:'reps/side', note:'Rear foot on a bench or box. Upright torso.' },
-  'step-lunge': { name:'Step-Through Lunge', grip:'none', ladder:['Reverse Lunge','Step-Through Lunge','Step-Through + Balance Hold','Step-Through + Hop'], repRange:[6,10], sets:3, unit:'reps/side', note:'Balance pause at the top of each rep.' },
-  'cossack-squat': { name:'Cossack Squat', grip:'none', ladder:['Supported Cossack Squat','Cossack Squat','Cossack Squat (slow tempo)','Weighted Cossack Squat'], repRange:[5,8], sets:3, unit:'reps/side', note:'Lateral plane. Heel stays planted. Go only as deep as you can control.' },
-  'calf-raise': { name:'Calf Raises', grip:'none', ladder:['Bilateral Calf Raise','Slow Bilateral (3s up/3s down)','Single-Leg Calf Raise','Single-Leg Slow Calf Raise'], repRange:[12,20], sets:2, unit:'reps', note:'Full ROM. Pause at the top and bottom.' },
-  'hollow-body': { name:'Hollow Body Hold', grip:'none', ladder:['Tuck Hollow Hold','Single-Leg Hollow Hold','Hollow Body Hold','Hollow Body Rock'], repRange:[20,40], sets:3, unit:'sec', note:'Lower back glued to the floor. Breathe.' }
+  'split-squat': { name:'Bulgarian Split Squat', grip:'none', ladder:['BW Split Squat','Bulgarian Split Squat','DB Bulgarian Split Squat','DB BSS (pause at bottom)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Rear foot on a bench or box. Upright torso.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'step-lunge': { name:'Step-Through Lunge', grip:'none', ladder:['Reverse Lunge','Step-Through Lunge','Step-Through + Balance Hold','Step-Through + Hop'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Balance pause at the top of each rep.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'cossack-squat': { name:'Cossack Squat', grip:'none', ladder:['Supported Cossack Squat','Cossack Squat','Cossack Squat (slow tempo)','Weighted Cossack Squat'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Lateral plane. Heel stays planted. Go only as deep as you can control.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'calf-raise': { name:'Calf Raises', grip:'none', ladder:['Bilateral Calf Raise','Slow Bilateral (3s up/3s down)','Single-Leg Calf Raise','Single-Leg Slow Calf Raise'], repRange:[12,20], sets:2, unit:'reps', reference:{ status:'text', cue:'Full ROM. Pause at the top and bottom.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'hollow-body': { name:'Hollow Body Hold', grip:'none', ladder:['Tuck Hollow Hold','Single-Leg Hollow Hold','Hollow Body Hold','Hollow Body Rock'], repRange:[20,40], sets:3, unit:'sec', reference:{ status:'text', cue:'Lower back glued to the floor. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } }
 };
 
 // ===================================================================
@@ -929,7 +929,7 @@ function renderExerciseStation(st){
     body.innerHTML = head + `
       <div class="timer-phase">${paused ? 'Paused' : 'Hold'}</div>
       <div class="timer-big work" id="timer-display">${paused ? fmtRemaining() : '--'}</div>
-      <div class="exercise-note">${ex.note}</div>`;
+      <div class="exercise-note">${refCue(ex)}</div>`;
     foot.innerHTML = `
       <button class="btn btn-primary" onclick="${paused ? 'resumeTimer()' : 'pauseTimer()'}">${paused ? 'Resume' : 'Pause'}</button>
       <div class="flow-actions-row">
@@ -946,8 +946,8 @@ function renderExerciseStation(st){
     // duration set ready
     body.innerHTML = head + `
       <div class="target-pill">Hold for ${top} ${ex.unit}</div>
-      <div class="exercise-note">${ex.note}</div>
-      <button class="demo-link" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
+      <div class="exercise-note">${refCue(ex)}</div>
+      <button class="ref-btn" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
     foot.innerHTML = `
       <button class="btn btn-primary" onclick="startDurationSet()">Start hold</button>
       <div class="flow-actions-row">
@@ -961,8 +961,8 @@ function renderExerciseStation(st){
     body.innerHTML = head + `
       <div class="target-pill">Target ${ex.repRange[0]}\u2013${ex.repRange[1]} ${ex.unit}</div>
       <input class="rep-input-big" id="rep-input" type="number" inputmode="numeric" pattern="[0-9]*" value="${cur}" placeholder="0" onfocus="this.select()">
-      <div class="exercise-note">${ex.note}</div>
-      <button class="demo-link" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
+      <div class="exercise-note">${refCue(ex)}</div>
+      <button class="ref-btn" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
     foot.innerHTML = `
       <button class="btn btn-primary" onclick="logRepSet()">Log set</button>
       <div class="flow-actions-row">
@@ -1119,13 +1119,29 @@ function skipExercise(){
   renderStation();
 }
 
-// Non-blocking reference: shows the Tier-3 text cue in a modal. No external
-// navigation, no session-state or timer change. Media arrives in the curation pass.
+// The exercise's text cue, read from the reference schema (note field retired in the
+// curation pass). Empty string if somehow absent \u2014 callers supply their own fallback.
+function refCue(ex){ return (ex && ex.reference && ex.reference.cue) || ''; }
+
+// Non-blocking reference modal with deterministic per-status degradation (curation pass).
+// status describes readiness only: text (complete, cue only) | pending (cue + "media not
+// added yet", no dead button) | ready (cue + user-initiated "Open reference", no autoplay
+// or mid-session embed) | unavailable (render like text). Media opens in a new tab on tap.
 function showRef(exId){
   const ex = EXERCISE_LIBRARY[exId]; if(!ex) return;
-  showModal(getVariationName(exId), ex.note || 'Text cue coming soon.', [
-    { text:'Close', cls:'btn-secondary', action:()=>hideModal() }
-  ]);
+  const ref = ex.reference || {};
+  const status = ref.status || 'text';
+  const cue = refCue(ex) || 'Text cue coming soon.';
+  const title = getVariationName(exId);
+  const buttons = [{ text:'Close', cls:'btn-secondary', action:()=>hideModal() }];
+  let body = cue;
+  if(status === 'pending'){
+    body = cue + '\n\nReference media not added yet.';
+  } else if(status === 'ready' && ref.mediaUrl){
+    buttons.unshift({ text:'Open reference', cls:'btn-primary', action:()=>{ hideModal(); try{ window.open(ref.mediaUrl, '_blank', 'noopener'); }catch(e){} } });
+  }
+  // 'text' and 'unavailable' both render as cue + Close (a complete state, no "coming soon").
+  showModal(title, body, buttons);
 }
 
 function noteIssue(){
