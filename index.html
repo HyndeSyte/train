@@ -351,29 +351,36 @@ const FORM = {
 // SESSION TEMPLATES (working blocks; the Form replaces the old mobility primer)
 // ===================================================================
 const SESSION_TEMPLATES = {
-  U1: { name:'Ring Upper', fullName:'U1 \u2014 Ring-Dominant Upper', grip:'high', blocks:[
-    { type:'anchor', label:'Anchor', exercises:['ring-row'] },
-    { type:'builder', label:'Builders', exercises:['ring-pullup','ring-pushup'] },
-    { type:'finisher', label:'Finisher', exercises:['ring-support','ring-curl'] }
+  RP: { name:'Heavy Rings: Pull', fullName:'Heavy Rings A \u2014 Pull', grip:'high', blocks:[
+    { type:'anchor', label:'Pull Anchor', exercises:['ring-pullup'] },
+    { type:'builder', label:'Builders', exercises:['ring-row','ring-pushup'] },
+    { type:'finisher', label:'Finisher', exercises:['ring-support'] }
   ]},
-  U2: { name:'Parallette/DB Upper', fullName:'U2 \u2014 Parallette & DB Upper', grip:'low', blocks:[
-    { type:'anchor', label:'Anchor', exercises:['para-pushup'] },
-    { type:'builder', label:'Builders', exercises:['pike-pushup','db-press'] },
-    { type:'finisher', label:'Finisher', exercises:['ring-face-pull','ab-wheel'] }
-  ]},
-  L1: { name:'Hinge Lower', fullName:'L1 \u2014 Hinge-Primary Lower', grip:'low', blocks:[
-    { type:'anchor', label:'Anchor', exercises:['jefferson-curl'] },
-    { type:'builder', label:'Builders', exercises:['single-leg-rdl','glute-bridge'] },
-    { type:'finisher', label:'Finisher', exercises:['jump-rope','hanging-knee-raise'] }
-  ]},
-  L2: { name:'Squat Lower', fullName:'L2 \u2014 Squat-Primary Lower', grip:'none', blocks:[
+  LP: { name:'Lower: Posterior', fullName:'Lower \u2014 Posterior + Unilateral', grip:'low', blocks:[
+    { type:'finisher', label:'Ring Opener', exercises:['ring-support'] },
     { type:'anchor', label:'Anchor', exercises:['split-squat'] },
-    { type:'builder', label:'Builders', exercises:['step-lunge','cossack-squat'] },
-    { type:'finisher', label:'Finisher', exercises:['calf-raise','hollow-body'] }
+    { type:'builder', label:'Builders', exercises:['single-leg-rdl','jump-rope'] },
+    { type:'finisher', label:'Finisher', exercises:['ab-wheel'] }
+  ]},
+  RPush: { name:'Heavy Rings: Push', fullName:'Heavy Rings B \u2014 Push', grip:'high', blocks:[
+    { type:'anchor', label:'Push Anchor', exercises:['ring-pushup'] },
+    { type:'builder', label:'Builders', exercises:['pike-pushup','ring-pullup'] },
+    { type:'finisher', label:'Finisher', exercises:['hollow-body'] }
+  ]},
+  LS: { name:'Lower: Squat + Cond', fullName:'Lower \u2014 Squat + Conditioning', grip:'low', blocks:[
+    { type:'finisher', label:'Ring Opener', exercises:['ring-support'] },
+    { type:'anchor', label:'Anchor', exercises:['cossack-squat'] },
+    { type:'builder', label:'Builders', exercises:['step-lunge','calf-raise'] },
+    { type:'finisher', label:'Conditioning', exercises:['jump-rope'] }
+  ]},
+  RPr: { name:'Ring Practice + WB', fullName:'Ring Practice + Whole-body', grip:'low', blocks:[
+    { type:'builder', label:'Ring Practice', exercises:['ring-row','ring-face-pull'] },
+    { type:'builder', label:'Whole-body', exercises:['db-press','para-pushup'] },
+    { type:'finisher', label:'Core', exercises:['hanging-knee-raise'] }
   ]}
 };
 
-const ROTATION = ['U1','L1','U2','L2'];
+const ROTATION = ['RP','LP','RPush','LS','RPr'];
 const REST_TIMES = { form:0, anchor:150, builder:75, finisher:45 };
 const FORM_REST = 0; // Form screens are advance-only, no rest timer
 
@@ -396,6 +403,11 @@ function migrate(state){
   if(!state.exerciseVariations) state.exerciseVariations = {};
   if(!state.log) state.log = [];
   if(!('activeSession' in state)) state.activeSession = null;
+  // v4 ring-spine rotation: drop any in-progress session keyed to a retired session type
+  // (old U1/L1/U2/L2). Its templates no longer exist, so resuming would throw. History is untouched.
+  if(state.activeSession && !SESSION_TEMPLATES[state.activeSession.type]) state.activeSession = null;
+  // clamp a stale rotationIndex into the new rotation length
+  if(typeof state.rotationIndex === 'number') state.rotationIndex = ((state.rotationIndex % ROTATION.length) + ROTATION.length) % ROTATION.length;
   return state;
 }
 
@@ -1098,7 +1110,7 @@ function finalizeSession(statusReason){
   }
 
   // Advance rotation only when the session actually ran to the end.
-  if(statusReason === 'completed') s.rotationIndex = (s.rotationIndex + 1) % 4;
+  if(statusReason === 'completed') s.rotationIndex = (s.rotationIndex + 1) % ROTATION.length;
 
   s.activeSession = null;
   saveState(s);
@@ -1131,7 +1143,7 @@ function showScreen(name){
 // ===================================================================
 function renderHome(){
   const s = getState();
-  const nextType = ROTATION[s.rotationIndex % 4];
+  const nextType = ROTATION[s.rotationIndex % ROTATION.length];
   const t = SESSION_TEMPLATES[nextType];
   const est = estimateDuration(nextType);
   const gc = t.grip==='high'?'var(--grip-high)':t.grip==='low'?'var(--grip-low)':'var(--grip-none)';
@@ -1253,12 +1265,15 @@ function formatDate(ds){ const d = new Date(ds+'T12:00:00'); return `${['Sun','M
 function renderReference(){
   const cats = [
     { label:'The Form (mobility kata)', form:true },
-    { label:'U1 \u2014 Ring Upper', ids:['ring-row','ring-pullup','ring-pushup','ring-support','ring-curl'] },
-    { label:'U2 \u2014 Parallette/DB', ids:['para-pushup','pike-pushup','db-press','ring-face-pull','ab-wheel'] },
-    { label:'L1 \u2014 Hinge Lower', ids:['jefferson-curl','single-leg-rdl','glute-bridge','jump-rope','hanging-knee-raise'] },
-    { label:'L2 \u2014 Squat Lower', ids:['split-squat','step-lunge','cossack-squat','calf-raise','hollow-body'] }
+    { label:'Heavy Rings: Pull', ids:['ring-pullup','ring-row','ring-pushup','ring-support'] },
+    { label:'Heavy Rings: Push', ids:['ring-pushup','pike-pushup','ring-pullup','hollow-body'] },
+    { label:'Lower: Posterior + Unilateral', ids:['split-squat','single-leg-rdl','jump-rope','ab-wheel'] },
+    { label:'Lower: Squat + Conditioning', ids:['cossack-squat','step-lunge','calf-raise'] },
+    { label:'Ring Practice + Whole-body', ids:['ring-face-pull','db-press','para-pushup','hanging-knee-raise'] },
+    { label:'Other / Bench', ids:['ring-curl','glute-bridge','jefferson-curl'] }
   ];
   let html = '';
+  const seen = {};
   cats.forEach(cat=>{
     html += `<div class="block-label">${cat.label}</div>`;
     if(cat.form){
@@ -1266,12 +1281,11 @@ function renderReference(){
       return;
     }
     cat.ids.forEach(exId=>{
-      const ex = EXERCISE_LIBRARY[exId]; const i = getCurrentVariation(exId);
+      const ex = EXERCISE_LIBRARY[exId]; if(!ex) return; const i = getCurrentVariation(exId);
       const ladder = ex.ladder.map((v,idx)=>{ if(idx===i) return `<span class="ref-current">${v}</span>`; if(idx<i) return `<span style="text-decoration:line-through;color:var(--text3);">${v}</span>`; return `<span style="color:var(--text3);">${v}</span>`; }).join(' &#8594; ');
       const promo = getPromotionState(exId);
       const hit = promo.consecutiveHits>0 ? ` &middot; <span style="color:var(--accent);">${promo.consecutiveHits}/2 HITs</span>` : '';
-      const demo = '';
-      html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>${hit}</div>${demo}</div><div class="ref-ladder">${ladder}</div></div>`;
+      html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span>${hit}</div></div><div class="ref-ladder">${ladder}</div></div>`;
     });
   });
   document.getElementById('reference-content').innerHTML = html;
@@ -1312,7 +1326,7 @@ function renderSettings(){
       </div>
       <div class="card" style="margin-top:8px;">
         <div class="setting-row"><div><div style="font-weight:600;">Import data</div><div style="font-size:12px;color:var(--text2);">Restore from a backup</div></div><button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button><input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"></div>
-        <div class="setting-row"><div><div style="font-weight:600;">Reset rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to U1</div></div><button class="btn btn-small btn-secondary" onclick="confirmResetRotation()">Reset</button></div>
+        <div class="setting-row"><div><div style="font-weight:600;">Reset rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to Heavy Rings: Pull</div></div><button class="btn btn-small btn-secondary" onclick="confirmResetRotation()">Reset</button></div>
         <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
       </div>
     </details>
@@ -1322,7 +1336,7 @@ function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
 function saveSyncUrl(){ setSyncUrl(document.getElementById('sync-url-input').value.trim()); renderSettings(); updateSyncIndicator(getSyncUrl()?'none':''); }
 function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
 function importData(ev){ const f = ev.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = e=>{ try { const data = JSON.parse(e.target.result); if(data.log && Array.isArray(data.log)){ showModal('Import data?', `Replace current data with ${data.log.length} sessions from the backup?`, [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Import',cls:'btn-primary',action:()=>{ saveState(migrate(data)); hideModal(); renderSettings(); showScreen('home'); }} ]); } else alert('Invalid backup file.'); } catch(err){ alert('Could not read file.'); } }; r.readAsText(f); }
-function confirmResetRotation(){ showModal('Reset rotation?', 'The next session returns to U1. Session history is not changed.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Reset',cls:'btn-danger',action:()=>{ hideModal(); resetRotation(); }} ]); }
+function confirmResetRotation(){ showModal('Reset rotation?', 'The next session returns to Heavy Rings: Pull. Session history is not changed.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Reset',cls:'btn-danger',action:()=>{ hideModal(); resetRotation(); }} ]); }
 function resetRotation(){ const s = getState(); s.rotationIndex = 0; saveState(s); renderSettings(); }
 function confirmErase(){ showModal('Erase all data?', 'Permanently deletes all sessions, promotions, and progression. Cannot be undone.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Erase everything',cls:'btn-danger',action:()=>{ localStorage.removeItem('train_state'); AS=null; hideModal(); showScreen('home'); }} ]); }
 
