@@ -282,17 +282,17 @@ html, body {
 // ===================================================================
 // SCHEMA VERSION
 // ===================================================================
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 // ===================================================================
 // EXERCISE LIBRARY
 // ===================================================================
 const EXERCISE_LIBRARY = {
   'ring-row': { name:'Ring Row', grip:'high', ladder:['Inverted Row (feet down)','Ring Row (feet elevated)','Archer Ring Row','Front Lever Tuck Row'], repRange:[5,8], sets:3, unit:'reps', note:'Full range, slow eccentric. Control the bottom. Heel of palm over the ring, not the fingers.' },
-  'ring-pushup': { name:'Ring Push-Up', grip:'high', ladder:['Ring Push-Up','Ring Push-Up (feet elevated)','Ring Archer Push-Up','Ring Dip (partial)'], repRange:[6,10], sets:3, unit:'reps', note:'Turn the rings out at the top. Elbows at 45 degrees.' },
+  'ring-pushup': { name:'Ring Push-Up', grip:'high', ladder:['Ring Push-Up','Ring Push-Up (feet elevated)','Ring Archer Push-Up','Ring Dip (partial)'], repRange:[5,8], sets:4, unit:'reps', note:'Turn the rings out at the top. Elbows at 45 degrees.' },
   'ring-support': { name:'Ring Support Hold', grip:'high', ladder:['Ring Support Hold','Ring Support (turned out)','Ring L-Sit Support','Ring Support + Slow Turn'], repRange:[15,30], sets:3, unit:'sec', note:'Locked arms, rings turned out. Breathe.' },
   'ring-curl': { name:'Ring Bicep Curl', grip:'high', ladder:['Ring Curl (steep angle)','Ring Curl (moderate)','Ring Curl (low angle)','Ring Curl (feet elevated)'], repRange:[8,12], sets:2, unit:'reps', note:'Slow eccentric, strict body line.' },
-  'ring-pullup': { name:'Ring Pull-Up', grip:'high', ladder:['Ring Negative Pull-Up (5s)','Ring Pull-Up (band assist)','Ring Pull-Up','Ring L-Sit Pull-Up'], repRange:[3,6], sets:3, unit:'reps', note:'Let the wrists rotate naturally. Dead hang to chest, slow negative.' },
+  'ring-pullup': { name:'Ring Pull-Up', grip:'high', ladder:['Ring Negative Pull-Up (5s)','Ring Pull-Up (band assist)','Ring Pull-Up','Ring L-Sit Pull-Up'], repRange:[3,6], sets:4, unit:'reps', note:'Let the wrists rotate naturally. Dead hang to chest, slow negative.' },
 
   'para-pushup': { name:'Parallette Push-Up', grip:'low', ladder:['Parallette Push-Up','Parallette Deficit Push-Up','Parallette Archer Push-Up','Parallette Planche Lean Push-Up'], repRange:[6,10], sets:3, unit:'reps', note:'Neutral grip. Full depth past the handles.' },
   'db-press': { name:'DB Floor Press', grip:'low', ladder:['DB Floor Press','DB Floor Press (slow ecc)','DB Floor Press (pause)','DB Single-Arm Floor Press'], repRange:[8,12], sets:3, unit:'reps', note:'25lb DBs. Control the bottom, pause at the chest.' },
@@ -352,7 +352,7 @@ const FORM = {
 // ===================================================================
 const SESSION_TEMPLATES = {
   RP: { name:'Heavy Rings: Pull', fullName:'Heavy Rings A \u2014 Pull', grip:'high', blocks:[
-    { type:'anchor', label:'Pull Anchor', exercises:['ring-pullup'] },
+    { type:'anchor', label:'Pull Anchor', progressionType:'heavyAnchor', exercises:['ring-pullup'] },
     { type:'builder', label:'Builders', exercises:['ring-row','ring-pushup'] },
     { type:'finisher', label:'Finisher', exercises:['ring-support'] }
   ]},
@@ -363,7 +363,7 @@ const SESSION_TEMPLATES = {
     { type:'finisher', label:'Finisher', exercises:['ab-wheel'] }
   ]},
   RPush: { name:'Heavy Rings: Push', fullName:'Heavy Rings B \u2014 Push', grip:'high', blocks:[
-    { type:'anchor', label:'Push Anchor', exercises:['ring-pushup'] },
+    { type:'anchor', label:'Push Anchor', progressionType:'heavyAnchor', exercises:['ring-pushup'] },
     { type:'builder', label:'Builders', exercises:['pike-pushup','ring-pullup'] },
     { type:'finisher', label:'Finisher', exercises:['hollow-body'] }
   ]},
@@ -396,7 +396,7 @@ function migrate(state){
   if(!state) return null;
   // Bring any older state up to current schema without losing history.
   if(!state.schemaVersion || state.schemaVersion < 4){
-    state.schemaVersion = SCHEMA_VERSION;
+    state.schemaVersion = 4;
   }
   if(!state.promotions) state.promotions = {};
   if(!state.promotionLog) state.promotionLog = [];
@@ -408,14 +408,41 @@ function migrate(state){
   if(state.activeSession && !SESSION_TEMPLATES[state.activeSession.type]) state.activeSession = null;
   // clamp a stale rotationIndex into the new rotation length
   if(typeof state.rotationIndex === 'number') state.rotationIndex = ((state.rotationIndex % ROTATION.length) + ROTATION.length) % ROTATION.length;
+
+  // ---- v5 INFRASTRUCTURE (Chunk 2, commit 1) ----
+  // Schema/infrastructure only: introduce the total-quality-reps progression scaffolding
+  // WITHOUT changing any scoring behavior yet. The legacy HIT fields (promotions,
+  // exerciseVariations, promotionLog) deliberately remain top-level and live — they are
+  // quarantined later, in the same commit that cuts over their readers, so there is never
+  // a half-migrated state with deleted fields and live readers.
+  if(!state.progressionEngineVersion || state.progressionEngineVersion < 2){
+    // one-time raw backup before the v5 line of work begins (best-effort; never block migration)
+    try {
+      if(!localStorage.getItem('train_state_backup_pre_v2')){
+        localStorage.setItem('train_state_backup_pre_v2', JSON.stringify(state));
+      }
+    } catch(e){ /* storage unavailable; proceed without backup */ }
+    state.progressionEngineVersion = 2;
+    state.schemaVersion = SCHEMA_VERSION;
+  }
+  // anchorProgress will hold per-slot scoreboard state for the two heavy ring anchors,
+  // keyed by buildFlow's deterministic slotId. NOTHING reads it yet (commit 1 is infra only).
+  if(!state.anchorProgress) state.anchorProgress = {};
   return state;
 }
+
+// The two heavy-anchor slot identities (must match buildFlow's slotId derivation:
+// `${type}_${blockType}_${exId}`). Used by the scoring engine in a later commit; defined
+// here so the slot vocabulary lives in one place. Not read by any display yet.
+const HEAVY_ANCHOR_SLOTS = {
+  'RP_anchor_ring-pullup': { exId:'ring-pullup', label:'Heavy Pull' },
+  'RPush_anchor_ring-pushup': { exId:'ring-pushup', label:'Heavy Push' }
+};
 
 function getState(){
   let s = migrate(loadRaw());
   if(!s){
-    s = { schemaVersion:SCHEMA_VERSION, rotationIndex:0, log:[], promotions:{}, promotionLog:{}, exerciseVariations:{}, activeSession:null };
-    s.promotionLog = [];
+    s = { schemaVersion:SCHEMA_VERSION, progressionEngineVersion:2, rotationIndex:0, log:[], promotions:{}, promotionLog:[], exerciseVariations:{}, anchorProgress:{}, activeSession:null };
     saveState(s);
   }
   return s;
@@ -589,7 +616,7 @@ function buildFlow(type){
   const t = SESSION_TEMPLATES[type];
   const flow = [];
   FORM.screens.forEach((s,i)=> flow.push({ kind:'form', uid:'form-'+s.id, screenIdx:i }));
-  t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label })));
+  t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label, slotId: type+'_'+block.type+'_'+exId, progressionType: block.progressionType || 'loose' })));
   return flow;
 }
 
@@ -1273,7 +1300,6 @@ function renderReference(){
     { label:'Other / Bench', ids:['ring-curl','glute-bridge','jefferson-curl'] }
   ];
   let html = '';
-  const seen = {};
   cats.forEach(cat=>{
     html += `<div class="block-label">${cat.label}</div>`;
     if(cat.form){
