@@ -168,6 +168,18 @@ html, body {
 .promo-card h3 { color:var(--accent); font-size:14px; margin-bottom:4px; }
 .promo-card p { font-size:13px; color:var(--text2); margin-bottom:10px; }
 .promo-actions { display:flex; gap:8px; }
+/* Anchor closing-in meter (Chunk 3) */
+.anchor-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; margin-bottom:10px; }
+.anchor-card .ac-top { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:2px; }
+.anchor-card .ac-label { font-size:14px; font-weight:700; color:var(--text); letter-spacing:-0.2px; }
+.anchor-card .ac-load { font-size:11px; font-weight:700; color:var(--accent); }
+.anchor-card .ac-last { font-size:12px; color:var(--text2); margin-bottom:10px; }
+.anchor-card .ac-last strong { color:var(--text); }
+.meter-track { height:10px; border-radius:6px; background:var(--surface2); overflow:hidden; border:1px solid var(--border); }
+.meter-fill { height:100%; background:var(--accent); border-radius:6px 0 0 6px; transition:width 0.3s ease; }
+.meter-fill.baseline { background:var(--warn); }
+.meter-caption { font-size:12px; font-weight:600; color:var(--text); margin-top:7px; }
+.meter-caption .mc-sub { display:block; font-size:11px; font-weight:400; color:var(--text3); margin-top:2px; }
 
 /* Settings / Reference */
 .setting-row { display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--border); gap:10px; }
@@ -552,18 +564,22 @@ function applyAnchorProgressionV2(next, entry){
   });
 }
 
-// Human-readable verdict for the most recent result on an anchor slot (used by renderHome).
-// Kept minimal here; Chunk 3 owns the richer display + closing-in meter.
+// Post-session verdict line for an anchor slot, shown under the meter on Home.
+// Branch logic is unchanged from the engine commit (no scoring behavior here) —
+// only the copy is warmer/clearer. Chunk 3.
 function anchorVerdict(prog){
   if(!prog) return '';
-  if(prog.steppedUp) return 'Top reached \u2014 load added. Establish your baseline next time.';
-  if(prog.creditedQualityReps === null) return 'New load. Establish your baseline.';
+  // Same branch logic as before (no scoring change) \u2014 warmer post-session copy.
+  if(prog.steppedUp) return `You owned the top. Load goes up to +${prog.externalLoad||LOAD_STEP_LB}${prog.loadUnit||'lb'} \u2014 next time just set your new baseline.`;
+  if(prog.creditedQualityReps === null) return 'Fresh load. First session sets your baseline, no target to beat.';
   const prev = prog.previousCreditedQualityReps;
-  if(typeof prev !== 'number') return `Baseline set: ${prog.lastRawQualityReps} total.`;
+  if(typeof prev !== 'number') return `Baseline locked in at ${prog.lastRawQualityReps}. Now we climb.`;
   const gain = prog.creditedQualityReps - prev;
-  if(gain > 0) return `+${gain} credited${prog.creditCapped ? ' (big day \u2014 capped at +'+WEEKLY_CREDIT_CAP+')' : ''}. Banked.`;
-  if(prog.lastRawQualityReps >= prev) return 'Matched last time. Hold the line.';
-  return 'Down a little \u2014 credited holds.';
+  if(gain > 0) return prog.creditCapped
+    ? `Huge day \u2014 banked +${gain} (capped at +${WEEKLY_CREDIT_CAP}/session so the target stays honest).`
+    : `+${gain} rep${gain===1?'':'s'} banked. That counts.`;
+  if(prog.lastRawQualityReps >= prev) return 'Matched last time \u2014 holding ground is progress on a hard lift.';
+  return 'Off your best today, but your banked total holds. No ground lost.';
 }
 
 // ===================================================================
@@ -1304,8 +1320,7 @@ function renderHome(){
     return;
   }
 
-  // Anchor scoreboard (minimal readout; Chunk 3 adds the closing-in meter + richer verdict).
-  // Shows the two heavy ring anchors' last result + today's beat-this target, read from
+  // Anchor scoreboard: the two heavy ring anchors' closing-in meter + verdict, read from
   // anchorProgress (the v2 engine's output). No manual promote prompts in v2.
   const anchorHtml = renderAnchorScoreboard(s);
 
@@ -1351,8 +1366,10 @@ function renderSessionPreview(type){
 }
 
 function getAllSessionExercises(){ const all = new Set(); Object.values(SESSION_TEMPLATES).forEach(t=>t.blocks.forEach(b=>b.exercises.forEach(e=>all.add(e)))); return [...all]; }
-// Minimal anchor scoreboard for Home: per heavy anchor, last total + today's target +
-// short verdict. Reads anchorProgress only. Chunk 3 will add the closing-in meter.
+// Anchor scoreboard for Home (Chunk 3): per heavy anchor, a closing-in meter toward the
+// next level plus last result + a warm verdict. The meter fills by creditedQualityReps
+// (the banked figure the level-up triggers on), never raw \u2014 so it can't promise a
+// level-up the engine won't grant; raw is shown alongside as the honest last result.
 function renderAnchorScoreboard(s){
   const ap = s.anchorProgress || {};
   let html = '';
@@ -1362,15 +1379,39 @@ function renderAnchorScoreboard(s){
     if(!prog || (prog.lastRawQualityReps == null && prog.creditedQualityReps == null)) return; // nothing logged yet
     const ex = EXERCISE_LIBRARY[meta.exId];
     const top = ex.sets * ex.repRange[1];
-    const loadStr = prog.externalLoad ? ` +${prog.externalLoad}${prog.loadUnit||'lb'}` : '';
-    const base = (typeof prog.creditedQualityReps === 'number') ? prog.creditedQualityReps
-               : (typeof prog.previousCreditedQualityReps === 'number' ? prog.previousCreditedQualityReps : prog.lastRawQualityReps);
-    const target = (prog.creditedQualityReps === null) ? 'establish baseline' : `beat ${base} / ${top}`;
+    const loadStr = prog.externalLoad ? `+${prog.externalLoad}${prog.loadUnit||'lb'}` : '';
+    const lastStr = (prog.lastRawQualityReps==null) ? '\u2014' : `${prog.lastRawQualityReps} total`;
     const verdict = anchorVerdict(prog);
+
+    // CLOSING-IN METER. Bar fills by creditedQualityReps (the banked figure the
+    // level-up actually triggers on), NOT raw \u2014 so the bar never promises a
+    // level-up the engine won't grant. Raw is shown alongside as the honest result.
+    let meter;
+    if(prog.creditedQualityReps === null){
+      // Fresh load (just stepped up, or awaiting first baseline at a new load):
+      // no credited figure to fill against. Show an empty 'baseline' track, not 0/top
+      // (which would read like a regression).
+      meter = `
+        <div class="meter-track"><div class="meter-fill baseline" style="width:0%"></div></div>
+        <div class="meter-caption">Set your baseline this session<span class="mc-sub">First clean session at the new load becomes the number to beat.</span></div>`;
+    } else {
+      const credited = Math.max(0, Math.min(prog.creditedQualityReps, top));
+      const pct = Math.round((credited / top) * 100);
+      const remaining = Math.max(0, top - credited);
+      const caption = remaining === 0
+        ? `Top owned \u2014 load goes up next session.`
+        : `You're ${remaining} rep${remaining===1?'':'s'} from leveling this up.`;
+      meter = `
+        <div class="meter-track"><div class="meter-fill" style="width:${pct}%"></div></div>
+        <div class="meter-caption">${credited} / ${top} banked toward the next level<span class="mc-sub">${caption}</span></div>`;
+    }
+
     html += `
-      <div class="promo-card">
-        <h3>${meta.label}${loadStr}</h3>
-        <p>Last: <strong style="color:var(--text);">${prog.lastRawQualityReps==null?'\u2014':prog.lastRawQualityReps} total</strong> &middot; Today: ${target}${verdict?`<br><span style="color:var(--text3);">${verdict}</span>`:''}</p>
+      <div class="anchor-card">
+        <div class="ac-top"><span class="ac-label">${meta.label}</span>${loadStr?`<span class="ac-load">${loadStr}</span>`:''}</div>
+        <div class="ac-last">Last session: <strong>${lastStr}</strong></div>
+        ${meter}
+        ${verdict?`<div class="meter-caption" style="font-weight:400;color:var(--text2);margin-top:9px;">${verdict}</div>`:''}
       </div>`;
   });
   return html;
