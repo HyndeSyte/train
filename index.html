@@ -1381,7 +1381,6 @@ function renderSessionPreview(type){
   return `<div class="card"><details open><summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;font-weight:600;">Session preview</summary><div style="margin-top:6px;">${inner}</div></details></div>`;
 }
 
-function getAllSessionExercises(){ const all = new Set(); Object.values(SESSION_TEMPLATES).forEach(t=>t.blocks.forEach(b=>b.exercises.forEach(e=>all.add(e)))); return [...all]; }
 // Anchor scoreboard for Home (Chunk 3): per heavy anchor, a closing-in meter toward the
 // next level plus last result + a warm verdict. The meter fills by creditedQualityReps
 // (the banked figure the level-up triggers on), never raw \u2014 so it can't promise a
