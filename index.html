@@ -1177,10 +1177,28 @@ function stopTimerLoop(){ if(timerRAF){ clearTimeout(timerRAF); timerRAF = null;
 
 // ---- STOP / COMPLETE ----
 function confirmStopSession(){
-  showModal('Stop session?', 'Anything completed so far will be saved. The rest is marked unfinished.', [
-    { text:'Keep going', cls:'btn-secondary', action:()=>hideModal() },
-    { text:'Stop & save', cls:'btn-danger', action:()=>{ hideModal(); finalizeSession('stopped'); } }
-  ]);
+  // Three-way stop modal: keep going / save what's done as a Partial / discard entirely.
+  // Discard reuses the same path as Home's Resume-card Discard so behavior never drifts.
+  // Labels kept short so three flex:1 buttons fit comfortably on a 360px-wide screen.
+  showModal('Stop session?',
+    'Save what you\u2019ve done as a partial session, or discard the whole session with no log entry?',
+    [
+      { text:'Cancel',       cls:'btn-secondary', action:()=>hideModal() },
+      { text:'Save partial', cls:'btn-secondary', action:()=>{ hideModal(); finalizeSession('stopped'); } },
+      { text:'Discard',      cls:'btn-danger',    action:()=>{ hideModal(); discardCurrentSession(); } }
+    ]);
+}
+
+// Single source of truth for "destroy the in-progress session without logging".
+// Called from confirmStopSession's Discard and from Home's Resume-card Discard.
+// Clears AS, nulls activeSession in storage, plays no cue, advances no rotation, writes no log.
+function discardCurrentSession(){
+  stopTimerLoop();
+  const s = getState();
+  s.activeSession = null;
+  saveState(s);
+  AS = null;
+  showScreen('home');
 }
 
 function renderCompletion(){
@@ -1434,7 +1452,7 @@ function renderAnchorScoreboard(s){
 function discardActiveSession(){
   showModal('Discard session?', 'The in-progress session will be deleted. Completed history is not affected.', [
     { text:'Keep', cls:'btn-secondary', action:()=>hideModal() },
-    { text:'Discard', cls:'btn-danger', action:()=>{ const s=getState(); s.activeSession=null; saveState(s); AS=null; hideModal(); renderHome(); } }
+    { text:'Discard', cls:'btn-danger', action:()=>{ hideModal(); discardCurrentSession(); } }
   ]);
 }
 
