@@ -1462,7 +1462,9 @@ function discardActiveSession(){
 function renderHistory(){
   const s = getState();
   if(!s.log.length){ document.getElementById('history-content').innerHTML = `<div class="empty"><div class="empty-icon">&#128203;</div>No sessions yet.<br>Complete your first session to see history.</div>`; return; }
-  const html = [...s.log].reverse().map(entry=>{
+  const total = s.log.length;
+  const html = [...s.log].reverse().map((entry, revIdx)=>{
+    const logIdx = total - 1 - revIdx;   // true index into state.log (list is reversed for display)
     const t = SESSION_TEMPLATES[entry.sessionType];
     const hitCount = entry.exercises ? Object.entries(entry.exercises).filter(([id,r])=>checkHit(id,r)).length : 0;
     const totalEx = entry.exercises ? Object.keys(entry.exercises).length : 0;
@@ -1476,11 +1478,63 @@ function renderHistory(){
       <div class="history-date">${formatDate(entry.date)}${entry.duration?' &middot; '+entry.duration+' min':''}</div>
       <div class="history-type"><span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span> ${t?t.name:''}<span class="status-chip status-${stat}">${stat}</span></div>
       <div class="history-hits">${hitCount}/${totalEx} HITs${entry.skipped&&entry.skipped.length?' &middot; '+entry.skipped.length+' skipped':''}</div>
-      <div class="history-detail">${detail}</div>
+      <div class="history-detail">${detail}<button class="btn btn-small btn-danger" style="margin-top:12px;" onclick="event.stopPropagation(); confirmDeleteSession(${logIdx})">Delete this session</button></div>
     </div>`;
   }).join('');
   document.getElementById('history-content').innerHTML = html;
 }
+// ===================================================================
+// HISTORY DELETE + SCOREBOARD REBUILD (Option B)
+// ===================================================================
+// Deleting a session must keep the anchor scoreboard in sync with the log. Option B:
+// remove the entry, then REBUILD anchorProgress from scratch by replaying the remaining
+// log in order through the same engine finalize uses. This keeps log<->scoreboard parity
+// exactly (no drift), at the cost of recomputing — correct while the engine numbers are
+// still being graded against real history.
+//
+// Replay rule MUST match finalize's scoring gate: finalize scores when
+// statusReason !== 'stopped' (i.e. completed AND partial both score; only stopped doesn't).
+// So we replay every entry whose sessionStatus !== 'stopped'. applyAnchorProgressionV2's
+// own guards handle everything else: entries without a performed[] array (pre-engine
+// sessions) no-op; skipped or incomplete anchor sets don't score. Never filter on
+// progressionEngineVersion — only on entry shape, which the engine already checks.
+function rebuildAnchorProgress(state){
+  state.anchorProgress = {};
+  state.log.forEach(entry=>{
+    if(!entry || entry.sessionStatus === 'stopped') return;   // stopped sessions never scored
+    applyAnchorProgressionV2(state, entry);                    // engine guards handle the rest (incl. no performed[])
+  });
+}
+
+// Delete one log entry by its true index into state.log, then rebuild the scoreboard.
+// Single saveState (build the whole next state, then write once), then re-render History.
+function deleteLogEntry(logIdx){
+  const s = getState();
+  if(!Array.isArray(s.log) || logIdx < 0 || logIdx >= s.log.length) return; // stale index guard
+  s.log.splice(logIdx, 1);
+  rebuildAnchorProgress(s);
+  saveState(s);
+  hideModal();
+  renderHistory();
+}
+
+// Confirmation modal for deleting a history entry. Names the date + session so the user
+// knows exactly what's going away, and warns that the scoreboard recalculates (Option B is
+// a stronger action than deleting the log row alone).
+function confirmDeleteSession(logIdx){
+  const s = getState();
+  const entry = s.log[logIdx];
+  if(!entry) return;
+  const t = SESSION_TEMPLATES[entry.sessionType];
+  const name = t ? t.name : entry.sessionType;
+  showModal('Delete this session?',
+    `${formatDate(entry.date)} \u2014 ${name}. This removes it from history and recalculates your scoreboard from your remaining sessions. This can\u2019t be undone.`,
+    [
+      { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
+      { text:'Delete', cls:'btn-danger', action:()=>deleteLogEntry(logIdx) }
+    ]);
+}
+
 function formatDate(ds){ const d = new Date(ds+'T12:00:00'); return `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}, ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getDate()}`; }
 
 // ===================================================================
