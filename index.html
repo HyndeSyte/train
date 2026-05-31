@@ -212,6 +212,12 @@ function migrate(state){
   // clamp a stale rotationIndex into the new rotation length
   if(typeof state.rotationIndex === 'number') state.rotationIndex = ((state.rotationIndex % ROTATION.length) + ROTATION.length) % ROTATION.length;
 
+  // Session-picker override (Option A): validate against SESSION_TEMPLATES. The picker
+  // only ever stores a valid template key; this is the defensive seam against stale
+  // storage, schema drift, or hand-edited state. Missing field is initialized to null.
+  if(!Object.prototype.hasOwnProperty.call(state, 'nextSessionOverride')) state.nextSessionOverride = null;
+  if(state.nextSessionOverride != null && !SESSION_TEMPLATES[state.nextSessionOverride]) state.nextSessionOverride = null;
+
   // ---- v5 INFRASTRUCTURE (Chunk 2, commit 1) ----
   // Schema/infrastructure only: introduce the total-quality-reps progression scaffolding
   // WITHOUT changing any scoring behavior yet. The legacy HIT fields (promotions,
@@ -257,10 +263,48 @@ const HEAVY_ANCHOR_SLOTS = {
 function getState(){
   let s = migrate(loadRaw());
   if(!s){
-    s = { schemaVersion:SCHEMA_VERSION, progressionEngineVersion:2, rotationIndex:0, log:[], anchorProgress:{}, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, activeSession:null };
+    s = { schemaVersion:SCHEMA_VERSION, progressionEngineVersion:2, rotationIndex:0, nextSessionOverride:null, log:[], anchorProgress:{}, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, activeSession:null };
     saveState(s);
   }
   return s;
+}
+
+// ===================================================================
+// SESSION-PICKER OVERRIDE (added 2026-05-30; spec locked Option A)
+// ===================================================================
+// Behavior contract (do not change without re-running the 8 acceptance tests):
+//   - state.nextSessionOverride: SESSION_TEMPLATES key, or null.
+//   - Home + Start ALWAYS resolve via getEffectiveSessionType() - never duplicate
+//     (override || ROTATION[index]) logic in callers.
+//   - On COMPLETED (finalize statusReason==='completed'): rotation advances from
+//     the LOGGED sessionType (entry.sessionType), not from the override field
+//     and not from rotationIndex+1. The log is source of truth. Override clears.
+//   - On STOPPED ('Save partial'): rotation UNCHANGED. Override clears.
+//   - On DISCARD: nothing changes. Override PERSISTS (discard = 'didn't happen').
+//   - HISTORY DELETE: rebuildAnchorProgress is scoreboard replay only. It never
+//     touches rotationIndex or nextSessionOverride. (No edit to that function
+//     in this commit - its behavior is correct as-is.)
+
+function isValidSessionType(t){
+  return typeof t === 'string' && Object.prototype.hasOwnProperty.call(SESSION_TEMPLATES, t);
+}
+function getDefaultSessionType(s){ return ROTATION[s.rotationIndex % ROTATION.length]; }
+function getEffectiveSessionType(s){
+  return isValidSessionType(s.nextSessionOverride) ? s.nextSessionOverride : getDefaultSessionType(s);
+}
+function hasSessionOverride(s){ return isValidSessionType(s.nextSessionOverride); }
+function setSessionOverride(type){
+  if(!isValidSessionType(type)) return;
+  const s = getState();
+  s.nextSessionOverride = type;
+  saveState(s);
+  renderHome();
+}
+function clearSessionOverride(){
+  const s = getState();
+  s.nextSessionOverride = null;
+  saveState(s);
+  renderHome();
 }
 
 function getCurrentVariation(exId){ const s = getState(); return (s.legacy && s.legacy.exerciseVariations && s.legacy.exerciseVariations[exId]) || 0; }
@@ -1078,8 +1122,18 @@ function finalizeSession(statusReason){
       applyAnchorProgressionV2(next, entry);
     }
 
-    // Advance rotation only when the session actually ran to the end.
-    if(statusReason === 'completed') next.rotationIndex = (next.rotationIndex + 1) % ROTATION.length;
+    // Rotation advance - Option A (session-picker override, 2026-05-30):
+    //   - completed: advance from the LOGGED sessionType (entry.sessionType),
+    //     not the override field and not the current rotationIndex+1. The log
+    //     is the source of truth for what actually ran (GPT blocker 1).
+    //   - stopped: rotation UNCHANGED (current Option A behavior preserved).
+    // In both cases, any active picker override is cleared (act was recorded).
+    // Discard never reaches this function, so override persists across discard.
+    if(statusReason === 'completed'){
+      const completedIdx = ROTATION.indexOf(entry.sessionType);
+      if(completedIdx !== -1) next.rotationIndex = (completedIdx + 1) % ROTATION.length;
+    }
+    next.nextSessionOverride = null;
 
     next.activeSession = null;
 
@@ -1127,7 +1181,11 @@ function showScreen(name){
 // ===================================================================
 function renderHome(){
   const s = getState();
-  const nextType = ROTATION[s.rotationIndex % ROTATION.length];
+  // Override-aware resolution: Pick -> setSessionOverride() stored a valid
+  // SESSION_TEMPLATES key; otherwise fall back to the rotation default.
+  const defaultType = getDefaultSessionType(s);
+  const overridden = hasSessionOverride(s) && s.nextSessionOverride !== defaultType;
+  const nextType = getEffectiveSessionType(s);
   const t = SESSION_TEMPLATES[nextType];
   const est = estimateDuration(nextType);
   const gc = t.grip==='high'?'var(--grip-high)':t.grip==='low'?'var(--grip-low)':'var(--grip-none)';
@@ -1165,7 +1223,13 @@ function renderHome(){
       </div>
       <div class="session-name">${t.name}</div>
       <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Today's Session</button>
-      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;">Opens with the Form</div>
+      <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.6;">
+        Opens with the Form
+        ${overridden
+          ? `<br>Picked &middot; Default: ${SESSION_TEMPLATES[defaultType].name} &middot; <a href="javascript:void(0)" onclick="clearSessionOverride()" style="color:var(--text2);text-decoration:underline;">Reset to default</a>`
+          : `<br><a href="javascript:void(0)" onclick="openSessionPicker()" style="color:var(--text2);text-decoration:underline;">Pick a different day</a>`
+        }
+      </div>
     </div>
     ${s.log.length ? renderLastSession(s) : ''}
     ${renderSessionPreview(nextType)}`;
@@ -1191,6 +1255,53 @@ function renderSessionPreview(type){
     b.exercises.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; inner += `<div style="font-size:14px;padding:2px 0;line-height:1.4;">${getVariationName(exId)} <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span></div>`; });
   });
   return `<div class="card"><details open><summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;font-weight:600;">Session preview</summary><div style="margin-top:6px;">${inner}</div></details></div>`;
+}
+
+// Session picker modal: lists all 5 ring-spine session types in rotation order with
+// Default / Picked / Heavy anchor markers. Tapping the default clears the override;
+// tapping a non-default sets it. Bypasses showModal's textContent body (uses innerHTML)
+// because the picker needs structured rows with click handlers, not flat text.
+function openSessionPicker(){
+  const s = getState();
+  const defaultType = getDefaultSessionType(s);
+  const current = getEffectiveSessionType(s);
+  const rows = ROTATION.map(type=>{
+    const tpl = SESSION_TEMPLATES[type];
+    const isDefault = type === defaultType;
+    const isCurrent = type === current;
+    const hasHeavyAnchor = tpl.blocks.some(b=> b.progressionType === 'heavyAnchor');
+    const markers = [];
+    if(isDefault) markers.push('<span style="font-size:10px;color:var(--accent);font-weight:700;letter-spacing:0.5px;">DEFAULT</span>');
+    if(isCurrent && !isDefault) markers.push('<span style="font-size:10px;color:var(--warn);font-weight:700;letter-spacing:0.5px;">PICKED</span>');
+    if(hasHeavyAnchor) markers.push('<span style="font-size:10px;color:var(--text3);font-weight:700;letter-spacing:0.5px;">HEAVY</span>');
+    const markerHtml = markers.length ? ` &middot; ${markers.join(' &middot; ')}` : '';
+    return `<div onclick="pickSessionFromModal('${type}')" style="padding:14px 12px;border-bottom:1px solid var(--border);cursor:pointer;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div>
+          <div style="font-size:15px;font-weight:600;">${tpl.name}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${type}${markerHtml}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('modal-title').textContent = 'Pick a different day';
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `<div style="font-size:13px;color:var(--text2);margin-bottom:12px;">After you log this workout, the rotation continues from that day.</div>
+    <div style="margin:0 -16px;border-top:1px solid var(--border);">${rows}</div>`;
+  document.getElementById('modal-actions').innerHTML = '<button class="btn btn-secondary" onclick="hideModal()">Cancel</button>';
+  document.getElementById('modal').classList.add('visible');
+}
+
+function pickSessionFromModal(type){
+  if(!isValidSessionType(type)){ hideModal(); return; }
+  const s = getState();
+  const defaultType = getDefaultSessionType(s);
+  if(type === defaultType){
+    clearSessionOverride();   // tapping default = clear override
+  } else {
+    setSessionOverride(type); // tapping non-default = set override
+  }
+  hideModal();
 }
 
 // Anchor scoreboard for Home (Chunk 3): per heavy anchor, a closing-in meter toward the
