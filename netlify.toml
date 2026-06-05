@@ -1,0 +1,13 @@
+# Functions-only Netlify site for the Train PWA -> Notion sync bridge.
+# No framework build; the static publish dir holds only a stub page.
+
+[build]
+  command = "echo 'functions-only; no build step'"
+  publish = "public"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  node_bundler = "esbuild"

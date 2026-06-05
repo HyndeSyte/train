@@ -1,0 +1,10 @@
+{
+  "name": "train-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Netlify Function bridge: Train PWA workout sessions -> Notion 'Training - Session Log' (idempotent upsert).",
+  "scripts": {
+    "test": "node --test"
+  }
+}
