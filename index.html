@@ -89,6 +89,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 6;
+const BUILD_ID = 'v6.1-2026-06-05-sync-selfheal';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -232,7 +233,7 @@ function migrate(state){
       }
     } catch(e){ /* storage unavailable; proceed without backup */ }
     state.progressionEngineVersion = 2;
-    state.schemaVersion = SCHEMA_VERSION;
+    state.schemaVersion = 5;  // v5 step only brings state to 5; the v6 backfill below must still run
   }
   if(!state.anchorProgress) state.anchorProgress = {};
 
@@ -256,17 +257,22 @@ function migrate(state){
   // localStorage remains the source of truth; Notion is a derived, self-healing mirror.
   if(typeof state.nextSessionSequence !== 'number') state.nextSessionSequence = 0;
   if(!Array.isArray(state.pendingDeletes)) state.pendingDeletes = [];
-  if(state.schemaVersion < 6){
-    // One-time backfill so existing history mirrors into Notion on next app-open. Assign a
-    // stable sessionId + monotonic sequence to each prior entry and mark it pending. The
-    // server upsert dedupes by sessionId, so this is safe even if it runs more than once.
-    (state.log || []).forEach((entry)=>{
+  // Self-healing backfill: ANY log entry missing transport fields gets them, on EVERY load,
+  // regardless of schemaVersion. Repairs states that reached v6 before this assignment ran
+  // (e.g. an older state whose v5 step had jumped schemaVersion past the gate). Idempotent:
+  // only fills missing fields; the server upsert dedupes by sessionId.
+  {
+    const _log = state.log || [];
+    let _maxSeq = -1;
+    _log.forEach((e)=>{ if(typeof e.sessionSequence === 'number' && e.sessionSequence > _maxSeq) _maxSeq = e.sessionSequence; });
+    if(state.nextSessionSequence <= _maxSeq) state.nextSessionSequence = _maxSeq + 1;
+    _log.forEach((entry)=>{
       if(!entry.sessionId) entry.sessionId = genSessionId();
       if(typeof entry.sessionSequence !== 'number') entry.sessionSequence = state.nextSessionSequence++;
       if(!entry.notionSync) entry.notionSync = { status:'pending', lastAttemptAt:null, syncedAt:null, notionPageId:null, error:null };
     });
-    state.schemaVersion = 6;
   }
+  if(state.schemaVersion < 6) state.schemaVersion = 6;
   return state;
 }
 
@@ -1672,7 +1678,7 @@ function renderSettings(){
         <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
       </div>
     </details>
-    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Version</strong>: Train v4 \u00b7 ${s.log.length} sessions</div></div>`;
+    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Build</strong>: ${BUILD_ID} \u00b7 ${s.log.length} sessions</div></div>`;
 }
 function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
 function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
