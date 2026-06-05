@@ -88,7 +88,7 @@
 // ===================================================================
 // SCHEMA VERSION
 // ===================================================================
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -249,7 +249,32 @@ function migrate(state){
   }
   if(!state.legacy) state.legacy = { promotions:{}, exerciseVariations:{}, promotionLog:[] };
   if(!state.legacy.exerciseVariations) state.legacy.exerciseVariations = {};
+
+  // ---- v6 NOTION SYNC INFRASTRUCTURE ----
+  // Transport-only fields for the PWA -> Notion mirror. The scoring engine NEVER reads
+  // notionSync; it is sync bookkeeping, kept parallel to (not inside) the progression data.
+  // localStorage remains the source of truth; Notion is a derived, self-healing mirror.
+  if(typeof state.nextSessionSequence !== 'number') state.nextSessionSequence = 0;
+  if(!Array.isArray(state.pendingDeletes)) state.pendingDeletes = [];
+  if(state.schemaVersion < 6){
+    // One-time backfill so existing history mirrors into Notion on next app-open. Assign a
+    // stable sessionId + monotonic sequence to each prior entry and mark it pending. The
+    // server upsert dedupes by sessionId, so this is safe even if it runs more than once.
+    (state.log || []).forEach((entry)=>{
+      if(!entry.sessionId) entry.sessionId = genSessionId();
+      if(typeof entry.sessionSequence !== 'number') entry.sessionSequence = state.nextSessionSequence++;
+      if(!entry.notionSync) entry.notionSync = { status:'pending', lastAttemptAt:null, syncedAt:null, notionPageId:null, error:null };
+    });
+    state.schemaVersion = 6;
+  }
   return state;
+}
+
+// Stable per-session id. crypto.randomUUID where available; otherwise a sufficient fallback
+// (ids only need to be unique within one user's log to drive idempotent upserts).
+function genSessionId(){
+  try { if(typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID(); } catch(e){}
+  return 'sid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 
 // The two heavy-anchor slot identities (must match buildFlow's slotId derivation:
@@ -263,7 +288,7 @@ const HEAVY_ANCHOR_SLOTS = {
 function getState(){
   let s = migrate(loadRaw());
   if(!s){
-    s = { schemaVersion:SCHEMA_VERSION, progressionEngineVersion:2, rotationIndex:0, nextSessionOverride:null, log:[], anchorProgress:{}, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, activeSession:null };
+    s = { schemaVersion:SCHEMA_VERSION, progressionEngineVersion:2, rotationIndex:0, nextSessionOverride:null, nextSessionSequence:0, pendingDeletes:[], log:[], anchorProgress:{}, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, activeSession:null };
     saveState(s);
   }
   return s;
@@ -434,59 +459,157 @@ function estimateDuration(type){
 }
 
 // ===================================================================
-// SYNC (unchanged transport; Apps Script backup)
+// NOTION SYNC (v6) - PWA -> Netlify Function -> Notion mirror
 // ===================================================================
-function getSyncUrl(){ try { return localStorage.getItem('train_sync_url') || ''; } catch(e){ return ''; } }
-function setSyncUrl(u){ localStorage.setItem('train_sync_url', u.trim()); }
-function updateSyncIndicator(status){
-  const el = document.getElementById('sync-indicator'); if(!el) return;
-  if(!getSyncUrl()){ el.innerHTML=''; return; }
-  const labels = { synced:'Synced', syncing:'Syncing...', error:'Sync failed', none:'' };
-  el.innerHTML = `<span class="sync-dot ${status}"></span>${labels[status]||''}`;
+// localStorage is the source of truth; the Notion DB is a derived, self-healing mirror.
+// Every finalized session carries a stable sessionId; the server upserts by that id, so a
+// timeout that wrote the row but never returned is healed on the next push (no duplicates).
+// Sync NEVER blocks finishing a workout, and notionSync metadata is transport-only -
+// the scoring engine never reads it.
+const SYNC_ENDPOINT = 'https://hyndesyte-train-sync.netlify.app/.netlify/functions/sync-training-session';
+
+function statusToNotion(s){ return s === 'stopped' ? 'Stopped' : s === 'partial' ? 'Partial' : 'Completed'; }
+
+// Build the heavy-anchor block for the payload from the entry alone (stable across re-pushes).
+// Performance fields come from performed[]; scoreboard fields from the snapshot taken at
+// finalize (absent on backfilled history, which is fine - those fields are simply omitted).
+function buildAnchorBlock(entry){
+  if(!Array.isArray(entry.performed)) return null;
+  const p = entry.performed.find(x => x.progressionType === 'heavyAnchor' && HEAVY_ANCHOR_SLOTS[x.slotId] && !x.skipped);
+  if(!p) return null;
+  const done = (p.reps || []).filter(r => typeof r === 'number' && r > 0);
+  if(!done.length) return null;
+  const block = {
+    slot: p.slotId,
+    exercise: p.exId,
+    reps: done.join('/'),
+    rawQualityReps: done.reduce((a,b)=>a+b,0),
+    targetTotal: anchorTopTotal(p.exId)
+  };
+  const snap = entry.anchorSnapshot;
+  if(snap){
+    if(typeof snap.creditedReps === 'number') block.creditedReps = snap.creditedReps;
+    if(typeof snap.creditDelta === 'number') block.creditDelta = snap.creditDelta;
+    if(typeof snap.creditCapped === 'boolean') block.creditCapped = snap.creditCapped;
+    if(typeof snap.load === 'number') block.load = snap.load;
+    if(snap.loadUnit) block.loadUnit = snap.loadUnit;
+  }
+  return block;
 }
-async function syncToSheet(){
-  const url = getSyncUrl(); if(!url) return;
-  updateSyncIndicator('syncing');
-  try {
-    const s = getState();
-    const logRows = s.log.map(entry=>{
-      const rows = [];
-      if(entry.exercises) Object.entries(entry.exercises).forEach(([exId,reps])=>{
-        const ex = EXERCISE_LIBRARY[exId];
-        const varIdx = (s.legacy && s.legacy.exerciseVariations && s.legacy.exerciseVariations[exId]) || 0;
-        rows.push({ date:entry.date, session:entry.sessionType, exercise:ex?ex.name:exId, variation:ex?ex.ladder[Math.min(varIdx,ex.ladder.length-1)]:exId, sets:reps, hit:checkHit(exId,reps), duration:entry.duration||0, feel:entry.sessionStatus||'', notes:entry.notes||'' });
-      });
-      if(entry.skipped) entry.skipped.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; rows.push({ date:entry.date, session:entry.sessionType, exercise:ex?ex.name:exId, variation:'SKIPPED', sets:[], hit:false, duration:entry.duration||0, feel:entry.sessionStatus||'', notes:entry.notes||'' }); });
-      return rows;
-    }).flat();
-    await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify({ state:s, logRows, lastLogCount:s.log.length }), mode:'no-cors' });
-    updateSyncIndicator('synced');
-    localStorage.setItem('train_last_sync', new Date().toISOString());
-  } catch(e){ console.error('sync push failed', e); updateSyncIndicator('error'); }
+
+// Map a log entry -> the Netlify function's upsert contract.
+function buildSyncPayload(entry){
+  const meta = entry.exerciseMeta || {};
+  const issues = Array.isArray(entry.issues) ? entry.issues : [];
+  const exercises = Array.isArray(entry.performed) ? entry.performed.map(p => {
+    const m = meta[p.exId] || {};
+    const ex = EXERCISE_LIBRARY[p.exId];
+    const out = { name: ex ? ex.name : p.exId, role: p.role, reps: p.skipped ? 'skipped' : (p.reps || []) };
+    if(m.issueFlag === 'issue' && m.note) out.issue = m.note;
+    else if(m.note) out.note = m.note;
+    return out;
+  }) : [];
+  const { notionSync, ...rawEntry } = entry;   // keep transport state out of the stored raw
+  const payload = {
+    op: 'upsert',
+    sessionId: entry.sessionId,
+    sessionSequence: entry.sessionSequence,
+    date: entry.date,
+    completedAt: entry.completedAt || null,
+    sessionType: entry.sessionType,
+    status: statusToNotion(entry.sessionStatus),
+    durationMin: typeof entry.duration === 'number' ? entry.duration : null,
+    overrideUsed: !!entry.overrideUsed,
+    sessionNote: entry.notes || '',
+    issueCount: issues.length,
+    issueFlags: [...new Set(issues.map(i => i.exId).filter(Boolean))],
+    attentionFlag: !!entry.attentionFlag,
+    detail: { exercises, collectedIssues: issues.map(i => i.note).filter(Boolean) },
+    raw: rawEntry
+  };
+  const anchor = buildAnchorBlock(entry);
+  if(anchor) payload.anchor = anchor;
+  return payload;
 }
-async function pullFromSheet(){
-  const url = getSyncUrl(); if(!url) return false;
-  updateSyncIndicator('syncing');
+
+// Mutate one entry's notionSync in place inside the live state, then persist. Looked up by
+// sessionId so a concurrent edit elsewhere can't clobber the whole log.
+function markSync(sessionId, patch){
+  const s = getState();
+  const e = (s.log || []).find(x => x.sessionId === sessionId);
+  if(!e) return;
+  e.notionSync = Object.assign({ status:'pending', lastAttemptAt:null, syncedAt:null, notionPageId:null, error:null }, e.notionSync, patch);
+  saveState(s);
+}
+
+async function postSync(body){
+  const res = await fetch(SYNC_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error('sync ' + res.status);
+  return res.json();
+}
+
+// Push a single entry (upsert). Non-blocking caller; updates notionSync + the indicator.
+async function syncEntry(sessionId){
+  const s = getState();
+  const entry = (s.log || []).find(x => x.sessionId === sessionId);
+  if(!entry) return;
+  markSync(sessionId, { status:'pending', lastAttemptAt:new Date().toISOString(), error:null });
+  refreshSyncIndicator();
   try {
-    const resp = await fetch(url + '?action=pull', { mode:'cors' });
-    if(!resp.ok) throw new Error('pull failed');
-    const data = await resp.json();
-    if(data && data.log && Array.isArray(data.log)){
-      const local = getState();
-      if(!local.log.length || local.log.length < data.log.length){ saveState(migrate(data)); updateSyncIndicator('synced'); return true; }
+    const data = await postSync(buildSyncPayload(entry));
+    markSync(sessionId, { status:'synced', syncedAt:new Date().toISOString(), notionPageId:(data && data.notionPageId) || null, error:null });
+  } catch(e){
+    markSync(sessionId, { status:'failed', error:String(e && e.message || e) });
+  }
+  refreshSyncIndicator();
+}
+
+// Drain pending soft-deletes (tombstones), then push every not-yet-synced session oldest-first.
+// One attempt per item per call (no hammering); failures stay queued for the next app-open or
+// manual retry. A verified failure is left as data, not retried in a tight loop.
+let syncDraining = false;
+async function pushUnsynced(){
+  if(syncDraining) return;
+  syncDraining = true;
+  try {
+    // tombstones first
+    let s = getState();
+    const deletes = Array.isArray(s.pendingDeletes) ? [...s.pendingDeletes] : [];
+    for(const sid of deletes){
+      try {
+        await postSync({ op:'delete', sessionId: sid });
+        const cur = getState();
+        cur.pendingDeletes = (cur.pendingDeletes || []).filter(x => x !== sid);
+        saveState(cur);
+      } catch(e){ /* leave queued; try again next open */ }
     }
-    updateSyncIndicator('synced'); return false;
-  } catch(e){ console.error('sync pull failed', e); updateSyncIndicator('error'); return false; }
+    // then unsynced sessions, oldest-first by sequence
+    s = getState();
+    const pending = (s.log || [])
+      .filter(e => e.sessionId && (!e.notionSync || e.notionSync.status !== 'synced'))
+      .sort((a,b)=> (a.sessionSequence||0) - (b.sessionSequence||0));
+    for(const e of pending){ await syncEntry(e.sessionId); }
+  } finally {
+    syncDraining = false;
+    refreshSyncIndicator();
+  }
 }
-async function testSync(){
-  const url = getSyncUrl(); if(!url){ alert('Enter a sync URL first.'); return; }
-  updateSyncIndicator('syncing');
-  try {
-    const resp = await fetch(url + '?action=ping', { mode:'cors' });
-    const text = await resp.text();
-    if(text.includes('ok') || text.includes('pong')){ updateSyncIndicator('synced'); alert('Connected. Sync is working.'); syncToSheet(); }
-    else { updateSyncIndicator('error'); alert('Unexpected response. Check the URL and redeploy the script.'); }
-  } catch(e){ updateSyncIndicator('error'); alert('Could not connect. Check the URL, that the script is deployed for "Anyone", and your connection.'); }
+
+// Indicator reflects real state: Synced when nothing is outstanding, otherwise a pending count
+// (red dot if any have hard-failed). Empty before the first session exists.
+function refreshSyncIndicator(){
+  const el = document.getElementById('sync-indicator'); if(!el) return;
+  const s = getState();
+  if(!s.log || !s.log.length){ el.innerHTML = ''; return; }
+  const pendingSessions = s.log.filter(e => !e.notionSync || e.notionSync.status !== 'synced');
+  const failed = pendingSessions.filter(e => e.notionSync && e.notionSync.status === 'failed').length;
+  const outstanding = pendingSessions.length + (Array.isArray(s.pendingDeletes) ? s.pendingDeletes.length : 0);
+  if(outstanding === 0){ el.innerHTML = '<span class="sync-dot synced"></span>Synced'; return; }
+  el.innerHTML = `<span class="sync-dot ${failed ? 'error' : 'syncing'}"></span>${outstanding} pending`;
 }
 
 // ===================================================================
@@ -1053,6 +1176,10 @@ function renderCompletion(){
     <div style="margin-top:14px;">
       <div class="move-name" style="font-size:14px;margin-bottom:8px;">Anything to note? (optional)</div>
       <textarea class="note-field" id="session-note" rows="3" placeholder="How it felt, anything to remember\u2026">${AS.sessionNote||''}</textarea>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--text2);cursor:pointer;">
+        <input type="checkbox" id="session-attention" ${AS.attentionFlag?'checked':''} style="width:18px;height:18px;flex:none;">
+        Flag this session for review
+      </label>
     </div>`;
   const foot = document.getElementById('flow-foot');
   foot.innerHTML = `<button class="btn btn-primary" onclick="finalizeSession('completed')">Complete Session</button>`;
@@ -1063,6 +1190,8 @@ function finalizeSession(statusReason){
   if(!AS){ showScreen('home'); return; }
   const noteEl = document.getElementById('session-note');
   if(noteEl) AS.sessionNote = noteEl.value.trim();
+  const attnEl = document.getElementById('session-attention');
+  if(attnEl) AS.attentionFlag = !!attnEl.checked;
 
   // TRANSACTIONAL FINALIZE (Chunk 2, commit 2):
   // Build the entire next state in memory, validate it, then save ONCE and render.
@@ -1104,6 +1233,9 @@ function finalizeSession(statusReason){
 
     const entry = {
       date: today, sessionType: AS.type, logSchemaVersion: 2,
+      sessionId: genSessionId(),
+      completedAt: new Date().toISOString(),
+      attentionFlag: !!AS.attentionFlag,
       exercises, skipped: skipped.length ? skipped : undefined,
       performed,
       sessionStatus, exerciseMeta,
@@ -1114,12 +1246,29 @@ function finalizeSession(statusReason){
 
     // Build next state in memory (do not mutate live state until validated).
     const next = getState();
+    entry.sessionSequence = next.nextSessionSequence++;
+    entry.overrideUsed = entry.sessionType !== getDefaultSessionType(next);
+    entry.notionSync = { status:'pending', lastAttemptAt:null, syncedAt:null, notionPageId:null, error:null };
     next.log.push(entry);
 
     // ANCHOR SCORING (v2): total-quality-reps engine, heavy anchors only. Builder work
     // never scores (keyed by slotId+progressionType, not exId). Skipped on a stopped session.
     if(statusReason !== 'stopped'){
       applyAnchorProgressionV2(next, entry);
+      // Snapshot the heavy-anchor scoreboard for this session so the Notion mirror's credited
+      // figures stay correct even when this entry is re-pushed after later sessions move the
+      // running scoreboard. Performance fields (reps, raw total) are re-derived at send time.
+      const ap = entry.performed.find(x => x.progressionType === 'heavyAnchor' && HEAVY_ANCHOR_SLOTS[x.slotId] && !x.skipped);
+      if(ap && next.anchorProgress[ap.slotId]){
+        const sb = next.anchorProgress[ap.slotId];
+        entry.anchorSnapshot = {
+          creditedReps: (typeof sb.creditedQualityReps === 'number') ? sb.creditedQualityReps : null,
+          creditDelta: (typeof sb.creditedQualityReps === 'number' && typeof sb.previousCreditedQualityReps === 'number') ? (sb.creditedQualityReps - sb.previousCreditedQualityReps) : null,
+          creditCapped: !!sb.creditCapped,
+          load: sb.externalLoad || 0,
+          loadUnit: sb.loadUnit || 'lb'
+        };
+      }
     }
 
     // Rotation advance - Option A (session-picker override, 2026-05-30):
@@ -1147,7 +1296,7 @@ function finalizeSession(statusReason){
     saveState(next);   // single write
     AS = null;
     if(statusReason === 'completed') cueSessionDone();
-    syncToSheet();
+    syncEntry(entry.sessionId);   // fire-and-forget; never blocks finishing
     showScreen('home');
   } catch(err){
     // Do NOT save, do NOT advance rotation, do NOT null AS — leave the session resumable.
@@ -1416,11 +1565,20 @@ function rebuildAnchorProgress(state){
 function deleteLogEntry(logIdx){
   const s = getState();
   if(!Array.isArray(s.log) || logIdx < 0 || logIdx >= s.log.length) return; // stale index guard
+  const removed = s.log[logIdx];
+  // Queue a soft-delete tombstone so the Notion mirror marks the row Deleted on next push.
+  // Queue regardless of prior sync status: a tombstone for a never-synced id is a harmless
+  // no-op server-side (query finds nothing), and this guarantees the mirror can't drift.
+  if(removed && removed.sessionId){
+    if(!Array.isArray(s.pendingDeletes)) s.pendingDeletes = [];
+    if(!s.pendingDeletes.includes(removed.sessionId)) s.pendingDeletes.push(removed.sessionId);
+  }
   s.log.splice(logIdx, 1);
   rebuildAnchorProgress(s);
   saveState(s);
   hideModal();
   renderHistory();
+  pushUnsynced();   // fire-and-forget: drain the tombstone (and any other pending) now
 }
 
 // Confirmation modal for deleting a history entry. Names the date + session so the user
@@ -1481,9 +1639,12 @@ function renderReference(){
 // ===================================================================
 function renderSettings(){
   const s = getState();
-  const syncUrl = getSyncUrl();
-  const lastSync = localStorage.getItem('train_last_sync');
-  const lastSyncDisplay = lastSync ? new Date(lastSync).toLocaleString() : 'Never';
+  const log = s.log || [];
+  const pendingCount = log.filter(e => !e.notionSync || e.notionSync.status !== 'synced').length + (Array.isArray(s.pendingDeletes) ? s.pendingDeletes.length : 0);
+  const failedCount = log.filter(e => e.notionSync && e.notionSync.status === 'failed').length;
+  const lastSynced = log.map(e => e.notionSync && e.notionSync.syncedAt).filter(Boolean).sort().slice(-1)[0];
+  const lastSyncedDisplay = lastSynced ? new Date(lastSynced).toLocaleString() : 'Not yet';
+  const syncStatusText = pendingCount === 0 ? (log.length ? 'All sessions synced' : 'No sessions yet') : `${pendingCount} pending${failedCount ? ` (${failedCount} failed)` : ''}`;
   const soundOn = soundEnabled();
   document.getElementById('settings-content').innerHTML = `
     <div class="block-label" style="margin-top:8px;">Sound cues</div>
@@ -1500,14 +1661,10 @@ function renderSettings(){
     <details style="margin-top:14px;">
       <summary style="font-size:13px;color:var(--text3);cursor:pointer;font-weight:600;padding:4px 0;">Advanced</summary>
       <div class="card" style="margin-top:8px;">
-        <div style="font-weight:700;margin-bottom:12px;">Google Sheets Sync</div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Last sync: ${lastSyncDisplay}</div>
-        <input type="text" class="sync-url-input" id="sync-url-input" placeholder="Paste Apps Script URL here" value="${syncUrl}">
-        <div style="display:flex;gap:8px;margin-top:4px;">
-          <button class="btn btn-small btn-primary" onclick="saveSyncUrl()">Save</button>
-          <button class="btn btn-small btn-secondary" onclick="testSync()">Test</button>
-          <button class="btn btn-small btn-secondary" onclick="syncToSheet()">Sync Now</button>
-        </div>
+        <div style="font-weight:700;margin-bottom:8px;">Notion sync</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">${syncStatusText}</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Last synced: ${lastSyncedDisplay}</div>
+        <button class="btn btn-small btn-secondary" onclick="pushUnsynced()">Retry sync</button>
       </div>
       <div class="card" style="margin-top:8px;">
         <div class="setting-row"><div><div style="font-weight:600;">Import data</div><div style="font-size:12px;color:var(--text2);">Restore from a backup</div></div><button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button><input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"></div>
@@ -1518,7 +1675,6 @@ function renderSettings(){
     <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Version</strong>: Train v4 \u00b7 ${s.log.length} sessions</div></div>`;
 }
 function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
-function saveSyncUrl(){ setSyncUrl(document.getElementById('sync-url-input').value.trim()); renderSettings(); updateSyncIndicator(getSyncUrl()?'none':''); }
 function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
 function importData(ev){ const f = ev.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = e=>{ try { const data = JSON.parse(e.target.result); if(data.log && Array.isArray(data.log)){ showModal('Import data?', `Replace current data with ${data.log.length} sessions from the backup?`, [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Import',cls:'btn-primary',action:()=>{ saveState(migrate(data)); hideModal(); renderSettings(); showScreen('home'); }} ]); } else alert('Invalid backup file.'); } catch(err){ alert('Could not read file.'); } }; r.readAsText(f); }
 function confirmResetRotation(){ showModal('Reset rotation?', 'The next session returns to Heavy Rings: Pull. Session history is not changed.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Reset',cls:'btn-danger',action:()=>{ hideModal(); resetRotation(); }} ]); }
@@ -1541,11 +1697,12 @@ function hideModal(){ document.getElementById('modal').classList.remove('visible
 // INIT
 // ===================================================================
 document.addEventListener('DOMContentLoaded', async ()=>{
-  const s = getState();
-  if(getSyncUrl()){
-    if(!s.log.length && !s.activeSession){ await pullFromSheet(); } else { updateSyncIndicator('synced'); }
-  }
   renderHome();
+  // Mirror to Notion in the background: drains pending tombstones and pushes any unsynced
+  // sessions oldest-first (this is what backfills existing history on first launch). Never
+  // blocks the UI; the indicator reflects progress.
+  refreshSyncIndicator();
+  pushUnsynced();
 });
 
 // Re-sync timer display when returning to the app (handles backgrounding/lock).
