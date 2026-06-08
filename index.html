@@ -91,7 +91,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 6;
-const BUILD_ID = 'v6.1-2026-06-05-sync-selfheal';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v6.2-2026-06-08-coming-up';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -731,6 +731,7 @@ function renderFormStation(st){
       <div class="move-detail">${m.detail}</div>
     </div>`).join('');
   body.innerHTML = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Coming up: ${nextFlowItemLabel()}</div>
     <div class="flow-meta"><span class="badge badge-form">Form</span> Screen ${st.screenIdx+1} of ${FORM.screens.length}</div>
     ${screen.cue ? `<div class="flow-cue">${screen.cue}</div>` : ''}
     <div class="flow-title">${screen.title}</div>
@@ -767,7 +768,9 @@ function renderExerciseStation(st){
     return `<div class="${cls}">${label}</div>`;
   }).join('');
 
+  const showLookahead = (AS.phase === 'view' || AS.phase === 'ready' || AS.phase === 'log' || AS.phase === 'work' || AS.phase === 'workPaused');
   const head = `
+    ${showLookahead ? `<div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Coming up: ${nextFlowItemLabel()}</div>` : ''}
     <div class="flow-meta">
       <span class="badge badge-${AS.type.toLowerCase()}">${st.blockLabel}</span>
       Set ${Math.min(AS.setIdx+1, ex.sets)} of ${ex.sets}
@@ -856,6 +859,14 @@ function renderExerciseStation(st){
         <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
       </div>`;
   }
+}
+
+function nextFlowItemLabel(){
+  const flow = currentFlow();
+  const next = flow[AS.cursor + 1];
+  if(!next) return 'Finish';
+  if(next.kind === 'form') return FORM.screens[next.screenIdx].title;
+  return getVariationName(next.exId);
 }
 
 function restNextLabel(st, ex){
@@ -1577,6 +1588,7 @@ function renderSettings(){
         <div><div style="font-weight:600;">Cue sounds</div><div style="font-size:12px;color:var(--text2);">Short tones for timers and saved actions</div></div>
         <button class="btn btn-small ${soundOn?'btn-primary':'btn-secondary'}" onclick="toggleSound()">${soundOn?'On':'Off'}</button>
       </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px;">Audio cues only play when your phone's silent switch is off.</div>
     </div>
     <div class="block-label">Your data</div>
     <div class="card">
@@ -1596,7 +1608,7 @@ function renderSettings(){
         <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
       </div>
     </details>
-    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Build</strong>: ${BUILD_ID} \u00b7 ${s.log.length} sessions</div></div>`;
+    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Build</strong>: ${BUILD_ID} \u00b7 data ${window.TRAIN_DATA_VERSION} \u00b7 ${s.log.length} sessions</div></div>`;
 }
 function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
 function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
