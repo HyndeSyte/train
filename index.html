@@ -78,7 +78,7 @@
 <div class="modal-overlay" id="modal">
   <div class="modal">
     <h3 id="modal-title"></h3>
-    <p id="modal-body"></p>
+    <div id="modal-body" style="font-size:14px; color:var(--text2); margin-bottom:16px;"></div>
     <div class="modal-actions" id="modal-actions"></div>
   </div>
 </div>
@@ -91,7 +91,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 6;
-const BUILD_ID = 'v6.2-2026-06-08-coming-up';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v6.3-2026-06-08-ref-embed';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -1019,25 +1019,47 @@ function skipExercise(){
 // curation pass). Empty string if somehow absent \u2014 callers supply their own fallback.
 function refCue(ex){ return (ex && ex.reference && ex.reference.cue) || ''; }
 
-// Non-blocking reference modal with deterministic per-status degradation (curation pass).
-// status describes readiness only: text (complete, cue only) | pending (cue + "media not
-// added yet", no dead button) | ready (cue + user-initiated "Open reference", no autoplay
-// or mid-session embed) | unavailable (render like text). Media opens in a new tab on tap.
+// Reference modal (v1 curation): cues-first, in-PWA. Renders the standalone form cue, an
+// inline embedded clip when status==='video' (built from mediaType + videoId + start/end;
+// loads paused, no autoplay dependency), a "not loading?" source fallback, engaged muscles
+// as text, and a source label. status: 'text' (cue only, a complete state) | 'video' |
+// 'broken' (degrades to cue + fallback). Muscle-highlight graphics intentionally deferred.
+function buildEmbedUrl(ref){
+  const id = ref.videoId;
+  if(!id) return null;
+  if(ref.mediaType === 'youtube'){
+    let u = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?playsinline=1&rel=0&modestbranding=1';
+    if(ref.start) u += '&start=' + ref.start;
+    if(ref.end) u += '&end=' + ref.end;
+    return u;
+  }
+  if(ref.mediaType === 'vimeo'){
+    let u = 'https://player.vimeo.com/video/' + encodeURIComponent(id) + '?playsinline=1&title=0&byline=0&portrait=0';
+    if(ref.start) u += '#t=' + ref.start + 's';
+    return u;
+  }
+  return null;
+}
 function showRef(exId){
   const ex = EXERCISE_LIBRARY[exId]; if(!ex) return;
   const ref = ex.reference || {};
   const status = ref.status || 'text';
   const cue = refCue(ex) || 'Text cue coming soon.';
   const title = getVariationName(exId);
-  const buttons = [{ text:'Close', cls:'btn-secondary', action:()=>hideModal() }];
-  let body = cue;
-  if(status === 'pending'){
-    body = cue + '\n\nReference media not added yet.';
-  } else if(status === 'ready' && ref.mediaUrl){
-    buttons.unshift({ text:'Open reference', cls:'btn-primary', action:()=>{ hideModal(); try{ window.open(ref.mediaUrl, '_blank', 'noopener'); }catch(e){} } });
+  const embedUrl = (status === 'video') ? buildEmbedUrl(ref) : null;
+  let html = `<div style="font-size:14px;color:var(--text);line-height:1.45;">${cue}</div>`;
+  if(embedUrl){
+    html += `<div style="position:relative;width:100%;padding-bottom:56.25%;margin-top:14px;background:#000;border-radius:8px;overflow:hidden;"><iframe src="${embedUrl}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
+    if(ref.fallbackUrl) html += `<div style="margin-top:8px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Not loading? Open source \u2197</a></div>`;
+    if(ref.sourceLabel) html += `<div style="font-size:11px;color:var(--text3);margin-top:6px;">Source: ${ref.sourceLabel}</div>`;
+  } else if(status === 'broken' && ref.fallbackUrl){
+    html += `<div style="margin-top:10px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Open reference \u2197</a></div>`;
   }
-  // 'text' and 'unavailable' both render as cue + Close (a complete state, no "coming soon").
-  showModal(title, body, buttons);
+  if(Array.isArray(ref.muscles) && ref.muscles.length) html += `<div style="font-size:12px;color:var(--text3);margin-top:14px;">Muscles: ${ref.muscles.join(', ')}</div>`;
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal-actions').innerHTML = '<button class="btn btn-secondary" onclick="hideModal()">Close</button>';
+  document.getElementById('modal').classList.add('visible');
 }
 
 function noteIssue(){
@@ -1627,7 +1649,7 @@ function showModal(title, body, buttons){
   buttons.forEach(b=>{ const el = document.getElementById('mb-'+b.text.replace(/\s/g,'')); if(el) el.onclick = b.action; });
   document.getElementById('modal').classList.add('visible');
 }
-function hideModal(){ document.getElementById('modal').classList.remove('visible'); }
+function hideModal(){ document.getElementById('modal').classList.remove('visible'); var mb = document.getElementById('modal-body'); if(mb) mb.innerHTML = ''; }
 
 // ===================================================================
 // INIT
