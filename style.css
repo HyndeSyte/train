@@ -203,3 +203,5 @@ html, body {
 .modal p { font-size:14px; color:var(--text2); margin-bottom:16px; }
 .modal-actions { display:flex; gap:8px; }
 .modal-actions .btn { flex:1; }
+.modal-actions.stack { flex-direction:column; }
+.modal-actions.stack .btn { width:100%; }
