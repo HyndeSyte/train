@@ -28,7 +28,7 @@
 <div id="screen-session" class="screen">
   <div class="header">
     <button class="header-btn" onclick="confirmStopSession()">&#10005; Stop</button>
-    <h1 id="session-title"></h1>
+    <h1 id="session-title" onclick="showSessionMap()"></h1>
     <div id="session-grip"></div>
   </div>
   <div class="flow-wrap">
@@ -84,14 +84,14 @@
 </div>
 
 <!-- data.js defines window.EXERCISE_LIBRARY, window.FORM, window.SESSION_TEMPLATES; it MUST load before the inline app script below. Keep both classic (no defer/async/module). -->
-<script src="data.js?v=6.2"></script>
+<script src="data.js?v=7.0"></script>
 <script>
 "use strict";
 // ===================================================================
 // SCHEMA VERSION
 // ===================================================================
-const SCHEMA_VERSION = 6;
-const BUILD_ID = 'v6.3-2026-06-08-ref-embed';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const SCHEMA_VERSION = 7;
+const BUILD_ID = 'v7.0-2026-08-16-elastic';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -191,7 +191,47 @@ function migrate(state){
     });
   }
   if(state.schemaVersion < 6) state.schemaVersion = 6;
+
+  // ---- v7 ELASTIC SESSIONS (2026-08-16) ----
+  // Backfill entry.coreComplete for history (null when the template is retired/unknown or
+  // the entry predates performed[]), then re-run the scoreboard replay ONCE under the v3
+  // gate: logged quality anchor work scores regardless of session end-state. This is the
+  // migration that admits the 2026-07-02 stopped RPush (8/8/8/8 = 32 = owned top):
+  // RPush steps to +5 lb and re-baselines — an EXPECTED, test-fixtured outcome.
+  (state.log || []).forEach((e)=>{ if(e && !('coreComplete' in e)) e.coreComplete = entryCoreComplete(e); });
+  if(state.progressionEngineVersion < 3){
+    state.progressionEngineVersion = 3;
+    rebuildAnchorProgress(state);
+  }
+  if(state.schemaVersion < 7) state.schemaVersion = 7;
   return state;
+}
+
+// ===================================================================
+// CORE GATE (v7 elastic sessions)
+// ===================================================================
+// Gate slots for a session type: every exercise in a gate:true block, addressed by the
+// same slotId vocabulary buildFlow/performed[] use. Null when the template is unknown
+// (retired types) or defines no gate.
+function templateGateSlots(sessionType){
+  const t = SESSION_TEMPLATES[sessionType]; if(!t) return null;
+  const slots = [];
+  t.blocks.forEach(b=>{ if(b.gate) b.exercises.forEach(exId=> slots.push({ slotId: sessionType+'_'+b.type+'_'+exId, exId })); });
+  return slots.length ? slots : null;
+}
+// Core gate for a LOG ENTRY (historical or fresh): every gate exercise has all sets
+// logged with reps > 0 in performed[] — the same completeness predicate the scoring
+// engine uses. Returns null (unknown, not false) for pre-engine or retired-type entries.
+function entryCoreComplete(entry){
+  const slots = entry && templateGateSlots(entry.sessionType);
+  if(!slots || !Array.isArray(entry.performed)) return null;
+  return slots.every(g=>{
+    const p = entry.performed.find(x=> x.slotId === g.slotId && !x.skipped);
+    if(!p) return false;
+    const ex = EXERCISE_LIBRARY[g.exId]; if(!ex) return false;
+    const done = (p.reps || []).filter(r=> typeof r === 'number' && r > 0);
+    return done.length >= ex.sets;
+  });
 }
 
 // Stable per-session id. crypto.randomUUID where available; otherwise a sufficient fallback
@@ -356,16 +396,16 @@ function applyAnchorProgressionV2(next, entry){
 // only the copy is warmer/clearer. Chunk 3.
 function anchorVerdict(prog){
   if(!prog) return '';
-  // Same branch logic as before (no scoring change) \u2014 warmer post-session copy.
-  if(prog.steppedUp) return `You owned the top. Load goes up to +${prog.externalLoad||LOAD_STEP_LB}${prog.loadUnit||'lb'} \u2014 next time just set your new baseline.`;
+  // Same branch logic as before (no scoring change) — warmer post-session copy.
+  if(prog.steppedUp) return `You owned the top. Load goes up to +${prog.externalLoad||LOAD_STEP_LB}${prog.loadUnit||'lb'} — next time just set your new baseline.`;
   if(prog.creditedQualityReps === null) return 'Fresh load. First session sets your baseline, no target to beat.';
   const prev = prog.previousCreditedQualityReps;
   if(typeof prev !== 'number') return `Baseline locked in at ${prog.lastRawQualityReps}. Now we climb.`;
   const gain = prog.creditedQualityReps - prev;
   if(gain > 0) return prog.creditCapped
-    ? `Huge day \u2014 banked +${gain} (capped at +${WEEKLY_CREDIT_CAP}/session so the target stays honest).`
+    ? `Huge day — banked +${gain} (capped at +${WEEKLY_CREDIT_CAP}/session so the target stays honest).`
     : `+${gain} rep${gain===1?'':'s'} banked. That counts.`;
-  if(prog.lastRawQualityReps >= prev) return 'Matched last time \u2014 holding ground is progress on a hard lift.';
+  if(prog.lastRawQualityReps >= prev) return 'Matched last time — holding ground is progress on a hard lift.';
   return 'Off your best today, but your banked total holds. No ground lost.';
 }
 
@@ -373,12 +413,24 @@ function anchorVerdict(prog){
 // VOLUME
 // ===================================================================
 function estimateDuration(type){
-  const t = SESSION_TEMPLATES[type]; let sec = 7*60; // Form ~7 min
+  const t = SESSION_TEMPLATES[type]; let sec = t.noForm ? 60 : 7*60; // Form ~7 min
+  if(t.activation) sec += 90;
   t.blocks.forEach(b=> b.exercises.forEach(exId=>{
     const ex = EXERCISE_LIBRARY[exId];
     const work = isDurationUnit(ex.unit) ? ex.repRange[1] : 30;
     sec += ex.sets * (work + REST_TIMES[b.type]);
   }));
+  return Math.round(sec/60);
+}
+// Core-only estimate — the honest "what does today ask of me" number.
+function estimateCoreDuration(type){
+  const t = SESSION_TEMPLATES[type]; let sec = t.noForm ? 60 : 7*60;
+  if(t.activation) sec += 90;
+  t.blocks.forEach(b=>{ if(b.core || b.gate) b.exercises.forEach(exId=>{
+    const ex = EXERCISE_LIBRARY[exId];
+    const work = isDurationUnit(ex.unit) ? ex.repRange[1] : 30;
+    sec += ex.sets * (work + REST_TIMES[b.type]);
+  }); });
   return Math.round(sec/60);
 }
 
@@ -445,6 +497,7 @@ function buildSyncPayload(entry){
     durationMin: typeof entry.duration === 'number' ? entry.duration : null,
     overrideUsed: !!entry.overrideUsed,
     sessionNote: entry.notes || '',
+    coreComplete: (typeof entry.coreComplete === 'boolean') ? entry.coreComplete : null,
     issueCount: issues.length,
     issueFlags: [...new Set(issues.map(i => i.exId).filter(Boolean))],
     attentionFlag: !!entry.attentionFlag,
@@ -598,12 +651,44 @@ let AS = null; // in-memory mirror of activeSession
 function buildFlow(type){
   const t = SESSION_TEMPLATES[type];
   const flow = [];
-  FORM.screens.forEach((s,i)=> flow.push({ kind:'form', uid:'form-'+s.id, screenIdx:i }));
-  t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label, slotId: type+'_'+block.type+'_'+exId, progressionType: block.progressionType || 'loose' })));
+  if(!t.noForm) FORM.screens.forEach((s,i)=> flow.push({ kind:'form', uid:'form-'+s.id, screenIdx:i }));
+  if(t.activation) flow.push({ kind:'activation', uid:'activation' });
+  t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label, core: !!(block.core || block.gate), gate: !!block.gate, slotId: type+'_'+block.type+'_'+exId, progressionType: block.progressionType || 'loose' })));
   return flow;
 }
 
-function persistAS(){ const s = getState(); s.activeSession = AS; saveState(s); }
+// ---- ACTIVE-TIME CLOCK (v7): duration is accumulated engaged time, never wall-clock
+// span. Gaps beyond the idle cap (backgrounded, left) don't count; Park freezes the
+// clock entirely. Kills the multi-day "4,256 min" duration class at the source.
+const IDLE_GAP_CAP_MS = 10*60*1000;
+function markActive(){
+  if(!AS || AS.parkedAt) return;
+  const now = Date.now();
+  if(typeof AS.activeMs !== 'number') AS.activeMs = 0;
+  if(AS.lastActiveAt) AS.activeMs += Math.min(now - AS.lastActiveAt, IDLE_GAP_CAP_MS);
+  AS.lastActiveAt = now;
+}
+function sessionActiveMinutes(){
+  markActive();
+  if(typeof AS.activeMs === 'number') return Math.max(1, Math.round(AS.activeMs/60000));
+  return Math.max(1, Math.round((Date.now() - AS.startTime)/60000)); // legacy in-flight session
+}
+// Core gate for the LIVE session — same predicate as entryCoreComplete, read from records.
+function liveCoreComplete(){
+  if(!AS) return false;
+  const slots = templateGateSlots(AS.type); if(!slots) return false;
+  const flow = currentFlow();
+  return slots.every(g=>{
+    const st = flow.find(x=> x.kind === 'exercise' && x.slotId === g.slotId); if(!st) return false;
+    const rec = AS.records[st.uid]; const ex = EXERCISE_LIBRARY[g.exId];
+    if(!rec || !ex) return false;
+    let done = 0;
+    rec.setStatus.forEach((s,i)=>{ if(s === 'done' && rec.sets[i] > 0) done++; });
+    return done >= ex.sets;
+  });
+}
+
+function persistAS(){ markActive(); const s = getState(); s.activeSession = AS; saveState(s); }
 
 function startSession(type){
   unlockAudio();
@@ -611,6 +696,7 @@ function startSession(type){
   AS = {
     schemaVersion: SCHEMA_VERSION,
     type, startTime: Date.now(),
+    activeMs: 0, lastActiveAt: Date.now(), coreForkShown: false,
     cursor: 0, phase: 'view', setIdx: 0,
     timerEnd: null, timerKind: null,
     records: {}, sessionNote: '', issues: []
@@ -620,7 +706,7 @@ function startSession(type){
       const ex = EXERCISE_LIBRARY[st.exId];
       AS.records[st.uid] = { kind:'exercise', exId:st.exId, sets:new Array(ex.sets).fill(0), setStatus:new Array(ex.sets).fill('pending'), status:'pending', issueFlag:'none', note:'', quality:'unknown', painFree:'unknown' };
     } else {
-      AS.records[st.uid] = { kind:'form', status:'pending' };
+      AS.records[st.uid] = { kind: st.kind, status:'pending' };
     }
   });
   persistAS();
@@ -631,6 +717,11 @@ function resumeSession(){
   const s = getState();
   if(!s.activeSession){ renderHome(); return; }
   AS = s.activeSession;
+  // Un-park: clear the bound, restart the clock. Frozen timers stay paused — the user
+  // restarts them deliberately (no ambush).
+  if(AS.parkedAt){ delete AS.parkedAt; delete AS.parkExpiresAt; }
+  if(typeof AS.activeMs !== 'number') AS.activeMs = 0;
+  AS.lastActiveAt = Date.now();
   // Reconcile a timer that expired while the app was closed. Cold resume never
   // fires a cue (GO/RELEASE) — the user is already looking at the resume state,
   // so surprise audio on page load would be worse than silence.
@@ -714,11 +805,96 @@ function renderProgressBar(){
 function renderStation(){
   if(!AS){ showScreen('home'); return; }
   const flow = currentFlow();
+  if(AS.phase === 'coreFork'){ renderCoreFork(); return; }
   if(AS.cursor >= flow.length){ renderCompletion(); return; }
   renderProgressBar();
   const st = flow[AS.cursor];
   if(st.kind === 'form') renderFormStation(st);
+  else if(st.kind === 'activation') renderActivationStation(st);
   else renderExerciseStation(st);
+}
+
+// ---- CORE FORK (v7 elastic sessions) ----
+// Shown once, at the moment the core gate is earned with extension work remaining.
+// Primary = Finish: Core IS the completed session (red-team Major 2 — the primary action
+// matches the declared success unit; extensions are a genuine option, not a debt).
+function maybeEnterCoreFork(){
+  if(!AS || AS.coreForkShown) return false;
+  const flow = currentFlow();
+  const lastCoreIdx = flow.reduce((acc,st,i)=> st.core ? i : acc, -1);
+  if(lastCoreIdx === -1) return false;
+  if(AS.cursor <= lastCoreIdx) return false;   // still inside the core path
+  if(AS.cursor >= flow.length) return false;   // nothing after core -> normal completion
+  if(!liveCoreComplete()) return false;        // gate not earned (e.g. skipped anchor sets)
+  AS.coreForkShown = true;
+  AS.phase = 'coreFork';
+  return true;
+}
+function renderCoreFork(){
+  renderProgressBar();
+  document.getElementById('flow-body').innerHTML = `
+    <div class="flow-meta"><span class="badge badge-${AS.type.toLowerCase()}">${AS.type}</span> Core</div>
+    <div class="flow-title">Core complete.</div>
+    <div class="flow-sub">The core work is done — this counts as a completed session either way.</div>`;
+  document.getElementById('flow-foot').innerHTML = `
+    <button class="btn btn-primary" onclick="finishAtFork()">Finish</button>
+    <div class="flow-actions-row">
+      <button class="mini-btn" onclick="keepGoingFromFork()">Keep going</button>
+      <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+    </div>`;
+}
+function finishAtFork(){ unlockAudio(); AS.phase = 'view'; AS.cursor = currentFlow().length; persistAS(); renderStation(); }
+function keepGoingFromFork(){ unlockAudio(); AS.phase = 'view'; persistAS(); renderStation(); }
+
+// ---- ACTIVATION STATION (upper sessions; one screen after the Form) ----
+// Capacity framing, advance-only, unlogged — same ritual class as the Form.
+function renderActivationStation(st){
+  renderProgressBar();
+  const act = SESSION_TEMPLATES[AS.type].activation || { title:'Prep', movements:[] };
+  const body = document.getElementById('flow-body');
+  body.innerHTML = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Coming up: ${nextFlowItemLabel()}</div>
+    <div class="flow-meta"><span class="badge badge-form">Prep</span></div>
+    ${act.cue ? `<div class="flow-cue">${act.cue}</div>` : ''}
+    <div class="flow-title">${act.title}</div>
+    <div style="margin-top:14px;">${act.movements.map(m=>`<div class="move-block"><div class="move-name">${m.name}</div><div class="move-detail">${m.detail}</div></div>`).join('')}</div>`;
+  document.getElementById('flow-foot').innerHTML = `
+    <button class="btn btn-primary" onclick="advanceForm()">Begin Training</button>
+    <div class="flow-actions-row">
+      <button class="mini-btn" onclick="skipFormScreen()">Skip this step</button>
+      <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
+    </div>`;
+}
+
+// ---- SESSION MAP (v7): block-level peek via the header title. Read-only, closes like
+// any modal, never an exercise scroll-list — blocks + position only.
+function showSessionMap(){
+  if(!AS) return;
+  const flow = currentFlow();
+  const t = SESSION_TEMPLATES[AS.type];
+  const groups = [];
+  flow.forEach((st,i)=>{
+    const label = st.kind === 'form' ? 'Form' : st.kind === 'activation' ? ((t.activation||{}).title || 'Prep') : st.blockLabel;
+    let g = groups[groups.length-1];
+    if(!g || g.label !== label){ g = { label, items:[] }; groups.push(g); }
+    g.items.push({ st, i });
+  });
+  const rows = groups.map(g=>{
+    const doneAll = g.items.every(x=> x.i < AS.cursor);
+    const current = g.items.some(x=> x.i === AS.cursor);
+    const mark = doneAll ? '&#10003;' : current ? '&#9656;' : '&middot;';
+    let sub = '';
+    if(current){
+      const cur = g.items.find(x=> x.i === AS.cursor);
+      if(cur && cur.st.kind === 'exercise'){ const ex = EXERCISE_LIBRARY[cur.st.exId]; sub = ` — ${ex.name}, set ${Math.min(AS.setIdx+1, ex.sets)} of ${ex.sets}`; }
+    }
+    const color = doneAll ? 'var(--text3)' : current ? 'var(--text)' : 'var(--text2)';
+    const exCount = g.items.filter(x=> x.st.kind === 'exercise').length;
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;color:${color};">${mark} ${g.label}${sub}${exCount ? `<span style="color:var(--text3);font-size:12px;"> &middot; ${exCount} exercise${exCount===1?'':'s'}</span>` : ''}</div>`;
+  }).join('');
+  showModal('', '', [ { text:'Close', cls:'btn-secondary', action:()=>hideModal() } ]);
+  document.getElementById('modal-title').textContent = t.name;
+  document.getElementById('modal-body').innerHTML = rows;
 }
 
 // ---- FORM STATION ----
@@ -737,7 +913,9 @@ function renderFormStation(st){
     <div class="flow-title">${screen.title}</div>
     <div style="margin-top:14px;">${movesHtml}</div>`;
   const foot = document.getElementById('flow-foot');
-  const isLast = st.screenIdx === FORM.screens.length - 1;
+  // 'Begin Training' only when the NEXT item is real work (activation keeps 'Next').
+  const nxt = currentFlow()[AS.cursor + 1];
+  const isLast = !nxt || (nxt.kind !== 'form' && nxt.kind !== 'activation');
   foot.innerHTML = `
     <button class="btn btn-primary" onclick="advanceForm()">${isLast ? 'Begin Training' : 'Next'}</button>
     <div class="flow-actions-row">
@@ -764,7 +942,7 @@ function renderExerciseStation(st){
     if(rec.setStatus[i] === 'skipped') cls += ' skipped';
     else if(rec.setStatus[i] === 'done'){ cls += (v >= top && v > 0) ? ' hit' : ' done'; }
     if(i === AS.setIdx && AS.phase !== 'rest') cls += ' current';
-    const label = rec.setStatus[i] === 'skipped' ? '\u2013' : (rec.setStatus[i] === 'done' ? v : (i+1));
+    const label = rec.setStatus[i] === 'skipped' ? '–' : (rec.setStatus[i] === 'done' ? v : (i+1));
     return `<div class="${cls}">${label}</div>`;
   }).join('');
 
@@ -776,14 +954,14 @@ function renderExerciseStation(st){
       Set ${Math.min(AS.setIdx+1, ex.sets)} of ${ex.sets}
     </div>
     <div class="flow-title">${varName}</div>
-    <div class="flow-sub">${ex.name} &middot; target ${ex.repRange[0]}\u2013${ex.repRange[1]} ${ex.unit}</div>
+    <div class="flow-sub">${ex.name} &middot; target ${ex.repRange[0]}–${ex.repRange[1]} ${ex.unit}</div>
     <div class="set-pills">${pills}</div>`;
 
   if(AS.phase === 'restComplete'){
     // Terminal rest state: timer hit zero, GO already played. Wait for the user.
     body.innerHTML = head + `
       <div class="statebig-rc">Rest complete</div>
-      <div class="exercise-note" style="text-align:center;">Next: ${restNextLabel(st, ex)}</div>`;
+      <div class="exercise-note" style="text-align:center;">Next: ${restNextLabel(st, ex)}</div>${thenLine(ex)}`;
     foot.innerHTML = `
       <button class="btn btn-primary" onclick="startNextAfterRest()">Start Next Set</button>
       <div class="flow-actions-row">
@@ -800,9 +978,9 @@ function renderExerciseStation(st){
     body.innerHTML = head + `
       <div class="timer-phase">${paused ? 'Rest paused' : 'Rest'}</div>
       <div class="timer-big rest" id="timer-display">${paused ? fmtRemaining() : '--'}</div>
-      <div class="exercise-note">Next: ${restNextLabel(st, ex)}</div>`;
+      <div class="exercise-note">Next: ${restNextLabel(st, ex)}</div>${thenLine(ex)}`;
     foot.innerHTML = `
-      <button class="btn btn-primary" onclick="endRestNow()">Skip rest \u2192 Next</button>
+      <button class="btn btn-primary" onclick="endRestNow()">Skip rest → Next</button>
       <div class="flow-actions-row">
         <button class="mini-btn" onclick="${paused ? 'resumeTimer()' : 'pauseTimer()'}">${paused ? 'Resume' : 'Pause'}</button>
         <button class="mini-btn" onclick="noteIssue()">Note issue</button>
@@ -847,7 +1025,7 @@ function renderExerciseStation(st){
     // rep set ready/log
     const cur = rec.sets[AS.setIdx] || '';
     body.innerHTML = head + `
-      <div class="target-pill">Target ${ex.repRange[0]}\u2013${ex.repRange[1]} ${ex.unit}</div>
+      <div class="target-pill">Target ${ex.repRange[0]}–${ex.repRange[1]} ${ex.unit}</div>
       <input class="rep-input-big" id="rep-input" type="number" inputmode="numeric" pattern="[0-9]*" value="${cur}" placeholder="0" onfocus="this.select()">
       <div class="exercise-note">${refCue(ex)}</div>
       <button class="ref-btn" onclick="showRef('${st.exId}')">&#9654; Reference</button>`;
@@ -866,17 +1044,24 @@ function nextFlowItemLabel(){
   const next = flow[AS.cursor + 1];
   if(!next) return 'Finish';
   if(next.kind === 'form') return FORM.screens[next.screenIdx].title;
+  if(next.kind === 'activation') return (SESSION_TEMPLATES[AS.type].activation || {}).title || 'Prep';
   return getVariationName(next.exId);
 }
 
 function restNextLabel(st, ex){
   // What comes after this rest?
-  if(AS.setIdx + 1 < ex.sets) return `${getVariationName(st.exId)} \u2014 set ${AS.setIdx + 2}`;
+  if(AS.setIdx + 1 < ex.sets) return `${getVariationName(st.exId)} — set ${AS.setIdx + 2}`;
   const flow = currentFlow();
   const next = flow[AS.cursor + 1];
   if(!next) return 'Finish session';
-  if(next.kind === 'form') return `Form \u2014 ${FORM.screens[next.screenIdx].title}`;
+  if(next.kind === 'form') return `Form — ${FORM.screens[next.screenIdx].title}`;
+  if(next.kind === 'activation') return (SESSION_TEMPLATES[AS.type].activation || {}).title || 'Prep';
   return getVariationName(next.exId);
+}
+// The exercise AFTER this one — shown during between-set rests (2026-06-03 note).
+function thenLine(ex){
+  if(AS.setIdx + 1 >= ex.sets) return '';
+  return `<div style="font-size:12px;color:var(--text3);text-align:center;margin-top:4px;">Then: ${nextFlowItemLabel()}</div>`;
 }
 
 // ---- rep set ----
@@ -978,6 +1163,7 @@ function advanceAfterSet(){
   } else {
     rec.status = rec.setStatus.every(s=>s==='skipped') ? 'skipped' : 'done';
     AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
+    maybeEnterCoreFork();
   }
   persistAS();
   renderStation();
@@ -1011,12 +1197,13 @@ function skipExercise(){
   rec.status = rec.setStatus.some(s=>s==='done') ? 'done' : 'skipped';
   clearTimerState();
   AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
+  maybeEnterCoreFork();
   persistAS();
   renderStation();
 }
 
 // The exercise's text cue, read from the reference schema (note field retired in the
-// curation pass). Empty string if somehow absent \u2014 callers supply their own fallback.
+// curation pass). Empty string if somehow absent — callers supply their own fallback.
 function refCue(ex){ return (ex && ex.reference && ex.reference.cue) || ''; }
 
 // Reference modal (v1 curation): cues-first, in-PWA. Renders the standalone form cue, an
@@ -1050,10 +1237,10 @@ function showRef(exId){
   let html = `<div style="font-size:14px;color:var(--text);line-height:1.45;">${cue}</div>`;
   if(embedUrl){
     html += `<div style="position:relative;width:100%;padding-bottom:56.25%;margin-top:14px;background:#000;border-radius:8px;overflow:hidden;"><iframe src="${embedUrl}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
-    if(ref.fallbackUrl) html += `<div style="margin-top:8px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Not loading? Open source \u2197</a></div>`;
+    if(ref.fallbackUrl) html += `<div style="margin-top:8px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Not loading? Open source ↗</a></div>`;
     if(ref.sourceLabel) html += `<div style="font-size:11px;color:var(--text3);margin-top:6px;">Source: ${ref.sourceLabel}</div>`;
   } else if(status === 'broken' && ref.fallbackUrl){
-    html += `<div style="margin-top:10px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Open reference \u2197</a></div>`;
+    html += `<div style="margin-top:10px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Open reference ↗</a></div>`;
   }
   if(Array.isArray(ref.muscles) && ref.muscles.length) html += `<div style="font-size:12px;color:var(--text3);margin-top:14px;">Muscles: ${ref.muscles.join(', ')}</div>`;
   document.getElementById('modal-title').textContent = title;
@@ -1093,18 +1280,53 @@ function startTimerLoop(){
 }
 function stopTimerLoop(){ if(timerRAF){ clearTimeout(timerRAF); timerRAF = null; } }
 
-// ---- STOP / COMPLETE ----
+// ---- LEAVE / PARK / STOP / COMPLETE ----
 function confirmStopSession(){
-  // Three-way stop modal: keep going / save what's done as a Partial / discard entirely.
-  // Discard reuses the same path as Home's Resume-card Discard so behavior never drifts.
-  // Labels kept short so three flex:1 buttons fit comfortably on a 360px-wide screen.
-  showModal('Stop session?',
-    'Save what you\u2019ve done as a partial session, or discard the whole session with no log entry?',
+  // v7 leave sheet: Park primary (resumable, bounded, self-clearing); End & save = Stopped
+  // (still counts + scores if core done); Discard destroys with no log entry.
+  showModal('Leave session?',
+    'Park it and pick up where you left off — parks clear after tomorrow. Or end it now and save what’s done.',
     [
-      { text:'Cancel',       cls:'btn-secondary', action:()=>hideModal() },
-      { text:'Save partial', cls:'btn-secondary', action:()=>{ hideModal(); finalizeSession('stopped'); } },
-      { text:'Discard',      cls:'btn-danger',    action:()=>{ hideModal(); discardCurrentSession(); } }
-    ]);
+      { text:'Park through tomorrow', cls:'btn-primary',   action:()=>{ hideModal(); parkSession(); } },
+      { text:'End & save',            cls:'btn-secondary', action:()=>{ hideModal(); finalizeSession('stopped'); } },
+      { text:'Discard',               cls:'btn-danger',    action:()=>{ hideModal(); discardCurrentSession(); } },
+      { text:'Cancel',                cls:'btn-secondary', action:()=>hideModal() }
+    ], { stack:true });
+}
+
+// ---- PARK (v7): thin metadata on the already-resumable activeSession. Atomically
+// freezes any live timer into the existing paused representation (timerRemaining), so a
+// hold can never "complete" while parked. The bound is fixed from parkedAt — end of the
+// FOLLOWING local day — and reopening the app never slides it. Expiry is lazy (no
+// scheduler, no notification): enforced on the first Home render past the bound.
+function endOfNextDay(ts){ const d = new Date(ts); d.setHours(0,0,0,0); d.setDate(d.getDate()+2); return d.getTime(); }
+function parkSession(){
+  if(!AS) return;
+  stopTimerLoop();
+  if(AS.timerEnd){
+    AS.timerRemaining = Math.max(0, AS.timerEnd - Date.now());
+    AS.timerEnd = null;
+    AS.phase = (AS.phase === 'rest') ? 'restPaused' : (AS.phase === 'work') ? 'workPaused' : AS.phase;
+  }
+  markActive();                       // bank the segment, THEN freeze the clock
+  AS.lastActiveAt = null;
+  AS.parkedAt = Date.now();
+  AS.parkExpiresAt = endOfNextDay(AS.parkedAt);
+  persistAS();
+  AS = null;
+  showScreen('home');
+}
+// Finalize an expired park as-is (Completed iff core done), quietly. Returns true if it
+// finalized — that path re-renders Home; the caller must stop rendering stale state.
+function expireParkIfDue(){
+  const s = getState();
+  const a = s.activeSession;
+  if(a && a.parkedAt && a.parkExpiresAt && Date.now() > a.parkExpiresAt){
+    AS = a;
+    finalizeSession('parkExpired');
+    return true;
+  }
+  return false;
 }
 
 // Single source of truth for "destroy the in-progress session without logging".
@@ -1124,15 +1346,15 @@ function renderCompletion(){
   renderProgressBar();
   const flow = currentFlow();
   let done=0, skipped=0, exTotal=0;
-  flow.forEach(st=>{ if(st.kind==='exercise'){ exTotal++; const r=AS.records[st.uid]; if(r.status==='skipped' || r.setStatus.every(s=>s==='skipped')) skipped++; else done++; } });
+  flow.forEach(st=>{ if(st.kind==='exercise'){ exTotal++; const r=AS.records[st.uid]; if(r.setStatus && r.setStatus.some(s=>s==='done')) done++; else skipped++; } });
   const body = document.getElementById('flow-body');
   body.innerHTML = `
     <div class="flow-meta"><span class="badge badge-${AS.type.toLowerCase()}">${AS.type}</span> Session review</div>
     <div class="flow-title">Nice work.</div>
-    <div class="flow-sub">${done} completed &middot; ${skipped} skipped of ${exTotal} exercises. The Form is done too.</div>
+    <div class="flow-sub">${done} completed &middot; ${skipped} skipped of ${exTotal} exercises.${SESSION_TEMPLATES[AS.type].noForm ? '' : ' The Form is done too.'}</div>
     <div style="margin-top:14px;">
       <div class="move-name" style="font-size:14px;margin-bottom:8px;">Anything to note? (optional)</div>
-      <textarea class="note-field" id="session-note" rows="3" placeholder="How it felt, anything to remember\u2026">${AS.sessionNote||''}</textarea>
+      <textarea class="note-field" id="session-note" rows="3" placeholder="How it felt, anything to remember…">${AS.sessionNote||''}</textarea>
       <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--text2);cursor:pointer;">
         <input type="checkbox" id="session-attention" ${AS.attentionFlag?'checked':''} style="width:18px;height:18px;flex:none;">
         Flag this session for review
@@ -1157,6 +1379,7 @@ function finalizeSession(statusReason){
   try {
     const flow = currentFlow();
     const today = new Date().toISOString().split('T')[0];
+    const gc = liveCoreComplete();   // the v7 core gate, computed while records are live
 
     // Build the slot-aware performed/skipped records from flow metadata (added in commit 1).
     // performed[] preserves slotId + exId + role + progressionType + reps for each exercise
@@ -1184,12 +1407,15 @@ function finalizeSession(statusReason){
       exerciseMeta[st.exId] = { setStatus:rec.setStatus, issueFlag:rec.issueFlag, note:rec.note||'', quality:rec.quality, painFree:rec.painFree };
     });
 
+    // v7 status: Completed = core done (extension tail optional, never demotes). Stopped
+    // stays a DISTINCT intent status; coreComplete is the orthogonal counting gate.
     let sessionStatus;
     if(statusReason === 'stopped') sessionStatus = 'stopped';
-    else sessionStatus = anySkipped ? 'partial' : 'completed';
+    else if(statusReason === 'parkExpired') sessionStatus = gc ? 'completed' : 'partial';
+    else sessionStatus = gc ? 'completed' : (anySkipped ? 'partial' : 'completed');
 
     const entry = {
-      date: today, sessionType: AS.type, logSchemaVersion: 2,
+      date: today, sessionType: AS.type, logSchemaVersion: 2, coreComplete: gc,
       sessionId: genSessionId(),
       completedAt: new Date().toISOString(),
       attentionFlag: !!AS.attentionFlag,
@@ -1198,20 +1424,21 @@ function finalizeSession(statusReason){
       sessionStatus, exerciseMeta,
       issues: AS.issues.length ? AS.issues : undefined,
       notes: AS.sessionNote || undefined,
-      duration: Math.round((Date.now() - AS.startTime)/60000)
+      duration: sessionActiveMinutes()
     };
 
     // Build next state in memory (do not mutate live state until validated).
     const next = getState();
     entry.sessionSequence = next.nextSessionSequence++;
-    entry.overrideUsed = entry.sessionType !== getDefaultSessionType(next);
+    entry.overrideUsed = ROTATION.indexOf(entry.sessionType) !== -1 && entry.sessionType !== getDefaultSessionType(next);
     entry.notionSync = { status:'pending', lastAttemptAt:null, syncedAt:null, notionPageId:null, error:null };
     next.log.push(entry);
 
-    // ANCHOR SCORING (v2): total-quality-reps engine, heavy anchors only. Builder work
-    // never scores (keyed by slotId+progressionType, not exId). Skipped on a stopped session.
-    if(statusReason !== 'stopped'){
-      applyAnchorProgressionV2(next, entry);
+    // ANCHOR SCORING (v3 gate): end-state no longer gates scoring. The complete-anchor
+    // predicate is UNCHANGED and remains the only quality gate — "one great set, then
+    // stop" still earns nothing. Builder work never scores.
+    applyAnchorProgressionV2(next, entry);
+    {
       // Snapshot the heavy-anchor scoreboard for this session so the Notion mirror's credited
       // figures stay correct even when this entry is re-pushed after later sessions move the
       // running scoreboard. Performance fields (reps, raw total) are re-derived at send time.
@@ -1228,18 +1455,15 @@ function finalizeSession(statusReason){
       }
     }
 
-    // Rotation advance - Option A (session-picker override, 2026-05-30):
-    //   - completed: advance from the LOGGED sessionType (entry.sessionType),
-    //     not the override field and not the current rotationIndex+1. The log
-    //     is the source of truth for what actually ran (GPT blocker 1).
-    //   - stopped: rotation UNCHANGED (current Option A behavior preserved).
-    // In both cases, any active picker override is cleared (act was recorded).
-    // Discard never reaches this function, so override persists across discard.
-    if(statusReason === 'completed'){
-      const completedIdx = ROTATION.indexOf(entry.sessionType);
-      if(completedIdx !== -1) next.rotationIndex = (completedIdx + 1) % ROTATION.length;
+    // Rotation + override (v7 invariant, red-teamed 2026-08-16): advance iff CORE achieved
+    // and rotation type, from the LOGGED sessionType (GPT blocker 1). Override is consumed
+    // iff the selected rotation session achieved core — pre-core stop/park-expiry
+    // PRESERVES it. Floor (MVS) never advances or consumes. Discard never reaches here.
+    const rotIdx = ROTATION.indexOf(entry.sessionType);
+    if(entry.coreComplete && rotIdx !== -1){
+      next.rotationIndex = (rotIdx + 1) % ROTATION.length;
+      next.nextSessionOverride = null;
     }
-    next.nextSessionOverride = null;
 
     next.activeSession = null;
 
@@ -1258,7 +1482,7 @@ function finalizeSession(statusReason){
   } catch(err){
     // Do NOT save, do NOT advance rotation, do NOT null AS — leave the session resumable.
     console.error('finalizeSession aborted; no state saved', err);
-    showModal('Could not finish session', 'Something went wrong saving this session, so nothing was changed. Your in-progress session is still here \u2014 try finishing again.', [
+    showModal('Could not finish session', 'Something went wrong saving this session, so nothing was changed. Your in-progress session is still here — try finishing again.', [
       { text:'OK', cls:'btn-secondary', action:()=>hideModal() }
     ]);
   }
@@ -1286,6 +1510,8 @@ function showScreen(name){
 // HOME
 // ===================================================================
 function renderHome(){
+  // Lazy park expiry — if it finalized, Home re-rendered with fresh state; stop here.
+  if(expireParkIfDue()) return;
   const s = getState();
   // Override-aware resolution: Pick -> setSessionOverride() stored a valid
   // SESSION_TEMPLATES key; otherwise fall back to the rotation default.
@@ -1299,11 +1525,22 @@ function renderHome(){
   // RESUME GUARD: an active session takes over Home entirely. No start path,
   // no Today card, no promotions competing with the in-progress decision.
   if(s.activeSession){
-    const rt = SESSION_TEMPLATES[s.activeSession.type];
-    document.getElementById('home-content').innerHTML = `
+    const a = s.activeSession;
+    const rt = SESSION_TEMPLATES[a.type];
+    const rtName = rt ? rt.name : a.type;
+    // Parked card: factual, never interrogative.
+    document.getElementById('home-content').innerHTML = a.parkedAt ? `
+      <div class="promo-card">
+        <h3>Parked &middot; ${a.type}</h3>
+        <p>${rtName} — saved where you left it. Parks clear after tomorrow.</p>
+        <div class="promo-actions">
+          <button class="btn btn-small btn-primary" onclick="resumeSession()">Resume</button>
+          <button class="btn btn-small btn-secondary" onclick="discardActiveSession()">Discard</button>
+        </div>
+      </div>` : `
       <div class="promo-card">
         <h3>&#9656; Session in progress</h3>
-        <p>${rt ? rt.name : s.activeSession.type} \u2014 pick up where you left off.</p>
+        <p>${rtName} — pick up where you left off.</p>
         <div class="promo-actions">
           <button class="btn btn-small btn-primary" onclick="resumeSession()">Resume Session</button>
           <button class="btn btn-small btn-secondary" onclick="discardActiveSession()">Discard Session</button>
@@ -1330,11 +1567,12 @@ function renderHome(){
       <div class="session-name">${t.name}</div>
       <button class="btn btn-primary" onclick="startSession('${nextType}')">Start Today's Session</button>
       <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px;line-height:1.6;">
-        Opens with the Form
+        Opens with the Form &middot; core ~${estimateCoreDuration(nextType)} min
         ${overridden
           ? `<br>Picked &middot; Default: ${SESSION_TEMPLATES[defaultType].name} &middot; <a href="javascript:void(0)" onclick="clearSessionOverride()" style="color:var(--text2);text-decoration:underline;">Reset to default</a>`
           : `<br><a href="javascript:void(0)" onclick="openSessionPicker()" style="color:var(--text2);text-decoration:underline;">Pick a different day</a>`
         }
+        <br><a href="javascript:void(0)" onclick="startSession('MVS')" style="color:var(--text2);text-decoration:underline;">Short on time? Floor day (~${estimateDuration('MVS')} min)</a>
       </div>
     </div>
     ${s.log.length ? renderLastSession(s) : ''}
@@ -1354,10 +1592,12 @@ function renderLastSession(s){
 
 function renderSessionPreview(type){
   const t = SESSION_TEMPLATES[type];
-  let inner = `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">Form</div>
-    <div style="font-size:14px;padding:2px 0;line-height:1.4;">7 screens \u2014 root, spine, hips, floor tension, bow</div>`;
+  let inner = t.noForm ? '' : `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">Form</div>
+    <div style="font-size:14px;padding:2px 0;line-height:1.4;">7 screens — root, spine, hips, floor tension, bow</div>`;
+  if(t.activation) inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${t.activation.title}</div>
+    <div style="font-size:14px;padding:2px 0;line-height:1.4;">${t.activation.movements.map(m=>m.name).join(' &middot; ')}</div>`;
   t.blocks.forEach(b=>{
-    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${b.label}</div>`;
+    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${b.label}${(b.core||b.gate)?' &middot; core':''}</div>`;
     b.exercises.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; inner += `<div style="font-size:14px;padding:2px 0;line-height:1.4;">${getVariationName(exId)} <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span></div>`; });
   });
   return `<div class="card"><details open><summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;font-weight:600;">Session preview</summary><div style="margin-top:6px;">${inner}</div></details></div>`;
@@ -1412,7 +1652,7 @@ function pickSessionFromModal(type){
 
 // Anchor scoreboard for Home (Chunk 3): per heavy anchor, a closing-in meter toward the
 // next level plus last result + a warm verdict. The meter fills by creditedQualityReps
-// (the banked figure the level-up triggers on), never raw \u2014 so it can't promise a
+// (the banked figure the level-up triggers on), never raw — so it can't promise a
 // level-up the engine won't grant; raw is shown alongside as the honest last result.
 function renderAnchorScoreboard(s){
   const ap = s.anchorProgress || {};
@@ -1424,11 +1664,11 @@ function renderAnchorScoreboard(s){
     const ex = EXERCISE_LIBRARY[meta.exId];
     const top = ex.sets * ex.repRange[1];
     const loadStr = prog.externalLoad ? `+${prog.externalLoad}${prog.loadUnit||'lb'}` : '';
-    const lastStr = (prog.lastRawQualityReps==null) ? '\u2014' : `${prog.lastRawQualityReps} total`;
+    const lastStr = (prog.lastRawQualityReps==null) ? '—' : `${prog.lastRawQualityReps} total`;
     const verdict = anchorVerdict(prog);
 
     // CLOSING-IN METER. Bar fills by creditedQualityReps (the banked figure the
-    // level-up actually triggers on), NOT raw \u2014 so the bar never promises a
+    // level-up actually triggers on), NOT raw — so the bar never promises a
     // level-up the engine won't grant. Raw is shown alongside as the honest result.
     let meter;
     if(prog.creditedQualityReps === null){
@@ -1443,7 +1683,7 @@ function renderAnchorScoreboard(s){
       const pct = Math.round((credited / top) * 100);
       const remaining = Math.max(0, top - credited);
       const caption = remaining === 0
-        ? `Top owned \u2014 load goes up next session.`
+        ? `Top owned — load goes up next session.`
         : `You're ${remaining} rep${remaining===1?'':'s'} from leveling this up.`;
       meter = `
         <div class="meter-track"><div class="meter-fill" style="width:${pct}%"></div></div>
@@ -1483,11 +1723,11 @@ function renderHistory(){
     if(entry.exercises) Object.entries(entry.exercises).forEach(([exId,reps])=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise">${checkHit(exId,reps)?'&#9632;':'&#9633;'} ${ex?ex.name:exId}: <span>${reps.join(', ')}</span></div>`; });
     if(entry.skipped) entry.skipped.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise" style="color:var(--text3);">&#8212; ${ex?ex.name:exId}: <span>skipped</span></div>`; });
     if(entry.issues) entry.issues.forEach(it=>{ detail += `<div class="history-exercise" style="color:var(--warn);">! ${it.note}</div>`; });
-    if(entry.notes) detail += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">\u201c${entry.notes}\u201d</div>`;
+    if(entry.notes) detail += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">“${entry.notes}”</div>`;
     const stat = entry.sessionStatus || 'completed';
     return `<div class="history-item" onclick="this.classList.toggle('expanded')">
       <div class="history-date">${formatDate(entry.date)}${entry.duration?' &middot; '+entry.duration+' min':''}</div>
-      <div class="history-type"><span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span> ${t?t.name:''}<span class="status-chip status-${stat}">${stat}</span></div>
+      <div class="history-type"><span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span> ${t?t.name:''}<span class="status-chip status-${stat}">${stat}</span>${entry.coreComplete && stat !== 'completed' ? '<span style="font-size:10px;color:var(--accent);margin-left:6px;">core done</span>' : ''}</div>
       <div class="history-hits">${hitCount}/${totalEx} HITs${entry.skipped&&entry.skipped.length?' &middot; '+entry.skipped.length+' skipped':''}</div>
       <div class="history-detail">${detail}<button class="btn btn-small btn-danger" style="margin-top:12px;" onclick="event.stopPropagation(); confirmDeleteSession(${logIdx})">Delete this session</button></div>
     </div>`;
@@ -1503,17 +1743,17 @@ function renderHistory(){
 // exactly (no drift), at the cost of recomputing — correct while the engine numbers are
 // still being graded against real history.
 //
-// Replay rule MUST match finalize's scoring gate: finalize scores when
-// statusReason !== 'stopped' (i.e. completed AND partial both score; only stopped doesn't).
-// So we replay every entry whose sessionStatus !== 'stopped'. applyAnchorProgressionV2's
-// own guards handle everything else: entries without a performed[] array (pre-engine
+// Replay rule (v3 gate, 2026-08-16) MUST match finalize's scoring gate: EVERY entry
+// replays — session end-state no longer gates scoring. applyAnchorProgressionV2's own
+// guards handle everything else: entries without a performed[] array (pre-engine
 // sessions) no-op; skipped or incomplete anchor sets don't score. Never filter on
 // progressionEngineVersion — only on entry shape, which the engine already checks.
+// Rotation and the picker override are NEVER touched here (scoreboard replay only).
 function rebuildAnchorProgress(state){
   state.anchorProgress = {};
   state.log.forEach(entry=>{
-    if(!entry || entry.sessionStatus === 'stopped') return;   // stopped sessions never scored
-    applyAnchorProgressionV2(state, entry);                    // engine guards handle the rest (incl. no performed[])
+    if(!entry) return;
+    applyAnchorProgressionV2(state, entry);   // engine guards handle the rest (incl. no performed[])
   });
 }
 
@@ -1548,7 +1788,7 @@ function confirmDeleteSession(logIdx){
   const t = SESSION_TEMPLATES[entry.sessionType];
   const name = t ? t.name : entry.sessionType;
   showModal('Delete this session?',
-    `${formatDate(entry.date)} \u2014 ${name}. This removes it from history and recalculates your scoreboard from your remaining sessions. This can\u2019t be undone.`,
+    `${formatDate(entry.date)} — ${name}. This removes it from history and recalculates your scoreboard from your remaining sessions. This can’t be undone.`,
     [
       { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
       { text:'Delete', cls:'btn-danger', action:()=>deleteLogEntry(logIdx) }
@@ -1569,6 +1809,7 @@ function renderReference(){
     { label:'Lower: Posterior + Unilateral', ids:['split-squat','single-leg-rdl','jump-rope','ab-wheel'] },
     { label:'Lower: Squat + Conditioning', ids:['cossack-squat','step-lunge','calf-raise'] },
     { label:'Ring Practice + Whole-body', ids:['ring-face-pull','db-press','para-pushup','hanging-knee-raise'] },
+    { label:'Floor day (MVS)', ids:['pushup','reverse-lunge','hollow-body'] },
     { label:'Other / Bench', ids:['ring-curl','glute-bridge','jefferson-curl'] }
   ];
   let html = '';
@@ -1630,7 +1871,7 @@ function renderSettings(){
         <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
       </div>
     </details>
-    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Build</strong>: ${BUILD_ID} \u00b7 data ${window.TRAIN_DATA_VERSION} \u00b7 ${s.log.length} sessions</div></div>`;
+    <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Build</strong>: ${BUILD_ID} · data ${window.TRAIN_DATA_VERSION} · ${s.log.length} sessions</div></div>`;
 }
 function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
 function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
@@ -1642,10 +1883,12 @@ function confirmErase(){ showModal('Erase all data?', 'Permanently deletes all s
 // ===================================================================
 // MODAL
 // ===================================================================
-function showModal(title, body, buttons){
+function showModal(title, body, buttons, opts){
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').textContent = body;
-  document.getElementById('modal-actions').innerHTML = buttons.map(b=>`<button class="btn ${b.cls}" id="mb-${b.text.replace(/\s/g,'')}">${b.text}</button>`).join('');
+  const act = document.getElementById('modal-actions');
+  if(act.classList && act.classList.toggle) act.classList.toggle('stack', !!(opts && opts.stack));
+  act.innerHTML = buttons.map(b=>`<button class="btn ${b.cls}" id="mb-${b.text.replace(/\s/g,'')}">${b.text}</button>`).join('');
   buttons.forEach(b=>{ const el = document.getElementById('mb-'+b.text.replace(/\s/g,'')); if(el) el.onclick = b.action; });
   document.getElementById('modal').classList.add('visible');
 }
