@@ -84,14 +84,14 @@
 </div>
 
 <!-- data.js defines window.EXERCISE_LIBRARY, window.FORM, window.SESSION_TEMPLATES; it MUST load before the inline app script below. Keep both classic (no defer/async/module). -->
-<script src="data.js?v=7.0"></script>
+<script src="data.js?v=7.2"></script>
 <script>
 "use strict";
 // ===================================================================
 // SCHEMA VERSION
 // ===================================================================
-const SCHEMA_VERSION = 7;
-const BUILD_ID = 'v7.1-2026-08-16-form-terse';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const SCHEMA_VERSION = 8;
+const BUILD_ID = 'v7.2-2026-08-16-form-card';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -128,6 +128,20 @@ function migrate(state){
   // v4 ring-spine rotation: drop any in-progress session keyed to a retired session type
   // (old U1/L1/U2/L2). Its templates no longer exist, so resuming would throw. History is untouched.
   if(state.activeSession && !SESSION_TEMPLATES[state.activeSession.type]) state.activeSession = null;
+  // v7.2 one-screen kata: remap an in-flight session built on the 7-screen Form flow
+  // (7 form items collapsed to 1 -> indexes shift by 6; mid-Form restarts the kata).
+  {
+    const as = state.activeSession;
+    if(as && (as.schemaVersion || 0) < 8){
+      const t = SESSION_TEMPLATES[as.type];
+      if(t && !t.noForm){
+        as.cursor = (as.cursor <= 6) ? 0 : as.cursor - 6;
+        if(!as.records) as.records = {};
+        if(!as.records['form-all']) as.records['form-all'] = { kind:'form', status:'pending' };
+      }
+      as.schemaVersion = 8;
+    }
+  }
   // clamp a stale rotationIndex into the new rotation length
   if(typeof state.rotationIndex === 'number') state.rotationIndex = ((state.rotationIndex % ROTATION.length) + ROTATION.length) % ROTATION.length;
 
@@ -651,7 +665,7 @@ let AS = null; // in-memory mirror of activeSession
 function buildFlow(type){
   const t = SESSION_TEMPLATES[type];
   const flow = [];
-  if(!t.noForm) FORM.screens.forEach((s,i)=> flow.push({ kind:'form', uid:'form-'+s.id, screenIdx:i }));
+  if(!t.noForm) flow.push({ kind:'form', uid:'form-all' });
   if(t.activation) flow.push({ kind:'activation', uid:'activation' });
   t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label, core: !!(block.core || block.gate), gate: !!block.gate, slotId: type+'_'+block.type+'_'+exId, progressionType: block.progressionType || 'loose' })));
   return flow;
@@ -898,38 +912,62 @@ function showSessionMap(){
   document.getElementById('modal-body').innerHTML = rows;
 }
 
-// ---- FORM STATION ----
+// ---- FORM STATION (v7.2 one-screen kata; red-team M2 + user 2026-08-16) ----
+// The whole Form on one card: ordinal + title + breath line visible (breath paces the
+// kata — no timer, no per-screen taps). Plain-language how-to and the approved demo sit
+// behind a tap per step. The only required touch in the ritual is the footer button.
 function renderFormStation(st){
-  const screen = FORM.screens[st.screenIdx];
   const body = document.getElementById('flow-body');
-  // v7.1 TERSE LIVE PATH (implements red-team Major 2, 2026-05-24): the Form shows the
-  // screen cue + movement names only — the ritual anchors. The anatomy detail collapses
-  // behind a tap per movement, never on the default path. Half-asleep readable.
-  const movesHtml = screen.movements.map(m=>`
+  const steps = FORM.screens.map((sc,i)=>`
     <details class="move-block">
-      <summary class="move-name" style="list-style:none;cursor:pointer;">${m.name}</summary>
-      <div class="move-detail" style="margin-top:6px;">${m.detail}</div>
+      <summary style="list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:12px;">
+        <span style="font-size:11px;color:var(--text3);min-width:14px;">${i+1}</span>
+        <span style="flex:1;">
+          <span class="move-name" style="font-size:18px;">${sc.title}</span>
+          ${sc.breath ? `<div style="font-size:12px;color:var(--text2);font-style:italic;margin-top:3px;line-height:1.4;">${sc.breath}</div>` : ''}
+        </span>
+      </summary>
+      <div style="padding:2px 0 14px 26px;">
+        ${sc.cue ? `<div class="flow-cue" style="margin-bottom:10px;">${sc.cue}</div>` : ''}
+        ${sc.movements.map(m=>`<div style="margin-bottom:10px;"><div style="font-size:14px;font-weight:600;margin-bottom:3px;">${m.name}</div><div style="font-size:13px;color:var(--text2);line-height:1.5;">${m.detail}</div></div>`).join('')}
+        ${sc.reference ? `<button class="ref-btn" onclick="showFormRef(${i})">&#9654; Demo</button>` : ''}
+      </div>
     </details>`).join('');
   body.innerHTML = `
     <div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Coming up: ${nextFlowItemLabel()}</div>
-    <div class="flow-meta"><span class="badge badge-form">Form</span> Screen ${st.screenIdx+1} of ${FORM.screens.length}</div>
-    ${screen.cue ? `<div class="flow-cue">${screen.cue}</div>` : ''}
-    <div class="flow-title">${screen.title}</div>
-    <div style="margin-top:14px;">${movesHtml}</div>
-    <div style="font-size:11px;color:var(--text3);margin-top:10px;">Tap a movement for detail.</div>`;
+    <div class="flow-meta"><span class="badge badge-form">Form</span></div>
+    <div style="margin-top:6px;">${steps}</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:10px;">Tap a step for how-to and demo.</div>`;
   const foot = document.getElementById('flow-foot');
-  // 'Begin Training' only when the NEXT item is real work (activation keeps 'Next').
   const nxt = currentFlow()[AS.cursor + 1];
-  const isLast = !nxt || (nxt.kind !== 'form' && nxt.kind !== 'activation');
+  const label = (nxt && nxt.kind === 'activation') ? 'Continue' : 'Begin Training';
   foot.innerHTML = `
-    <button class="btn btn-primary" onclick="advanceForm()">${isLast ? 'Begin Training' : 'Next'}</button>
+    <button class="btn btn-primary" onclick="advanceForm()">${label}</button>
     <div class="flow-actions-row">
-      <button class="mini-btn" onclick="skipFormScreen()">Skip screen</button>
+      <button class="mini-btn" onclick="skipFormScreen()">Skip Form</button>
       <button class="mini-btn warn" onclick="confirmStopSession()">Stop</button>
     </div>`;
 }
-function advanceForm(){ unlockAudio(); const flow = currentFlow(); AS.records[flow[AS.cursor].uid].status = 'done'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
-function skipFormScreen(){ cueNoted(); const flow = currentFlow(); AS.records[flow[AS.cursor].uid].status = 'skipped'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
+// Demo modal for a Form step: embedded video, or an open-in-browser card for page links.
+function showFormRef(idx){
+  const sc = FORM.screens[idx]; if(!sc || !sc.reference) return;
+  const ref = sc.reference;
+  let html = sc.breath ? `<div style="font-size:13px;color:var(--text2);font-style:italic;margin-bottom:10px;">${sc.breath}</div>` : '';
+  if(ref.status === 'video'){
+    const u = buildEmbedUrl(ref);
+    if(u) html += `<div style="position:relative;width:100%;padding-bottom:56.25%;background:#000;border-radius:8px;overflow:hidden;"><iframe src="${u}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
+    if(ref.fallbackUrl) html += `<div style="margin-top:8px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Not loading? Open source ↗</a></div>`;
+    if(ref.sourceLabel) html += `<div style="font-size:11px;color:var(--text3);margin-top:6px;">Source: ${ref.sourceLabel}</div>`;
+  } else if(ref.status === 'link' && ref.url){
+    html += `<a href="${ref.url}" target="_blank" rel="noopener" style="display:block;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);text-decoration:none;font-size:14px;font-weight:600;">Open demo ↗<span style="display:block;font-size:12px;color:var(--text2);font-weight:400;margin-top:3px;">${ref.sourceLabel || ''}</span></a>`;
+  }
+  document.getElementById('modal-title').textContent = sc.title.replace(/&amp;/g,'&');
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal-actions').innerHTML = '<button class="btn btn-secondary" onclick="hideModal()">Close</button>';
+  document.getElementById('modal').classList.add('visible');
+}
+function advanceForm(){ unlockAudio(); const flow = currentFlow(); const st = flow[AS.cursor]; if(!AS.records[st.uid]) AS.records[st.uid] = { kind: st.kind, status:'pending' }; AS.records[st.uid].status = 'done'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
+function skipFormScreen(){ cueNoted(); const flow = currentFlow(); const st = flow[AS.cursor]; if(!AS.records[st.uid]) AS.records[st.uid] = { kind: st.kind, status:'pending' }; AS.records[st.uid].status = 'skipped'; AS.cursor++; AS.phase='view'; AS.setIdx=0; persistAS(); renderStation(); }
 
 // ---- EXERCISE STATION ----
 function renderExerciseStation(st){
@@ -1048,7 +1086,7 @@ function nextFlowItemLabel(){
   const flow = currentFlow();
   const next = flow[AS.cursor + 1];
   if(!next) return 'Finish';
-  if(next.kind === 'form') return FORM.screens[next.screenIdx].title;
+  if(next.kind === 'form') return 'Form';
   if(next.kind === 'activation') return (SESSION_TEMPLATES[AS.type].activation || {}).title || 'Prep';
   return getVariationName(next.exId);
 }
@@ -1059,7 +1097,7 @@ function restNextLabel(st, ex){
   const flow = currentFlow();
   const next = flow[AS.cursor + 1];
   if(!next) return 'Finish session';
-  if(next.kind === 'form') return `Form — ${FORM.screens[next.screenIdx].title}`;
+  if(next.kind === 'form') return 'Form';
   if(next.kind === 'activation') return (SESSION_TEMPLATES[AS.type].activation || {}).title || 'Prep';
   return getVariationName(next.exId);
 }
@@ -1598,7 +1636,7 @@ function renderLastSession(s){
 function renderSessionPreview(type){
   const t = SESSION_TEMPLATES[type];
   let inner = t.noForm ? '' : `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">Form</div>
-    <div style="font-size:14px;padding:2px 0;line-height:1.4;">7 screens — root, spine, hips, floor tension, bow</div>`;
+    <div style="font-size:14px;padding:2px 0;line-height:1.4;">7 steps — root, spine, hips, floor tension, bow</div>`;
   if(t.activation) inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${t.activation.title}</div>
     <div style="font-size:14px;padding:2px 0;line-height:1.4;">${t.activation.movements.map(m=>m.name).join(' &middot; ')}</div>`;
   t.blocks.forEach(b=>{
@@ -1821,7 +1859,7 @@ function renderReference(){
   cats.forEach(cat=>{
     html += `<div class="block-label">${cat.label}</div>`;
     if(cat.form){
-      FORM.screens.forEach((sc,i)=>{ html += `<div class="ref-exercise"><div class="ref-name">${i+1}. ${sc.title}</div><div class="ref-ladder">${sc.movements.map(m=>m.name).join(' &middot; ')}</div></div>`; });
+      FORM.screens.forEach((sc,i)=>{ html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ref-name">${i+1}. ${sc.title}</div>${sc.reference ? `<button class="ref-btn" style="margin-top:0;" onclick="showFormRef(${i})">&#9654;</button>` : ''}</div><div class="ref-ladder">${sc.breath || sc.movements.map(m=>m.name).join(' &middot; ')}</div></div>`; });
       return;
     }
     cat.ids.forEach(exId=>{
