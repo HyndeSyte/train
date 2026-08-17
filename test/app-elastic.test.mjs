@@ -100,7 +100,7 @@ test('flow: MVS has no Form; RP has activation; LP does not', () => {
   assert.ok(mvs.every(st=>st.kind !== 'form'), 'MVS skips the Form');
   const rp = ctx.buildFlow('RP');
   assert.ok(rp.some(st=>st.kind === 'activation'), 'RP includes activation');
-  assert.equal(rp.filter(st=>st.kind==='form').length, ctx.FORM.screens.length);
+  assert.equal(rp.filter(st=>st.kind==='form').length, 1, 'v7.2: one-screen Form');
   const lp = ctx.buildFlow('LP');
   assert.ok(lp.every(st=>st.kind !== 'activation'), 'LP has no activation');
   // core flags: LP opener+anchor core; only anchor gated
@@ -279,7 +279,7 @@ test('MIGRATION FIXTURE: real July log shapes — stopped RPush 8/8/8/8 steps to
   const { ctx } = boot({ seed });
   const s = ctx.getState(); // triggers migrate()
   assert.equal(s.progressionEngineVersion, 3);
-  assert.equal(s.schemaVersion, 7);
+  assert.ok(s.schemaVersion >= 7);
   const rp = s.anchorProgress['RP_anchor_ring-pullup'];
   assert.equal(rp.externalLoad, 5, 'RP result unchanged by replay');
   assert.equal(rp.creditedQualityReps, null);
@@ -370,4 +370,18 @@ test('sync payload carries coreComplete; statusToNotion unchanged', () => {
   assert.equal(p.coreComplete, true);
   assert.equal(p.status, 'Completed');
   assert.equal(ctx.statusToNotion('stopped'), 'Stopped');
+});
+
+test('v7.2 migration: pre-v8 activeSession cursor remaps for the one-screen Form', () => {
+  const mk = (cursor) => ({ schemaVersion:6, progressionEngineVersion:3, rotationIndex:0, nextSessionOverride:null,
+    nextSessionSequence:1, pendingDeletes:[], anchorProgress:{}, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, log:[],
+    activeSession:{ schemaVersion:7, type:'RP', startTime:1, activeMs:0, lastActiveAt:null, coreForkShown:false, cursor, phase:'view', setIdx:0, timerEnd:null, timerKind:null, records:{}, sessionNote:'', issues:[] } });
+  // mid-Form (old cursor 3) -> restart Form at 0
+  let s = boot({ seed: mk(3) }).ctx.getState();
+  assert.equal(s.activeSession.cursor, 0);
+  assert.equal(s.activeSession.schemaVersion, 8);
+  assert.ok(s.activeSession.records['form-all'], 'form-all record injected');
+  // past the Form (old cursor 9 = second station after 7 form + activation) -> shifts by 6
+  s = boot({ seed: mk(9) }).ctx.getState();
+  assert.equal(s.activeSession.cursor, 3);
 });
