@@ -91,7 +91,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 8;
-const BUILD_ID = 'v7.2-2026-08-16-form-card';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v7.2.1-2026-08-18-preview-tags';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -1640,7 +1640,7 @@ function renderSessionPreview(type){
   if(t.activation) inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${t.activation.title}</div>
     <div style="font-size:14px;padding:2px 0;line-height:1.4;">${t.activation.movements.map(m=>m.name).join(' &middot; ')}</div>`;
   t.blocks.forEach(b=>{
-    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${b.label}${(b.core||b.gate)?' &middot; core':''}</div>`;
+    inner += `<div style="font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;color:var(--text3);margin:8px 0 3px;">${b.label}</div>`;
     b.exercises.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; inner += `<div style="font-size:14px;padding:2px 0;line-height:1.4;">${getVariationName(exId)} <span style="color:var(--text3);">${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit} &times; ${ex.sets}</span></div>`; });
   });
   return `<div class="card"><details open><summary style="font-size:13px;color:var(--text2);cursor:pointer;list-style:none;font-weight:600;">Session preview</summary><div style="margin-top:6px;">${inner}</div></details></div>`;
