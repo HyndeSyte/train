@@ -5,7 +5,7 @@
 // recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '7.3';
+window.TRAIN_DATA_VERSION = '7.3.1';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -193,7 +193,7 @@ window.RECOVERY_TEMPLATES = {
     // pulldown repeats RP's by design.
     { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
     { type:'builder', label:'Builder', exercises:['rec-pulldown'] },
-    { type:'finisher', label:'Core', exercises:['rec-reverse-crunch'] }
+    { type:'finisher', label:'Finisher', exercises:['rec-reverse-crunch'] }   // not 'Core': that word means the gate path
   ]}
 };
 
