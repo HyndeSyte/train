@@ -363,8 +363,10 @@ function recordArmCheck(value){
   s.armCheck = { date: localDay(), value: ARM_CHECK_VALUES.indexOf(value) !== -1 ? value : null };
   saveState(s);
 }
+// `then` receives the tapped value (null for Skip), so a failed storage write can never
+// loop the question or lose the answer.
 function askArmCheck(then){
-  const pick = (v)=>()=>{ recordArmCheck(v); hideModal(); then(); };
+  const pick = (v)=>()=>{ recordArmCheck(v); hideModal(); then(v); };
   showModal('Arm check', 'Since your last session, your arms are:', [
     { text:'Better', cls:'btn-secondary', action: pick('better') },
     { text:'Same',   cls:'btn-secondary', action: pick('same') },
@@ -874,10 +876,10 @@ function startSession(type){
   unlockAudio();
   const s = getState();
   const mode = sessionModeFor(s, type);
-  if(mode === 'recovery' && needsArmCheck(s)){ askArmCheck(()=> beginSession(type, mode)); return; }
+  if(mode === 'recovery' && needsArmCheck(s)){ askArmCheck((v)=> beginSession(type, mode, v)); return; }
   beginSession(type, mode);
 }
-function beginSession(type, mode){
+function beginSession(type, mode, tappedArmCheck){
   mode = mode || 'normal';
   const s = getState();
   // FROZEN at start (v7.3): the exercise list, the template facts and the mode live on the
@@ -886,7 +888,7 @@ function beginSession(type, mode){
   AS = {
     schemaVersion: SCHEMA_VERSION,
     type, mode, flow, tpl: tplSnapshot(templateFor(type, mode, s)),
-    armCheck: mode === 'recovery' ? todayArmCheck(s) : null,
+    armCheck: mode === 'recovery' ? (tappedArmCheck !== undefined ? tappedArmCheck : todayArmCheck(s)) : null,
     startTime: Date.now(),
     activeMs: 0, lastActiveAt: Date.now(), coreForkShown: false,
     cursor: 0, phase: 'view', setIdx: 0,
@@ -905,14 +907,15 @@ function beginSession(type, mode){
   enterSessionScreen();
 }
 
-function resumeSession(){
+function resumeSession(asked){
   const s = getState();
   if(!s.activeSession){ renderHome(); return; }
   // v7.3: a recovery session resumed on a new day opens with that day's arm check, and the
-  // entry logs the check of the day it is finished on.
-  if(s.activeSession.mode === 'recovery' && needsArmCheck(s)){ askArmCheck(resumeSession); return; }
+  // entry logs the check of the day it is finished on. `asked` = { value } once answered.
+  const answered = !!(asked && typeof asked === 'object' && 'value' in asked);
+  if(!answered && s.activeSession.mode === 'recovery' && needsArmCheck(s)){ askArmCheck((v)=> resumeSession({ value: v })); return; }
   AS = s.activeSession;
-  if(AS.mode === 'recovery') AS.armCheck = todayArmCheck(s);
+  if(AS.mode === 'recovery') AS.armCheck = answered ? asked.value : todayArmCheck(s);
   // Un-park: clear the bound, restart the clock. Frozen timers stay paused — the user
   // restarts them deliberately (no ambush).
   if(AS.parkedAt){ delete AS.parkedAt; delete AS.parkExpiresAt; }
@@ -2163,7 +2166,7 @@ function startPtSession(){
   const s = getState();
   // Once a day: after today's list is logged, reopening it is for reference only.
   if(ptDoneToday(s)){ PTS = { viewOnly: true, startedAt: Date.now(), armCheck: null, checked: {}, note: '' }; showScreen('pt'); return; }
-  const go = ()=>{ PTS = { startedAt: Date.now(), armCheck: todayArmCheck(getState()), checked: {}, note: '' }; showScreen('pt'); };
+  const go = (v)=>{ PTS = { startedAt: Date.now(), armCheck: v !== undefined ? v : todayArmCheck(getState()), checked: {}, note: '' }; showScreen('pt'); };
   if(needsArmCheck(s)) askArmCheck(go); else go();
 }
 function renderPtScreen(){
@@ -2281,10 +2284,18 @@ function renderHistory(){
 // Rotation and the picker override are NEVER touched here (scoreboard replay only).
 function rebuildAnchorProgress(state){
   state.anchorProgress = {};
+  // v7.3: a recovery-mode turn-off resets both anchors at its point in the log (resetSeq =
+  // the first sequence number after it). Recovery entries carry their own reset.
+  const resetSeq = (state.recovery && typeof state.recovery.resetSeq === 'number') ? state.recovery.resetSeq : null;
+  let resetApplied = false;
   state.log.forEach(entry=>{
     if(!entry) return;
+    if(resetSeq !== null && !resetApplied && typeof entry.sessionSequence === 'number' && entry.sessionSequence >= resetSeq){
+      resetHeavyAnchors(state, null); resetApplied = true;
+    }
     applyAnchorProgressionV2(state, entry);   // engine guards handle the rest (incl. no performed[])
   });
+  if(resetSeq !== null && !resetApplied) resetHeavyAnchors(state, null);
 }
 
 // Delete one log entry by its true index into state.log, then rebuild the scoreboard.
@@ -2435,10 +2446,11 @@ function setRecoveryMode(on){
   s.recovery.on = !!on;
   if(on){ s.recovery.since = new Date().toISOString(); s.recovery.offAt = null; }
   else {
+    // The two ring anchors restart at bodyweight now. resetSeq marks the point in the log,
+    // so any later replay (history delete, migration) re-applies it there.
     s.recovery.offAt = new Date().toISOString();
-    // Recovery entries already hold the anchors at bodyweight (replay-safe). With none in
-    // the log, reset here so the turn-off promise still holds.
-    if(!(s.log || []).some(e=> e && e.mode === 'recovery')) resetHeavyAnchors(s, localDay());
+    s.recovery.resetSeq = (typeof s.nextSessionSequence === 'number') ? s.nextSessionSequence : 0;
+    resetHeavyAnchors(s, localDay());
   }
   saveState(s);
 }

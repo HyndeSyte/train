@@ -513,14 +513,48 @@ test('cardiology set back to not-cleared mid-session: jump rope in a frozen sess
   assert.equal(e.performed.find(p=> p.exId === 'jump-rope').skipped, true);
 });
 
-test('turning recovery off resets the anchors even with no recovery entry logged', () => {
+test('turning recovery off resets the anchors even with no recovery entry logged, and a later replay keeps it', () => {
+  const pre = [
+    { date:'2026-07-02', sessionType:'RPush', sessionStatus:'stopped', coreComplete:true, sessionId:'22222222-bbbb', sessionSequence:0,
+      performed:[ { slotId:'RPush_anchor_ring-pushup', exId:'ring-pushup', role:'anchor', progressionType:'heavyAnchor', reps:[8,8,8,8] } ] },
+    { date:'2026-07-04', sessionType:'LP', sessionStatus:'completed', coreComplete:true, sessionId:'33333333-cccc', sessionSequence:1,
+      performed:[ { slotId:'LP_anchor_split-squat', exId:'split-squat', role:'anchor', progressionType:'loose', reps:[8,8,8] } ] } ];
   const preAnchors = { 'RPush_anchor_ring-pushup': { exId:'ring-pushup', label:'Heavy Push', lastRawQualityReps:32, creditedQualityReps:null,
     previousCreditedQualityReps:32, creditCapped:false, externalLoad:5, loadUnit:'lb', variationId:null, lastDate:'2026-07-02', steppedUp:true } };
-  const { ctx } = recoveryBoot({ anchorProgress: preAnchors });
+  const { ctx } = recoveryBoot({ log: pre, nextSessionSequence: 2, anchorProgress: preAnchors });
   ctx.setRecoveryMode(false);
-  const s = ctx.getState();
+  let s = ctx.getState();
   assert.equal(s.anchorProgress['RPush_anchor_ring-pushup'].externalLoad, 0);
   assert.equal(s.anchorProgress['RPush_anchor_ring-pushup'].creditedQualityReps, null);
+  assert.equal(s.recovery.resetSeq, 2);
+  ctx.deleteLogEntry(1);   // an unrelated delete replays the whole log
+  s = ctx.getState();
+  assert.equal(s.anchorProgress['RPush_anchor_ring-pushup'].externalLoad, 0, 'the turn-off reset survives the replay');
+  // and a post-recovery session still builds on bodyweight through a replay
+  ctx.startSession('RPush'); skipForm(ctx); logWholeExercise(ctx, 5);
+  if(AS_(ctx).phase === 'coreFork') ctx.finishAtFork();
+  ctx.finalizeSession('completed');
+  const full = JSON.parse(JSON.stringify(ctx.getState()));
+  ctx.rebuildAnchorProgress(full);
+  assert.equal(full.anchorProgress['RPush_anchor_ring-pushup'].externalLoad, 0);
+  assert.equal(full.anchorProgress['RPush_anchor_ring-pushup'].creditedQualityReps, 20);
+});
+
+test('arm check answer is used even if storage cannot persist it (no question loop on resume)', () => {
+  const { ctx, storage } = recoveryBoot();
+  ctx.recordArmCheck('same');
+  ctx.startSession('RP');
+  skipForm(ctx);
+  ctx.parkSession();
+  const s = ctx.getState(); s.armCheck.date = '2000-01-01'; ctx.saveState(s);
+  const realSet = ctx.localStorage.setItem;
+  ctx.localStorage.setItem = () => { throw new Error('quota'); };   // writes fail from here on
+  ctx.resumeSession();
+  tap(ctx, 'Better');
+  assert.ok(AS_(ctx), 'resumed after one tap');
+  assert.equal(AS_(ctx).armCheck, 'better');
+  ctx.localStorage.setItem = realSet;
+  assert.ok(storage.size >= 1);
 });
 
 test("PT's list is once a day: reopening it is view-only and never logs a second entry; a list belongs to the day it started", () => {
