@@ -247,9 +247,11 @@ function migrate(state){
   {
     const as = state.activeSession;
     if(as && !Array.isArray(as.flow)){
+      // Raw template on purpose: the frozen list must index exactly like the records and
+      // cursor it was built with. Anything newly parked is passed over at render time.
       as.mode = 'normal';
-      as.flow = buildFlow(as.type, 'normal');
-      as.tpl = tplSnapshot(templateFor(as.type, 'normal'));
+      as.flow = buildFlowFrom(as.type, SESSION_TEMPLATES[as.type]);
+      as.tpl = tplSnapshot(SESSION_TEMPLATES[as.type]);
     }
   }
   return state;
@@ -308,16 +310,27 @@ const HEAVY_ANCHOR_SLOTS = {
 // the reset survives any history replay (see applyAnchorProgressionV2).
 function isRecoveryOn(s){ return !!(s && s.recovery && s.recovery.on); }
 function cardioCleared(s){ return !!(s && s.recovery && s.recovery.cardioClear); }
+// Gate 4 belongs to cardiology, not to the mode: once recovery mode has been on, the effort
+// cap (two reps short of failure, no sprints, hill repeats or jump rope, the warning signs)
+// holds in EITHER mode until cardiology clears hard efforts. A fresh install never had it.
+function cardioCapOn(s){ return !!(s && s.recovery && !s.recovery.cardioClear && (s.recovery.on || s.recovery.offAt)); }
+const CARDIO_EXERCISES = ['jump-rope'];   // conditioning that waits for cardiology (hill sprints ride on its cue)
 function sessionModeFor(s, type){ return (isRecoveryOn(s) && RECOVERY_TEMPLATES[type]) ? 'recovery' : 'normal'; }
 // Template for a session type in a mode. Recovery blocks flagged requiresCardioClear (jump
 // rope) appear only once cardiology has cleared hard efforts (Gate 4).
 function templateFor(type, mode, s){
+  const st = s || getState();
+  const cap = cardioCapOn(st);
   if(mode === 'recovery' && RECOVERY_TEMPLATES[type]){
     const rt = RECOVERY_TEMPLATES[type];
-    const clear = cardioCleared(s || getState());
-    return Object.assign({}, rt, { blocks: rt.blocks.filter(b=> !b.requiresCardioClear || clear) });
+    return Object.assign({}, rt, { blocks: rt.blocks.filter(b=> !b.requiresCardioClear || !cap) });
   }
-  return SESSION_TEMPLATES[type];
+  const t = SESSION_TEMPLATES[type];
+  if(!t || !cap) return t;
+  // Normal mode under the cardiology cap: conditioning comes out until it clears.
+  const blocks = t.blocks.map(b=> Object.assign({}, b, { exercises: b.exercises.filter(id=> CARDIO_EXERCISES.indexOf(id) === -1) }))
+    .filter(b=> b.exercises.length);
+  return Object.assign({}, t, { blocks });
 }
 // The template facts a running session needs, frozen into activeSession at start.
 function tplSnapshot(t){
@@ -469,18 +482,7 @@ function applyAnchorProgressionV2(next, entry){
   // mode turns off sets a fresh baseline at bodyweight. Because the reset is read from the
   // log itself, every replay (history delete, migration) reproduces it. Recovery work never
   // scores and never steps load.
-  if(entry && entry.mode === 'recovery'){
-    Object.keys(HEAVY_ANCHOR_SLOTS).forEach(slotId=>{
-      const meta = HEAVY_ANCHOR_SLOTS[slotId];
-      next.anchorProgress[slotId] = {
-        exId: meta.exId, label: meta.label,
-        lastRawQualityReps: null, creditedQualityReps: null, previousCreditedQualityReps: null,
-        creditCapped: false, externalLoad: 0, loadUnit: 'lb', variationId: null,
-        lastDate: entry.date || null, steppedUp: false, recoveryReset: true
-      };
-    });
-    return;
-  }
+  if(entry && entry.mode === 'recovery'){ resetHeavyAnchors(next, entry.date); return; }
   if(!entry || !Array.isArray(entry.performed)) return;
   entry.performed.forEach(p=>{
     if(p.progressionType !== 'heavyAnchor') return;          // only heavy anchors score
@@ -529,6 +531,20 @@ function applyAnchorProgressionV2(next, entry){
     }
 
     next.anchorProgress[p.slotId] = prog;
+  });
+}
+
+// Both heavy anchors back to bodyweight with no baseline (v7.3 recovery layer).
+function resetHeavyAnchors(next, date){
+  if(!next.anchorProgress) next.anchorProgress = {};
+  Object.keys(HEAVY_ANCHOR_SLOTS).forEach(slotId=>{
+    const meta = HEAVY_ANCHOR_SLOTS[slotId];
+    next.anchorProgress[slotId] = {
+      exId: meta.exId, label: meta.label,
+      lastRawQualityReps: null, creditedQualityReps: null, previousCreditedQualityReps: null,
+      creditCapped: false, externalLoad: 0, loadUnit: 'lb', variationId: null,
+      lastDate: date || null, steppedUp: false, recoveryReset: true
+    };
   });
 }
 
@@ -791,13 +807,28 @@ function cueNoted(){ unlockAudio(); toneW(392,0,0.16,0.20,'sine'); buzz(30); }  
 let timerRAF = null;
 let AS = null; // in-memory mirror of activeSession
 
-function buildFlow(type, mode){
-  const t = templateFor(type, mode || 'normal');
+function buildFlow(type, mode, s){ return buildFlowFrom(type, templateFor(type, mode || 'normal', s)); }
+function buildFlowFrom(type, t){
   const flow = [];
   if(!t.noForm) flow.push({ kind:'form', uid:'form-all' });
   if(t.activation) flow.push({ kind:'activation', uid:'activation' });
-  t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label, core: !!(block.core || block.gate), gate: !!block.gate, arms: !!block.arms, slotId: type+'_'+block.type+'_'+exId, progressionType: block.progressionType || 'loose' })));
+  t.blocks.forEach(block=> block.exercises.forEach(exId=> flow.push({ kind:'exercise', uid:'ex-'+exId, exId, blockType:block.type, blockLabel:block.label, core: !!(block.core || block.gate), gate: !!block.gate, arms: !!block.arms, cardio: !!block.requiresCardioClear || CARDIO_EXERCISES.indexOf(exId) !== -1, slotId: type+'_'+block.type+'_'+exId, progressionType: block.progressionType || 'loose' })));
   return flow;
+}
+// Flow items passed over when the cursor reaches them (v7.3): arm work after a leg-day
+// symptom stop, and conditioning while the cardiology cap holds (a frozen session can
+// carry jump rope from before the cap came back on).
+function isPassedOver(st, s){
+  if(!st || st.kind !== 'exercise') return false;
+  if(AS && AS.armWorkEnded && st.arms) return true;
+  return !!(st.cardio && cardioCapOn(s || getState()));
+}
+// Index of the next flow item that will actually run, from `from` on.
+function nextLiveIndex(from){
+  const flow = currentFlow(); const s = getState();
+  let i = from;
+  while(i < flow.length && isPassedOver(flow[i], s)) i++;
+  return i;
 }
 
 // ---- ACTIVE-TIME CLOCK (v7): duration is accumulated engaged time, never wall-clock
@@ -877,7 +908,11 @@ function beginSession(type, mode){
 function resumeSession(){
   const s = getState();
   if(!s.activeSession){ renderHome(); return; }
+  // v7.3: a recovery session resumed on a new day opens with that day's arm check, and the
+  // entry logs the check of the day it is finished on.
+  if(s.activeSession.mode === 'recovery' && needsArmCheck(s)){ askArmCheck(resumeSession); return; }
   AS = s.activeSession;
+  if(AS.mode === 'recovery') AS.armCheck = todayArmCheck(s);
   // Un-park: clear the bound, restart the clock. Frozen timers stay paused — the user
   // restarts them deliberately (no ambush).
   if(AS.parkedAt){ delete AS.parkedAt; delete AS.parkExpiresAt; }
@@ -920,7 +955,7 @@ function reconcileExpiredWork(expiredAt){
   clearTimerState();
   const restSec = REST_TIMES[st.blockType] || 0;
   const moreSets = AS.setIdx + 1 < ex.sets;
-  const moreStations = AS.cursor + 1 < flow.length;
+  const moreStations = nextLiveIndex(AS.cursor + 1) < flow.length;
   if(restSec > 0 && (moreSets || moreStations)){
     const restEnd = expiredAt + restSec*1000;
     if(Date.now() >= restEnd){
@@ -970,12 +1005,12 @@ function renderStation(){
   if(!AS){ showScreen('home'); return; }
   const flow = currentFlow();
   if(AS.phase === 'coreFork'){ renderCoreFork(); return; }
-  // v7.3 leg-day symptom stop: the arm work is done for today, so pass over any remaining
-  // arm item (jump rope, dead bug) and keep going with the legs.
-  if(AS.armWorkEnded && AS.cursor < flow.length && flow[AS.cursor].kind === 'exercise' && flow[AS.cursor].arms){
-    while(AS.cursor < flow.length && flow[AS.cursor].kind === 'exercise' && flow[AS.cursor].arms){
+  // v7.3: pass over what can't run now: arm work after a leg-day symptom stop, and
+  // conditioning while the cardiology cap holds. Closed out as skipped, never logged as done.
+  if(AS.cursor < flow.length && isPassedOver(flow[AS.cursor])){
+    while(AS.cursor < flow.length && isPassedOver(flow[AS.cursor])){
       closeOutRecord(AS.records[flow[AS.cursor].uid], false);
-      AS.cursor++; AS.setIdx = 0; AS.phase = 'view';
+      AS.cursor++; AS.setIdx = 0; AS.phase = 'view'; clearTimerState();
     }
     maybeEnterCoreFork();
     persistAS();
@@ -999,7 +1034,7 @@ function maybeEnterCoreFork(){
   const lastCoreIdx = flow.reduce((acc,st,i)=> st.core ? i : acc, -1);
   if(lastCoreIdx === -1) return false;
   if(AS.cursor <= lastCoreIdx) return false;   // still inside the core path
-  if(AS.cursor >= flow.length) return false;   // nothing after core -> normal completion
+  if(nextLiveIndex(AS.cursor) >= flow.length) return false;   // nothing (live) after core -> normal completion
   if(!liveCoreComplete()) return false;        // gate not earned (e.g. skipped anchor sets)
   AS.coreForkShown = true;
   AS.phase = 'coreFork';
@@ -1139,6 +1174,9 @@ function skipFormScreen(){ cueNoted(); const flow = currentFlow(); const st = fl
 // ---- EXERCISE STATION ----
 function renderExerciseStation(st){
   const ex = EXERCISE_LIBRARY[st.exId];
+  // v7.3 frozen flows: a session frozen by migrate() could in principle reach an item with
+  // no record yet; give it a fresh one rather than failing to render.
+  if(!AS.records[st.uid]) AS.records[st.uid] = { kind:'exercise', exId:st.exId, sets:new Array(ex.sets).fill(0), setStatus:new Array(ex.sets).fill('pending'), status:'pending', issueFlag:'none', note:'', quality:'unknown', painFree:'unknown' };
   const rec = AS.records[st.uid];
   const varName = getVariationName(st.exId);
   const isDur = isDurationUnit(ex.unit);
@@ -1253,7 +1291,7 @@ function renderExerciseStation(st){
 
 function nextFlowItemLabel(){
   const flow = currentFlow();
-  const next = flow[AS.cursor + 1];
+  const next = flow[nextLiveIndex(AS.cursor + 1)];
   if(!next) return 'Finish';
   if(next.kind === 'form') return 'Form';
   if(next.kind === 'activation') return (currentTpl().activation || {}).title || 'Prep';
@@ -1264,7 +1302,7 @@ function restNextLabel(st, ex){
   // What comes after this rest?
   if(AS.setIdx + 1 < ex.sets) return `${getVariationName(st.exId)} — set ${AS.setIdx + 2}`;
   const flow = currentFlow();
-  const next = flow[AS.cursor + 1];
+  const next = flow[nextLiveIndex(AS.cursor + 1)];
   if(!next) return 'Finish session';
   if(next.kind === 'form') return 'Form';
   if(next.kind === 'activation') return (currentTpl().activation || {}).title || 'Prep';
@@ -1281,15 +1319,19 @@ function openRepsLabel(ex){ return 'Open reps' + (String(ex.unit).indexOf('/side
 // Under a recovery exercise: last time's numbers (reps first, then angle), the one-rung
 // reminder after a symptom stop, the worse-day hold, and PT's rule with the effort cap.
 function recoveryStationLines(st, ex){
-  if(!AS || AS.mode !== 'recovery') return '';
+  if(!AS) return '';
   const s = getState();
+  const capOn = cardioCapOn(s);
+  const capText = isDurationUnit(ex.unit) ? 'end the hold well before your limit' : 'two reps short of failure';
+  if(AS.mode !== 'recovery'){
+    return capOn ? `<div class="recovery-lines">Until cardiology clears: ${capText}.</div>` : '';
+  }
   const lines = [];
   const last = lastPerformance(s, st.exId);
   if(last && last.symptomStop) lines.push('<span style="color:var(--warn);">Last time this crossed PT&rsquo;s line: one rung easier today.</span>');
   else if(last && last.reps.length) lines.push(`Last time: ${last.reps.join(' &middot; ')}`);
   if(AS.armCheck === 'worse') lines.push('Arm check says worse: no progression today.');
-  const cap = cardioCleared(s) ? '' : (isDurationUnit(ex.unit) ? ' &middot; end the hold well before your limit' : ' &middot; two reps short of failure');
-  lines.push(`Up to tingling, never into it${cap}.`);
+  lines.push(`Up to tingling, never into it${capOn ? ' &middot; ' + capText : ''}.`);
   return `<div class="recovery-lines">${lines.join('<br>')}</div>`;
 }
 function symptomStopButton(){
@@ -1420,7 +1462,7 @@ function beginRestOrAdvance(st, ex, rec){
   // If there are more sets or another station, run a rest timer; otherwise advance.
   const moreSets = AS.setIdx + 1 < ex.sets;
   const flow = currentFlow();
-  const moreStations = AS.cursor + 1 < flow.length;
+  const moreStations = nextLiveIndex(AS.cursor + 1) < flow.length;
   if(restSec > 0 && (moreSets || moreStations)){
     AS.phase = 'rest';
     AS.timerKind = 'rest';
@@ -1593,10 +1635,10 @@ function stopTimerLoop(){ if(timerRAF){ clearTimeout(timerRAF); timerRAF = null;
 function confirmStopSession(){
   // v7 leave sheet: Park primary (resumable, bounded, self-clearing); End & save = Stopped
   // (still counts + scores if core done); Discard destroys with no log entry.
-  // v7.3: in recovery mode, until cardiology clears hard efforts, the sheet carries the
+  // v7.3: until cardiology clears hard efforts (either mode), the sheet carries the
   // warning signs (End & save is the action they call for).
   const s = getState();
-  const cardiac = (AS && AS.mode === 'recovery' && !cardioCleared(s))
+  const cardiac = cardioCapOn(s)
     ? ' Chest pressure, unusual breathlessness, a racing or skipping heart, or light-headedness: End & save, then call cardiology; call 911 if it’s severe.'
     : '';
   showModal('Leave session?',
@@ -1661,7 +1703,7 @@ function renderCompletion(){
   renderProgressBar();
   const flow = currentFlow();
   let done=0, skipped=0, exTotal=0;
-  flow.forEach(st=>{ if(st.kind==='exercise'){ exTotal++; const r=AS.records[st.uid]; if(r.setStatus && r.setStatus.some(s=>s==='done')) done++; else skipped++; } });
+  flow.forEach(st=>{ if(st.kind==='exercise'){ exTotal++; const r=AS.records[st.uid]; if(r && r.setStatus && r.setStatus.some(s=>s==='done')) done++; else skipped++; } });
   const body = document.getElementById('flow-body');
   body.innerHTML = `
     <div class="flow-meta"><span class="badge badge-${AS.type.toLowerCase()}">${AS.type}</span> Session review</div>
@@ -1704,7 +1746,7 @@ function finalizeSession(statusReason){
     let anyDone = false, anySkipped = false;
     flow.forEach(st=>{
       if(st.kind !== 'exercise') return;
-      const rec = AS.records[st.uid];
+      const rec = AS.records[st.uid] || { setStatus:[], sets:[], status:'skipped', issueFlag:'none', note:'', quality:'unknown', painFree:'unknown' };
       const role = (st.progressionType === 'heavyAnchor') ? 'anchor' : (st.blockType || 'builder');
       const doneSets = rec.setStatus.map((status,i)=> status==='done' ? rec.sets[i] : null).filter(v=>v!==null);
       const wasSkippedWhole = rec.setStatus.every(x=>x==='skipped') || (rec.status==='skipped' && doneSets.length===0);
@@ -1856,6 +1898,20 @@ function renderHome(){
     const a = s.activeSession;
     const rt = a.tpl || SESSION_TEMPLATES[a.type];
     const rtName = rt ? rt.name : a.type;
+    // v7.3: a session started before recovery mode keeps its (normal) exercises, which hold
+    // work recovery mode parks. Lead with Discard; Resume stays possible behind a confirm.
+    if(recovery && a.mode !== 'recovery'){
+      document.getElementById('home-content').innerHTML = `
+      <div class="promo-card" style="background:var(--warn-dim);border-color:var(--warn);">
+        <h3 style="color:var(--warn);">${a.parkedAt ? 'Parked' : 'In progress'} &middot; started before recovery mode</h3>
+        <p>${rtName} holds work recovery mode parks (hanging, full bodyweight on the arms, weights, flat palms). Discard it and start today&rsquo;s recovery session instead.</p>
+        <div class="promo-actions">
+          <button class="btn btn-small btn-primary" onclick="discardActiveSession()">Discard</button>
+          <button class="btn btn-small btn-secondary" onclick="confirmResumePreRecovery()">Resume anyway</button>
+        </div>
+      </div>` + renderPtCard(s);
+      return;
+    }
     // Parked card: factual, never interrogative.
     document.getElementById('home-content').innerHTML = a.parkedAt ? `
       <div class="promo-card">
@@ -1886,7 +1942,8 @@ function renderHome(){
   // Recovery mode: PT's list takes the Floor day's place, and ring days carry the PT-visit rule.
   const extraLine = recovery
     ? (RING_DAYS.indexOf(nextType) !== -1 ? `<br>PT visit today? No ring session: <a href="javascript:void(0)" onclick="openSessionPicker()" style="color:var(--text2);text-decoration:underline;">pick a leg day</a>, or rest.` : '')
-    : `<br><a href="javascript:void(0)" onclick="startSession('MVS')" style="color:var(--text2);text-decoration:underline;">Short on time? Floor day (~${estimateDuration('MVS')} min)</a>`;
+    : `<br><a href="javascript:void(0)" onclick="startSession('MVS')" style="color:var(--text2);text-decoration:underline;">Short on time? Floor day (~${estimateDuration('MVS')} min)</a>`
+      + (cardioCapOn(s) ? `<br>Until cardiology clears: two reps short of failure; no sprints, hill repeats or jump rope.` : '');
 
   document.getElementById('home-content').innerHTML = `
     ${anchorHtml}
@@ -1918,9 +1975,10 @@ function renderHome(){
 }
 
 // ---- PT'S LIST CARD + RECOVERY RULES (Home, v7.3) ----
+// A list belongs to the local day it was STARTED on (23:55 -> 00:05 counts for the first day).
 function ptDoneToday(s){
   const d = localDay();
-  return (s.log || []).some(e=> e && e.sessionType === 'PT' && e.completedAt && localDay(e.completedAt) === d);
+  return (s.log || []).some(e=> e && e.sessionType === 'PT' && (e.startedAt || e.completedAt) && localDay(e.startedAt || e.completedAt) === d);
 }
 function renderPtCard(s){
   if(!PT_LIST) return '';
@@ -2078,6 +2136,12 @@ function renderAnchorScoreboard(s){
   });
   return html;
 }
+function confirmResumePreRecovery(){
+  showModal('Resume anyway?', 'This session was started before recovery mode, so it includes parked work. Resume it only if PT has cleared that work.', [
+    { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
+    { text:'Resume', cls:'btn-danger', action:()=>{ hideModal(); resumeSession(); } }
+  ]);
+}
 function discardActiveSession(){
   showModal('Discard session?', 'The in-progress session will be deleted. Completed history is not affected.', [
     { text:'Keep', cls:'btn-secondary', action:()=>hideModal() },
@@ -2096,8 +2160,11 @@ let PTS = null;
 function startPtSession(){
   if(!PT_LIST) return;
   unlockAudio();
+  const s = getState();
+  // Once a day: after today's list is logged, reopening it is for reference only.
+  if(ptDoneToday(s)){ PTS = { viewOnly: true, startedAt: Date.now(), armCheck: null, checked: {}, note: '' }; showScreen('pt'); return; }
   const go = ()=>{ PTS = { startedAt: Date.now(), armCheck: todayArmCheck(getState()), checked: {}, note: '' }; showScreen('pt'); };
-  if(needsArmCheck(getState())) askArmCheck(go); else go();
+  if(needsArmCheck(s)) askArmCheck(go); else go();
 }
 function renderPtScreen(){
   const el = document.getElementById('pt-content');
@@ -2114,9 +2181,12 @@ function renderPtScreen(){
     <div class="flow-meta" style="margin-top:4px;"><span class="badge badge-pt">PT</span> once a day &middot; ~${PT_LIST.estimate} min</div>
     <div class="recovery-note" style="margin-top:6px;">${PT_LIST.rule} If one crosses the line, stop it for today; next time make it shorter. Runs exactly as PT prescribed.</div>
     <div style="margin:10px 0 4px;">${items}</div>
-    <div style="font-size:11px;color:var(--text3);margin:6px 0 14px;">Tap an item to tick it off. Nothing is logged per item; Finish logs the list.</div>
+    ${PTS.viewOnly
+      ? `<div style="font-size:13px;color:var(--accent);font-weight:600;margin:10px 0 14px;">&#10003; Logged today. This view is for reference; nothing new is logged.</div>
+    <button class="btn btn-secondary" onclick="closePtSession()">Close</button>`
+      : `<div style="font-size:11px;color:var(--text3);margin:6px 0 14px;">Tap an item to tick it off. Nothing is logged per item; Finish logs the list.</div>
     <textarea class="note-field" id="pt-note" rows="2" placeholder="Anything to note? (optional)">${PTS.note || ''}</textarea>
-    <button class="btn btn-primary" style="margin-top:12px;" onclick="finishPtSession()">Finish</button>
+    <button class="btn btn-primary" style="margin-top:12px;" onclick="finishPtSession()">Finish</button>`}
     <div style="height:24px;"></div>`;
 }
 function togglePtItem(i){
@@ -2128,6 +2198,7 @@ function togglePtItem(i){
 function closePtSession(){ PTS = null; showScreen('home'); }
 function finishPtSession(){
   if(!PTS || !PT_LIST){ showScreen('home'); return; }
+  if(PTS.viewOnly){ closePtSession(); return; }   // once a day: a reopened list never logs twice
   const noteEl = document.getElementById('pt-note');
   const note = (noteEl ? noteEl.value : (PTS.note || '')).trim();
   try {
@@ -2136,6 +2207,7 @@ function finishPtSession(){
       date: new Date().toISOString().split('T')[0], sessionType: 'PT', logSchemaVersion: 2,
       mode: 'recovery', ptList: true, coreComplete: true,
       sessionId: genSessionId(),
+      startedAt: new Date(PTS.startedAt).toISOString(),
       completedAt: new Date().toISOString(),
       attentionFlag: false,
       exercises: {}, performed: [], sessionStatus: 'completed', exerciseMeta: {},
@@ -2321,7 +2393,7 @@ function renderSettings(){
         <div><div style="font-weight:600;">Recovery mode</div><div style="font-size:12px;color:var(--text2);">Reduced-load swaps, PT&rsquo;s list as its own daily session, scoreboard hidden${sinceLine}</div></div>
         <button class="btn btn-small ${recOn?'btn-primary':'btn-secondary'}" onclick="toggleRecoveryMode()">${recOn?'On':'Off'}</button>
       </div>
-      ${recOn ? `<div class="setting-row">
+      ${(recOn || s.recovery.offAt || clear) ? `<div class="setting-row">
         <div><div style="font-weight:600;">Cardiology cleared hard efforts</div><div style="font-size:12px;color:var(--text2);">Gate 4: lifts the two-reps-short cap; jump rope returns</div></div>
         <button class="btn btn-small ${clear?'btn-primary':'btn-secondary'}" onclick="toggleCardioClear()">${clear?'Yes':'No'}</button>
       </div>` : ''}
@@ -2362,13 +2434,19 @@ function setRecoveryMode(on){
   s.recovery = Object.assign({ on:false, cardioClear:false, since:null, offAt:null }, s.recovery);
   s.recovery.on = !!on;
   if(on){ s.recovery.since = new Date().toISOString(); s.recovery.offAt = null; }
-  else s.recovery.offAt = new Date().toISOString();
+  else {
+    s.recovery.offAt = new Date().toISOString();
+    // Recovery entries already hold the anchors at bodyweight (replay-safe). With none in
+    // the log, reset here so the turn-off promise still holds.
+    if(!(s.log || []).some(e=> e && e.mode === 'recovery')) resetHeavyAnchors(s, localDay());
+  }
   saveState(s);
 }
 function toggleRecoveryMode(){
   const s = getState();
   if(isRecoveryOn(s)){
-    showModal('Turn off recovery mode?', 'Only after PT clears you, hang test included. Ring sessions go back to normal, PT’s list leaves Home, and the two ring anchors restart at bodyweight. A session already in progress keeps its exercises.', [
+    const capNote = cardioCleared(s) ? '' : ' Cardiology hasn’t cleared hard efforts yet, so the effort cap stays on until you mark it cleared.';
+    showModal('Turn off recovery mode?', 'Only after PT clears you, hang test included. Ring sessions go back to normal, PT’s list leaves Home, and the two ring anchors restart at bodyweight. A session already in progress keeps its exercises.' + capNote, [
       { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
       { text:'Turn off', cls:'btn-danger', action:()=>{ hideModal(); setRecoveryMode(false); renderSettings(); } }
     ]);

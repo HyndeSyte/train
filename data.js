@@ -188,7 +188,7 @@ window.RECOVERY_TEMPLATES = {
     { type:'builder', label:'Builders', exercises:['step-lunge','calf-raise'] },
     { type:'finisher', label:'Conditioning', requiresCardioClear:true, arms:true, exercises:['jump-rope'] }
   ]},
-  RPr: { name:'Ring Practice (recovery)', fullName:'Recovery: Incline Push-Up + Pulldown', grip:'low', blocks:[
+  RPr: { name:'Ring Practice (recovery)', fullName:'Recovery: Incline Push-Up + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
     // Gate is the incline push-up so rows never run two sessions in a row; the light
     // pulldown repeats RP's by design.
     { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
