@@ -143,3 +143,38 @@ test('size limit: small ok, huge rejected', () => {
   assert.equal(withinSizeLimit('x'.repeat(70 * 1024)), false);
   assert.equal(withinSizeLimit(undefined), false);
 });
+
+// ---- v7.3 recovery layer: PT session type + Mode / Arm Check / PT List ----
+test('validate: PT session type accepted (recovery layer daily session)', () => {
+  assert.equal(validatePayload({ ...base, sessionType: 'PT' }).ok, true);
+});
+test('validate: mode / armCheck / ptList accepted when valid, absent, or null', () => {
+  assert.equal(validatePayload({ ...base, mode: 'Recovery', armCheck: 'Worse', ptList: true }).ok, true);
+  assert.equal(validatePayload({ ...base, mode: 'Normal' }).ok, true);
+  assert.equal(validatePayload({ ...base, mode: null, armCheck: null, ptList: null }).ok, true);
+  assert.equal(validatePayload(base).ok, true, 'older app builds omit all three');
+});
+test('validate: bad mode / armCheck / ptList rejected', () => {
+  assert.equal(validatePayload({ ...base, mode: 'recovery' }).ok, false, 'case matters: must match the Notion option');
+  assert.equal(validatePayload({ ...base, armCheck: 'Meh' }).ok, false);
+  assert.equal(validatePayload({ ...base, ptList: 'yes' }).ok, false);
+});
+test('props: Mode / Arm Check / PT List mapped when present', () => {
+  const p = toNotionProperties({ ...base, sessionType: 'PT', mode: 'Recovery', armCheck: 'Same', ptList: true }, 'x');
+  assert.equal(p['Session Type'].select.name, 'PT');
+  assert.equal(p['Mode'].select.name, 'Recovery');
+  assert.equal(p['Arm Check'].select.name, 'Same');
+  assert.equal(p['PT List'].checkbox, true);
+  assert.equal(p['Session'].title[0].text.content, '2026-06-04 · PT');
+});
+test('props: absent recovery fields write no properties (backward compatible)', () => {
+  const p = toNotionProperties(base, 'x');
+  assert.equal('Mode' in p, false);
+  assert.equal('Arm Check' in p, false);
+  assert.equal('PT List' in p, false);
+});
+test('props: ptList false is written as an unchecked box', () => {
+  const p = toNotionProperties({ ...base, mode: 'Recovery', ptList: false }, 'x');
+  assert.equal(p['PT List'].checkbox, false);
+  assert.equal('Arm Check' in p, false, 'skipped arm check sends nothing');
+});
