@@ -1,10 +1,11 @@
 "use strict";
 // ===================================================================
 // data.js  -  static content for Train (loaded before the inline app script).
-// Defines window.EXERCISE_LIBRARY, window.FORM, window.SESSION_TEMPLATES.
+// Defines window.EXERCISE_LIBRARY, window.FORM, window.SESSION_TEMPLATES, and the v7.3
+// recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '7.2';
+window.TRAIN_DATA_VERSION = '7.3';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -35,13 +36,32 @@ window.EXERCISE_LIBRARY = {
   'step-lunge': { name:'Step-Through Lunge', grip:'none', ladder:['Reverse Lunge','Step-Through Lunge','Step-Through + Balance Hold','Step-Through + Hop'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Balance pause at the top of each rep.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'cossack-squat': { name:'Cossack Squat', grip:'none', ladder:['Supported Cossack Squat','Cossack Squat','Cossack Squat (slow tempo)','Weighted Cossack Squat'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Lateral plane. Heel stays planted. Go only as deep as you can control.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'calf-raise': { name:'Calf Raises', grip:'none', ladder:['Bilateral Calf Raise','Slow Bilateral (3s up/3s down)','Single-Leg Calf Raise','Single-Leg Slow Calf Raise'], repRange:[12,20], sets:2, unit:'reps', reference:{ status:'text', cue:'Full ROM. Pause at the top and bottom.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  'hollow-body': { name:'Hollow Body Hold', grip:'none', ladder:['Tuck Hollow Hold','Single-Leg Hollow Hold','Hollow Body Hold','Hollow Body Rock'], repRange:[20,40], sets:3, unit:'sec', reference:{ status:'text', cue:'Lower back glued to the floor. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } }
+  'hollow-body': { name:'Hollow Body Hold', grip:'none', ladder:['Tuck Hollow Hold','Single-Leg Hollow Hold','Hollow Body Hold','Hollow Body Rock'], repRange:[20,40], sets:3, unit:'sec', reference:{ status:'text', cue:'Lower back glued to the floor. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+
+  // ---- v7.3 RECOVERY SWAPS (2026-10-15) ----
+  // Every swap has its own entry, so a legacy ladder position (some of them loaded, e.g.
+  // DB Bulgarian Split Squat) can never leak into a recovery session. ladder[0] is the
+  // name shown; the rest reads as the progression: reps first, then angle. No dumbbells,
+  // no hanging, no flat palms, nothing overhead. openReps = no fixed rep target.
+  'rec-ring-row': { name:'Ring Row (upright)', grip:'low', ladder:['Ring Row (steep, upright)','Ring Row (a little less steep)','Ring Row (moderate lean)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Stand steep, close to upright. Ring in the fingers, wrist straight, pressure off the pinky side. Reps first, then lean back a little.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-pulldown': { name:'Straight-Arm Ring Pulldown', grip:'low', ladder:['Straight-Arm Ring Pulldown (light lean)','Straight-Arm Ring Pulldown (more lean)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Rings set high. Lean in a little with straight arms, rings at chest height, then sweep them down to your hips and back. Ring in the fingers, shoulder blades moving freely. The lean sets the load: keep it light.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-incline-pushup': { name:'Incline Push-Up (edge grip)', grip:'low', ladder:['Incline Push-Up (counter height)','Incline Push-Up (table height)','Incline Push-Up (bench height)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Hands grip the edge of a counter or bench, wrists straight, no flat palms. Start at counter height. Reps first, then a lower surface.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-wall-plus': { name:'Wall Push-Up Plus (forearms)', grip:'none', ladder:['Wall Push-Up Plus (forearms)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Forearms on the wall, elbows at shoulder height or below. Push the wall away so the shoulder blades spread, then let them come back. Light, small range.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-hollow-hold': { name:'Hollow Hold (arms down)', grip:'none', ladder:['Hollow Hold (arms toward feet)'], repRange:[15,30], sets:3, unit:'sec', reference:{ status:'text', cue:'Lower back pressed to the floor, arms long by your sides, reaching toward your feet. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-glute-bridge': { name:'Glute Bridge', grip:'none', ladder:['Glute Bridge'], repRange:[10,15], sets:2, unit:'reps', reference:{ status:'text', cue:'Feet flat, arms resting by your sides. Drive through the heels, squeeze at the top, lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-split-squat': { name:'Rear-Foot-Elevated Split Squat', grip:'none', openReps:true, ladder:['Rear-Foot-Elevated Split Squat (bodyweight)'], repRange:[6,15], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Back foot on the bench, hands free, no dumbbells. Upright torso. Open reps: log what you do.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-sl-rdl': { name:'Single-Leg RDL (bodyweight)', grip:'none', ladder:['Single-Leg RDL (bodyweight)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Bodyweight, hands free. Hinge at the hip, not the back. A fingertip on the wall for balance if needed, no weight through the hand.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-cossack': { name:'Cossack Squat (bodyweight)', grip:'none', ladder:['Cossack Squat (bodyweight, hands free)'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Bodyweight, hands free. Heel stays planted. Go only as deep as you can control.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-dead-bug': { name:'Dead Bug', grip:'none', ladder:['Dead Bug (arms toward the ceiling)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'On your back, lower back pressed down, arms reaching toward the ceiling. Lower the opposite leg slowly while the arms stay put. Arms go further only as PT\u2019s rule allows.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-reverse-crunch': { name:'Reverse Crunch (floor)', grip:'none', ladder:['Reverse Crunch (floor)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'On your back, arms resting by your sides. Curl the knees toward the chest and lift the hips a little, then lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } }
 };
 
 // ===================================================================
 // THE FORM  (fixed universal mobility kata — one in-app card, v7.2)
 // breath = the visible pacing line (the kata is paced in breaths, not seconds).
 // detail = plain-language teaching text (beginner vocabulary, approved 2026-08-16).
+// 2026-10-15: two permanent neck edits from the recovery-layer review: step 1's neck circles
+// became chin tucks, and step 7's roll-down keeps the chin lightly tucked (no hanging head).
 // reference = Dane-approved demo (video embed or open-in-browser link). NOT logged as sets.
 // ===================================================================
 window.FORM = {
@@ -50,7 +70,7 @@ window.FORM = {
     { id:'f1', title:'Root &amp; Prepare', breath:'Three slow breaths · shift weight on the exhale', cue:'Begin standing. Feet planted, hands rise from the sides.', movements:[
       { name:'Root + Breath + Weight Shift', detail:'Stand easy, feet under your hips. Spread your toes and feel the whole sole of each foot — front pad, outside edge, heel. Three slow breaths, rocking your weight gently side to side, so slow you never wobble.' },
       { name:'Wrist + Hand Wave → Centerline', detail:'Circle your wrists, open and close your hands, wake the fingers. Finish with your hands resting at the center of your chest, elbows heavy.' },
-      { name:'Neck + Scapular Setting', detail:'Gentle neck circles. Let your shoulders drop away from your ears, collarbones wide.' }
+      { name:'Neck + Scapular Setting', detail:'Five slow chin tucks: a small nod, then glide your head straight back. Then let your shoulders settle away from your ears, collarbones wide.' }
     ]},
     { id:'f2', title:'Spinal Wave', breath:'Exhale into each reach · five per direction', cue:'Stay tall. Let the reach grow out of quiet shoulders.',
       reference:{ status:'video', mediaType:'youtube', videoId:'xtj4dmVtP8I', start:null, end:null, sourceLabel:'YouTube', fallbackUrl:'https://www.youtube.com/watch?v=xtj4dmVtP8I', checkedAt:'2026-08-16' },
@@ -76,7 +96,7 @@ window.FORM = {
     { id:'f7', title:'Bow &amp; Close', breath:'Fold on a long exhale · rise on the inhale · three closing breaths', cue:'Press to hands and knees, rise slowly, then stack up into the bow.',
       reference:{ status:'video', mediaType:'youtube', videoId:'BGQ-1Uptah8', start:null, end:null, sourceLabel:'YouTube', fallbackUrl:'https://www.youtube.com/watch?v=BGQ-1Uptah8', checkedAt:'2026-08-16' },
       movements:[
-      { name:'Jefferson Curl / Bow', detail:'Tuck your chin and roll down toward your toes one vertebra at a time, head heavy, knees soft. Roll back up just as slowly, stacking your spine from the bottom. Five slow reps, no weight.' },
+      { name:'Jefferson Curl / Bow', detail:'Tuck your chin lightly and roll down toward your toes one vertebra at a time, head following the spine, knees soft. Roll back up just as slowly, stacking your spine from the bottom. Five slow reps, no weight.' },
       { name:'Closing Reach + Breath', detail:'Reach both arms overhead, pause, and let the arms float down on one long exhale. Three times. That is the close — it marks the kata done.' }
     ]}
   ]
@@ -128,4 +148,74 @@ window.SESSION_TEMPLATES = {
   MVS: { name:'Floor — Minimum Viable', fullName:'Floor — Minimum Viable Session', grip:'none', noForm:true, blocks:[
     { type:'finisher', label:'Floor', core:true, gate:true, exercises:['pushup','reverse-lunge','hollow-body'] }
   ]}
+};
+
+// ===================================================================
+// RECOVERY MODE (v7.3, 2026-10-15): reduced-load swaps while PT limits lifting.
+// ===================================================================
+// Same rotation keys, same log, same core/gate rules; only the exercises change. Parked
+// in this mode: hanging, full bodyweight on the arms, overhead loading, dumbbells, weight
+// through flat palms. The Floor (MVS) slot is taken by PT's list (window.PT_LIST below).
+//   requiresCardioClear = block appears only after cardiology clears hard efforts (Gate 4)
+//   arms = arm work on a leg day; a symptom stop passes over it (finish the legs)
+// No block is progressionType 'heavyAnchor': recovery work never touches the scoreboard.
+const REC_ACTIVATION = { title:'Shoulder Prep', cue:'Thirty seconds, empty-handed. Arms start at shoulder height or below.', movements:[
+  { name:'External Rotation Sweep', detail:'Elbows pinned to the ribs, forearms sweep out and back, 10 slow reps. Empty-handed: no dumbbells.' },
+  { name:'Scap Set', detail:'Arms at shoulder height or below. Shrug up, then let the shoulder blades glide down and around on their own, moving freely rather than pulled down. 5 slow reps.' }
+]};
+
+window.RECOVERY_TEMPLATES = {
+  RP: { name:'Pull (recovery)', fullName:'Recovery: Ring Row + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
+    { type:'anchor', label:'Pull Gate', core:true, gate:true, exercises:['rec-ring-row'] },
+    { type:'builder', label:'Builder', exercises:['rec-pulldown'] },
+    { type:'finisher', label:'Finisher', exercises:['rec-hollow-hold'] }
+  ]},
+  LP: { name:'Lower: Posterior (recovery)', fullName:'Recovery: Lower, Posterior + Unilateral', grip:'none', blocks:[
+    { type:'finisher', label:'Opener', core:true, exercises:['rec-glute-bridge'] },
+    { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-split-squat'] },
+    { type:'builder', label:'Builders', exercises:['rec-sl-rdl'] },
+    { type:'builder', label:'Builders', requiresCardioClear:true, arms:true, exercises:['jump-rope'] },
+    { type:'finisher', label:'Finisher', arms:true, exercises:['rec-dead-bug'] }
+  ]},
+  RPush: { name:'Push (recovery)', fullName:'Recovery: Incline Push-Up + Wall Plus', grip:'low', activation: REC_ACTIVATION, blocks:[
+    { type:'anchor', label:'Push Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
+    { type:'builder', label:'Builder', exercises:['rec-wall-plus'] },
+    { type:'finisher', label:'Finisher', exercises:['rec-hollow-hold'] }
+  ]},
+  LS: { name:'Lower: Squat (recovery)', fullName:'Recovery: Lower, Squat', grip:'none', blocks:[
+    { type:'finisher', label:'Opener', core:true, exercises:['rec-glute-bridge'] },
+    { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-cossack'] },
+    { type:'builder', label:'Builders', exercises:['step-lunge','calf-raise'] },
+    { type:'finisher', label:'Conditioning', requiresCardioClear:true, arms:true, exercises:['jump-rope'] }
+  ]},
+  RPr: { name:'Ring Practice (recovery)', fullName:'Recovery: Incline Push-Up + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
+    // Gate is the incline push-up so rows never run two sessions in a row; the light
+    // pulldown repeats RP's by design.
+    { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
+    { type:'builder', label:'Builder', exercises:['rec-pulldown'] },
+    { type:'finisher', label:'Core', exercises:['rec-reverse-crunch'] }
+  ]}
+};
+
+// ===================================================================
+// PT'S LIST (v7.3): PT's home program, run by Train as its own short daily session.
+// ===================================================================
+// PT owns the list (My Ivy Care). Train's copy is updated from the visit notes after each
+// visit, and it runs exactly as PT prescribed: names and doses only, no added technique.
+// One tap-through card, one Finish; it never parks and never advances the rotation.
+window.PT_LIST = {
+  name: 'PT\u2019s list',
+  estimate: '15\u201320',          // the honest session length, in minutes
+  updated: '2026-10-15',
+  ivyUntil: '2026-10-29',          // tick it in My Ivy Care too until Train has carried it two weeks
+  rule: 'Work up to tingling or other nerve symptoms, never into them.',
+  items: [
+    { name:'Doorway pec stretch', dose:'3 x 10', source:'ivy' },
+    { name:'Seated upper-trap stretch', dose:'3 x 10 each side', source:'ivy' },
+    { name:'Supine chin tuck', dose:'3 x 10', source:'ivy' },
+    { name:'Seated prayer median-nerve glide', dose:'3 x 10', source:'ivy' },
+    { name:'Median nerve glide', dose:'3 x 10', source:'clinic' },
+    { name:'Ulnar nerve glide', dose:'3 x 10', source:'clinic' },
+    { name:'Radial nerve glide', dose:'3 x 10', source:'clinic' }
+  ]
 };
