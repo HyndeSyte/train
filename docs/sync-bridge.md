@@ -41,10 +41,14 @@ Train PWA (on finalize)
   "sessionSequence": 42,
   "date": "2026-06-04",
   "completedAt": "2026-06-04T13:47:00.000Z",
-  "sessionType": "RP | LP | RPush | LS | RPr",
+  "sessionType": "RP | LP | RPush | LS | RPr | MVS | PT",
   "status": "Completed | Partial | Stopped",
   "durationMin": 47,
   "overrideUsed": false,
+  "coreComplete": true,
+  "mode": "Normal | Recovery",
+  "armCheck": "Better | Same | Worse",
+  "ptList": true,
   "anchor": {
     "slot": "RP_anchor_ring-pullup | RPush_anchor_ring-pushup",
     "exercise": "ring-pullup",
@@ -72,7 +76,16 @@ Train PWA (on finalize)
 ```
 
 `anchor` is omitted for sessions without a heavy ring anchor. `detail` and `raw` populate
-the page body only. Responses: `{ ok, action, notionPageId, sessionId }` where `action`
+the page body only.
+
+`mode`, `armCheck` and `ptList` (v7.3 recovery layer, 2026-10-15) are optional and map to the
+Notion properties **Mode** (select: Normal, Recovery), **Arm Check** (select: Better, Same,
+Worse) and **PT List** (checkbox). Older app builds omit them and nothing is written. Values
+are validated against those option names, so a typo fails loudly as a 400 instead of
+creating a stray option. `PT` is the recovery layer's daily PT-list session: it runs outside
+the rotation, carries `ptList: true`, and lists PT's items in `detail.exercises` with
+`role: "pt"` and the dose as `reps`. A new `Session Type` option (such as `PT` or `MVS`) is
+created by Notion on the first write that uses it. Responses: `{ ok, action, notionPageId, sessionId }` where `action`
 is `created | updated | soft-deleted | noop-absent`.
 
 ### Delete (tombstone) body
