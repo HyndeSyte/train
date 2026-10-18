@@ -2314,7 +2314,7 @@ function ptItemDone(status){
   renderPtScreen();
   // A second symptom stop offers to end today's list (it still counts), like the ring-day rule.
   if(status === 'stopped' && !PTS.viewOnly && Object.values(PTS.status).filter(v=> v === 'stopped').length >= 2){
-    showModal('End today\u2019s list?', 'Two movements have crossed the line today. Ending now still counts as today\u2019s list. If symptoms linger or keep getting worse, tell PT; new weakness, or numbness that doesn\u2019t settle, means a prompt call to PT or a doctor.', [
+    showModal('End today\u2019s list?', 'Two movements have crossed the line today. Ending now still counts as today\u2019s list. If symptoms linger or keep getting worse, tell PT. New or worsening weakness means same-day medical care (tell PT too); the red flags on the list screen apply.', [
       { text:'End today\u2019s list', cls:'btn-primary', action:()=>{ hideModal(); finishPtSession(); } },
       { text:'Keep going gently', cls:'btn-secondary', action:()=>hideModal() }
     ]);
