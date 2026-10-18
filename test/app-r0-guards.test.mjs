@@ -72,10 +72,12 @@ test('the stale v4 files are gone', () => {
 });
 
 test('code comments no longer name the condition or the PT portal (user-facing copy is allowed to)', () => {
+  // The terms are base64 so this file does not spell them out in the public repo.
+  const banned = new RegExp(Buffer.from('Y3ViaXRhbHxyYWRpY3Vsb3BhdGh8dGhvcmFjaWMgb3V0bGV0fEl2eSBDYXJlfFN5bmVyZ3k=', 'base64').toString('utf8'), 'i');
   const files = ['index.html', 'data.js'];
   for(const f of files){
     const src = readFileSync(join(root, f), 'utf8');
     const comments = [...src.matchAll(/\/\/[^\n]*/g)].map(m=>m[0]).join('\n');
-    assert.doesNotMatch(comments, /cubital|radiculopath|thoracic outlet|Ivy Care|Synergy/i, f + ' comments');
+    assert.doesNotMatch(comments, banned, f + ' comments');
   }
 });

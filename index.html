@@ -2759,9 +2759,9 @@ function toggleCardioClear(){
     { text:'Yes, cleared', cls:'btn-primary', action:()=>{ hideModal(); setCardioClear(true); renderSettings(); } }
   ]);
 }
-// Export: hand the backup to the share sheet when the browser can share files (Home Screen web
-// apps: a blob <a download> can freeze the app, WebKit bug 290847); the blob link is the fallback
-// only where files can't be shared. A cancelled share sheet is not an error.
+// Export: hand the backup to the share sheet when the browser can share files (in a Home Screen
+// web app a blob <a download> shows no download or only a preview, WebKit bug 275288); the blob
+// link is the fallback only where files can't be shared. A cancelled share sheet is not an error.
 function exportBackupFile(){ const json = JSON.stringify(getState(),null,2); const name = `train-backup-${localDay()}.json`; return { json, name }; }
 function exportViaBlob(json, name){ const blob = new Blob([json],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
 function exportData(){
