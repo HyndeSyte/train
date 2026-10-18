@@ -101,7 +101,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 8;
-const BUILD_ID = 'v7.4.1-2026-10-18-local-day-share';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v7.4.2-2026-10-19-r0-guards';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -156,8 +156,10 @@ function migrate(state){
       as.schemaVersion = 8;
     }
   }
-  // clamp a stale rotationIndex into the new rotation length
-  if(typeof state.rotationIndex === 'number') state.rotationIndex = ((state.rotationIndex % ROTATION.length) + ROTATION.length) % ROTATION.length;
+  // clamp a stale rotationIndex into the new rotation length; a missing or non-numeric one
+  // (hand-edited or partial import) starts the rotation over instead of breaking Home/finalize
+  if(typeof state.rotationIndex !== 'number' || !isFinite(state.rotationIndex)) state.rotationIndex = 0;
+  state.rotationIndex = ((Math.trunc(state.rotationIndex) % ROTATION.length) + ROTATION.length) % ROTATION.length;
 
   // Session-picker override (Option A): validate against SESSION_TEMPLATES. The picker
   // only ever stores a valid template key; this is the defensive seam against stale
@@ -2804,6 +2806,9 @@ function hideModal(){ document.getElementById('modal').classList.remove('visible
 // ===================================================================
 document.addEventListener('DOMContentLoaded', async ()=>{
   renderHome();
+  // Ask the browser to keep this origin's storage out of eviction under storage pressure
+  // (best effort; a refusal changes nothing).
+  try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{}); } catch(e){}
   // Mirror to Notion in the background: drains pending tombstones and pushes any unsynced
   // sessions oldest-first (this is what backfills existing history on first launch). Never
   // blocks the UI; the indicator reflects progress.

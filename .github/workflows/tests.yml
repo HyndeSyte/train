@@ -1,0 +1,41 @@
+# Unit tests under two time zones, plus the end-to-end run in a real WebKit at iPhone size
+# (PT's list through the guided timer, then one recovery ring session; sync stubbed, nothing
+# leaves the runner). Actions are GitHub-owned and pinned by commit SHA.
+name: tests
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22'
+      - name: Unit tests (UTC)
+        run: TZ=UTC node --test
+      - name: Unit tests (America/New_York)
+        run: TZ=America/New_York node --test
+  webkit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install WebKit
+        run: npx playwright install --with-deps webkit
+      - name: End-to-end in WebKit (iPhone size, sync stubbed)
+        run: node e2e/webkit-session.mjs

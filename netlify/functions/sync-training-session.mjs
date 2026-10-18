@@ -5,7 +5,8 @@
 //   NOTION_TOKEN           Notion internal integration secret
 //   NOTION_DATA_SOURCE_ID  data source ID of "Training - Session Log" (bb53c37f-...)
 //   TRAIN_SYNC_SECRET      optional shared key; if set, requests must send matching X-Train-Sync-Key
-//   ALLOWED_ORIGIN         optional; defaults to the GitHub Pages origin below
+//   ALLOWED_ORIGIN         optional extra allowed origin(s), comma-separated; the built-in allowlist
+//                          below (GitHub Pages + the Capacitor iOS shell) always applies
 //
 // Notion API version 2025-09-03 (data-source-scoped):
 //   - dedup query: POST /v1/data_sources/{id}/query   (filter Session ID == sessionId)
@@ -24,16 +25,33 @@ import {
 } from '../../lib/session-mapping.mjs';
 
 const NOTION_VERSION = '2025-09-03';
-const DEFAULT_ORIGIN = 'https://hyndesyte.github.io';
+// CORS allowlist: the PWA on GitHub Pages and the Capacitor iOS shell (its WebView origin is
+// capacitor://localhost). The matching Origin is echoed back with Vary: Origin; any other
+// Origin gets no Access-Control-Allow-Origin header, so a browser page elsewhere cannot read
+// the response. CORS is not auth: the optional X-Train-Sync-Key gate stays the gate.
+const DEFAULT_ORIGINS = ['https://hyndesyte.github.io', 'capacitor://localhost'];
 
-export const handler = async (event) => {
-  const origin = process.env.ALLOWED_ORIGIN || DEFAULT_ORIGIN;
+export function allowedOrigins(env = process.env) {
+  const extra = String(env.ALLOWED_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
+  return [...DEFAULT_ORIGINS, ...extra].map((o) => o.toLowerCase());
+}
+
+export function corsHeaders(event, env = process.env) {
+  const h = event.headers || {};
+  const raw = h.origin || h.Origin || '';
+  const match = raw && allowedOrigins(env).includes(String(raw).toLowerCase());
   const cors = {
-    'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Train-Sync-Key',
     'Access-Control-Max-Age': '86400',
+    Vary: 'Origin',
   };
+  if (match) cors['Access-Control-Allow-Origin'] = raw;
+  return cors;
+}
+
+export const handler = async (event) => {
+  const cors = corsHeaders(event);
   const json = (statusCode, obj) => ({
     statusCode,
     headers: { ...cors, 'Content-Type': 'application/json' },

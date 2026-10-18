@@ -200,16 +200,16 @@ window.RECOVERY_TEMPLATES = {
 // ===================================================================
 // PT'S LIST (v7.3): PT's home program, run by Train as its own short daily session.
 // ===================================================================
-// PT owns the list (My Ivy Care). Train's copy is updated from the visit notes after each
+// PT owns the list. Train's copy is updated from the visit notes after each
 // visit, and it runs exactly as PT prescribed: PT's names and doses. v7.4 adds how-to and
 // demo per item (technique only), and an optional 'Train adds' block inside PT's limits.
 // One tap-through card, one Finish; it never parks and never advances the rotation.
 window.PT_LIST = {
   name: 'PT\u2019s list',
   updated: '2026-10-18',
-  ivyUntil: '2026-10-29',          // tick it in My Ivy Care too until Train has carried it two weeks
+  ivyUntil: '2026-10-29',          // the 'tick it in PT's app too' line shows until Train has carried the list two weeks
   rule: 'Work up to tingling or other nerve symptoms, never into them.',
-  // All-day elbow and posture habits: first-line care for cubital tunnel; no session time.
+  // All-day elbow and posture habits PT asked for: first-line care; no session time.
   // Standing red flags (reviewed 2026-10-18): shown on the list screen every day, not only after a stop.
   redFlags: 'Call PT for numbness that doesn\u2019t settle. Same-day medical care, and tell PT, for new or worsening weakness, new hand clumsiness (dropping things, trouble with buttons), or a change in balance or walking. Emergency room for sudden major weakness or new bladder or bowel trouble.',
   allDay: 'All day: don\u2019t lean on your elbows, use a headset for calls, and keep the elbows from staying bent at night (a towel loosely wrapped around the elbow helps).',
