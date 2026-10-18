@@ -2407,7 +2407,7 @@ function renderPtItem(){
   } else stage = '';
   return `
     <div class="flow-meta" style="margin-top:4px;"><span class="badge ${isAdd || it.block === 'open' ? 'badge-adds' : 'badge-pt'}">${isAdd ? 'Train adds' : it.block === 'open' ? 'Settle in' : 'PT'}</span> ${pos} of ${total}${it.source === 'clinic' ? ' &middot; as shown in clinic' : ''}</div>
-    ${Object.values(PTS.status).includes('stopped') && !r.plan ? `<div class="recovery-note" style="margin:6px 0 8px;">One movement crossed the line today: keep the rest smaller and gentler, or end the list here.</div>` : ''}
+    ${Object.values(PTS.status).includes('stopped') && !r.plan ? `<div class="recovery-note" style="margin:6px 0 8px;">One movement crossed the line today. Go on only once symptoms are back to how they were before you started, and keep the rest smaller and gentler. Not settling? End the list here.</div>` : ''}
     <div class="session-name" style="font-size:22px;margin:4px 0 2px;">${it.name}</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">${ptDoseLine(it)}</div>
     ${stage}
@@ -2438,7 +2438,8 @@ function renderPtScreen(){
 // line; otherwise partial. Any of the three still counts as today's list (coreComplete).
 function ptSessionStatus(){
   const st = ptItemsAll().map((it,i)=> (it.block || 'pt') === 'pt' ? (PTS.status[i] || 'not done') : null).filter(Boolean);
-  if(Object.values(PTS.status).includes('stopped')) return 'stopped';
+  // Only PT's own items set the record; an optional add that stops is logged per item instead.
+  if(st.includes('stopped')) return 'stopped';
   return st.every(v=> v === 'done') ? 'completed' : 'partial';
 }
 function ptAllPtDone(){ return ptItemsAll().every((it,i)=> (it.block || 'pt') !== 'pt' || !!PTS.status[i]); }

@@ -211,7 +211,7 @@ window.PT_LIST = {
   rule: 'Work up to tingling or other nerve symptoms, never into them.',
   // All-day elbow and posture habits: first-line care for cubital tunnel; no session time.
   // Standing red flags (reviewed 2026-10-18): shown on the list screen every day, not only after a stop.
-  redFlags: 'Call PT or a doctor promptly for new weakness, clumsy hands or dropping things, numbness that doesn\u2019t settle, or a change in balance or walking. New bladder or bowel trouble, or sudden major weakness: get urgent care.',
+  redFlags: 'Call PT promptly for new weakness or numbness that doesn\u2019t settle. Same-day medical care for new hand clumsiness (dropping things, trouble with buttons) or a change in balance or walking. Emergency room for sudden major weakness or new bladder or bowel trouble.',
   allDay: 'All day: don\u2019t lean on your elbows, use a headset for calls, and keep the elbows from staying bent at night (a towel loosely wrapped around the elbow helps).',
   items: [
     // TRAIN ADDS (block 'adds', optional): reviewed 2026-10-18 by an internal PT red team, ChatGPT

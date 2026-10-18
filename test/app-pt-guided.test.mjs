@@ -135,3 +135,17 @@ test('a symptom stop marks the item stopped and logs it at Finish', () => {
   assert.equal(e.ptItems[5].status, 'stopped');
   assert.equal(e.armCheck, 'worse');
 });
+
+test('an optional add that stops never downgrades a completed PT program', () => {
+  const { ctx } = boot();
+  ctx.recordArmCheck('same');
+  ctx.startPtSession();
+  const items = ctx.PT_LIST.items;
+  items.forEach((it,i)=>{ if((it.block || 'pt') === 'pt'){ ctx.ptOpen(i); ctx.ptItemDone('done'); } });
+  const add = items.findIndex(it=> it.block === 'adds');
+  ctx.ptOpen(add); ctx.ptItemDone('stopped');
+  ctx.finishPtSession();
+  const e = ctx.getState().log.slice(-1)[0];
+  assert.equal(e.sessionStatus, 'completed');
+  assert.equal(e.ptItems[add].status, 'stopped');
+});
