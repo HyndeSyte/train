@@ -171,3 +171,31 @@ test('chin tuck builds from 5 s holds toward 10 s only on a tap, and the level p
   assert.ok(p.filter(s=> s.kind === 'hold').every(s=> s.sec === 10));
   assert.equal(p.filter(s=> s.kind === 'hold').length, 10);
 });
+
+test('review fixes: Next while paused starts the next step fresh; dose logged as done; history shows statuses', () => {
+  const { ctx } = boot();
+  ctx.recordArmCheck('same');
+  ctx.startPtSession();
+  const pec = ctx.PT_LIST.items.findIndex(it=> it.id === 'pec');
+  ctx.ptOpen(pec); ctx.ptStartItem();
+  const r = ctx.__PTS().run;
+  r.endsAt = Date.now() + 25000; ctx.ptPause();
+  ctx.ptAdvance();   // from 'ready' to the first hold while paused
+  assert.equal(r.paused, false);
+  const st = r.plan[r.k];
+  assert.ok(Math.abs((r.endsAt - Date.now()) - st.sec * 1000) < 1500, 'new step runs its own length');
+  ctx.ptItemDone('done');
+  const chin = ctx.PT_LIST.items.findIndex(it=> it.id === 'chin');
+  ctx.ptOpen(chin); ctx.ptItemDone('done');
+  ctx.ptHoldLonger(chin);   // level up AFTER doing 5 s holds
+  ctx.ptOpen(chin + 1); ctx.ptItemDone('stopped');
+  ctx.ptBackToList();
+  ctx.finishPtSession();
+  const e = ctx.getState().log.slice(-1)[0];
+  assert.equal(e.ptItems[chin].dose, '1 x 10, 5 s hold each', 'logged what was done, not the new level');
+  ctx.renderHistory();
+  const h = ctx.document.getElementById('history-content').innerHTML;
+  assert.match(h, /stopped for symptoms/);
+  assert.match(h, /not done/);
+  ctx.ptStopTimer();
+});

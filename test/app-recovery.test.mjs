@@ -570,8 +570,13 @@ test("PT's list is once a day: reopening it is view-only and never logs a second
   const { ctx } = recoveryBoot();
   ctx.recordArmCheck('same');
   ctx.startPtSession();
+  ctx.finishPtSession();   // nothing done yet: Finish logs nothing
+  assert.equal(ctx.getState().log.length, 0);
+  assert.equal(ctx.document.getElementById('modal-title').textContent, 'Nothing done yet');
+  ctx.ptOpen(1); ctx.ptItemDone('done');
   ctx.finishPtSession();
   const n = ctx.getState().log.length;
+  assert.equal(n, 1);
   ctx.startPtSession();
   assert.equal(ctx.__PTS().viewOnly, true);
   ctx.renderPtScreen();

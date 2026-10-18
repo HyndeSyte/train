@@ -2181,6 +2181,7 @@ function startPtSession(){
 // starts on one tap, then the timer runs it hands-off: get set -> hold -> release -> next rep,
 // switch sides, rest between sets. Reps without a hold wait for "Set done". The timer is
 // absolute-time (survives backgrounding) and the screen is kept awake while one runs.
+function escHtml(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function ptItemsAll(){
   const items = (PT_LIST && Array.isArray(PT_LIST.items)) ? PT_LIST.items : [];
   // Items with holdSteps carry a per-install hold level (state.ptLevels[id]); apply it here so the
@@ -2242,12 +2243,12 @@ let ptTimer = null, ptWake = null;
 function ptWakeOn(){
   try {
     if(ptWake || !navigator.wakeLock || !navigator.wakeLock.request) return;
-    navigator.wakeLock.request('screen').then(l=>{ ptWake = l; if(l && l.addEventListener) l.addEventListener('release', ()=>{ ptWake = null; }); }).catch(()=>{});
+    navigator.wakeLock.request('screen').then(l=>{ if(!PTS || !PTS.run || !PTS.run.plan){ try { l.release(); } catch(e){} return; } ptWake = l; if(l && l.addEventListener) l.addEventListener('release', ()=>{ ptWake = null; }); }).catch(()=>{});
   } catch(e){ /* no wake lock: the timer still runs on absolute time */ }
 }
 function ptWakeOff(){ try { if(ptWake) ptWake.release(); } catch(e){} ptWake = null; }
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible' && PTS && PTS.run && PTS.run.plan && !PTS.run.paused) { ptWakeOn(); ptTick(); }
+  if(document.visibilityState === 'visible' && PTS && PTS.run && PTS.run.plan && !PTS.run.paused) { ptWakeOn(); ptStopTimer(); ptTick(); }
 });
 function ptStopTimer(){ if(ptTimer){ clearTimeout(ptTimer); ptTimer = null; } }
 function ptStep(){ const r = PTS && PTS.run; return (r && r.plan) ? r.plan[r.k] : null; }
@@ -2274,6 +2275,7 @@ function ptStartItem(){
 }
 function ptEnter(){
   const r = PTS.run, st = ptStep();
+  r.paused = false; r.left = 0;   // a new step always starts running (Next or Set done while paused)
   if(!st){ ptItemDone('done'); return; }
   if(st.sec){
     r.endsAt = Date.now() + st.sec * 1000;
@@ -2317,6 +2319,7 @@ function ptItemDone(status){
   ptStopTimer(); ptWakeOff();
   const i = PTS.run.i;
   PTS.status[i] = status;
+  PTS.doseAt = PTS.doseAt || {}; PTS.doseAt[i] = ptDoseLine(ptItemsAll()[i]);   // what was actually done today
   PTS.lastDone = (status === 'done' && ptCanHoldLonger(ptItemsAll()[i])) ? i : null;
   if(status === 'done') cueLogged(); else cueNoted();
   // Next: the first item after this one that has no status yet, else back to the list.
@@ -2445,7 +2448,7 @@ function renderPtScreen(){
     ${PTS.viewOnly
       ? `<div style="font-size:13px;color:var(--accent);font-weight:600;margin:14px 0;">&#10003; Logged today. You can run any item again; nothing new is logged.</div>
     <button class="btn btn-secondary" onclick="closePtSession()">Close</button>`
-      : `<textarea class="note-field" id="pt-note" rows="2" placeholder="Anything to note? (optional)" style="margin-top:14px;">${PTS.note || ''}</textarea>
+      : `<textarea class="note-field" id="pt-note" rows="2" placeholder="Anything to note? (optional)" style="margin-top:14px;">${escHtml(PTS.note || '')}</textarea>
     <button class="btn ${ptAllPtDone() ? 'btn-primary' : 'btn-secondary'}" style="margin-top:12px;" onclick="finishPtSession()">Finish</button>`}
     <div style="height:24px;"></div>`;
 }
@@ -2462,6 +2465,13 @@ function closePtSession(){ ptStopTimer(); ptWakeOff(); PTS = null; showScreen('h
 function finishPtSession(){
   if(!PTS || !PT_LIST){ showScreen('home'); return; }
   if(PTS.viewOnly){ closePtSession(); return; }   // once a day: a reopened list never logs twice
+  if(!ptItemsAll().some((it,i)=> (it.block || 'pt') === 'pt' && PTS.status[i] && PTS.status[i] !== 'skipped')){
+    showModal('Nothing done yet', 'Do at least one of PT\u2019s movements before Finish, or close the list and come back later. Nothing is logged.', [
+      { text:'Close the list', cls:'btn-secondary', action:()=>{ hideModal(); closePtSession(); } },
+      { text:'Keep going', cls:'btn-primary', action:()=>hideModal() }
+    ]);
+    return;
+  }
   const noteEl = document.getElementById('pt-note');
   const note = (noteEl ? noteEl.value : (PTS.note || '')).trim();
   try {
@@ -2474,7 +2484,7 @@ function finishPtSession(){
       completedAt: new Date().toISOString(),
       attentionFlag: false,
       exercises: {}, performed: [], sessionStatus: ptSessionStatus(), exerciseMeta: {},
-      ptItems: ptItemsAll().map((i,idx)=> ({ name: i.name, dose: ptDoseLine(i), block: i.block || 'pt', status: PTS.status[idx] || 'not done' })),   // what was prescribed that day, and what happened
+      ptItems: ptItemsAll().map((i,idx)=> ({ name: i.name, dose: (PTS.doseAt && PTS.doseAt[idx]) || ptDoseLine(i), block: i.block || 'pt', status: PTS.status[idx] || 'not done' })),   // what was prescribed that day, and what happened
       notes: note || undefined,
       duration: Math.max(1, Math.min(60, Math.round((Date.now() - PTS.startedAt)/60000)))
     };
@@ -2512,17 +2522,17 @@ function renderHistory(){
     const totalEx = entry.exercises ? Object.keys(entry.exercises).length : 0;
     const isPt = entry.sessionType === 'PT';
     let detail = '';
-    if(isPt && Array.isArray(entry.ptItems)) entry.ptItems.forEach(i=>{ detail += `<div class="history-exercise">&#9632; ${i.name}: <span>${i.dose || ''}</span></div>`; });
+    if(isPt && Array.isArray(entry.ptItems)) entry.ptItems.forEach(i=>{ const s = i.status || 'done'; detail += `<div class="history-exercise"${s === 'stopped' ? ' style="color:var(--warn);"' : s !== 'done' ? ' style="color:var(--text3);"' : ''}>${s === 'done' ? '&#9632;' : s === 'stopped' ? '!' : '&#9633;'} ${i.name}: <span>${i.dose || ''}${s !== 'done' ? ' &middot; ' + (s === 'stopped' ? 'stopped for symptoms' : s) : ''}</span></div>`; });
     if(entry.armCheck) detail += `<div class="history-exercise" style="color:var(--text2);">Arm check: <span>${entry.armCheck}</span></div>`;
     if(entry.exercises) Object.entries(entry.exercises).forEach(([exId,reps])=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise">${checkHit(exId,reps)?'&#9632;':'&#9633;'} ${ex?ex.name:exId}: <span>${reps.join(', ')}</span></div>`; });
     if(entry.skipped) entry.skipped.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise" style="color:var(--text3);">&#8212; ${ex?ex.name:exId}: <span>skipped</span></div>`; });
     if(entry.issues) entry.issues.forEach(it=>{ detail += `<div class="history-exercise" style="color:var(--warn);">! ${it.note}</div>`; });
-    if(entry.notes) detail += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">“${entry.notes}”</div>`;
+    if(entry.notes) detail += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">“${escHtml(entry.notes)}”</div>`;
     const stat = entry.sessionStatus || 'completed';
     return `<div class="history-item" onclick="this.classList.toggle('expanded')">
       <div class="history-date">${formatDate(entry.date)}${entry.duration?' &middot; '+entry.duration+' min':''}</div>
       <div class="history-type"><span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span> ${entryName(entry)}<span class="status-chip status-${stat}">${stat}</span>${entry.mode === 'recovery' && !isPt ? '<span class="status-chip status-recovery">recovery</span>' : ''}${entry.coreComplete && stat !== 'completed' ? '<span style="font-size:10px;color:var(--accent);margin-left:6px;">core done</span>' : ''}</div>
-      <div class="history-hits">${isPt ? 'PT&rsquo;s list done' : `${hitCount}/${totalEx} HITs`}${entry.skipped&&entry.skipped.length?' &middot; '+entry.skipped.length+' skipped':''}${entry.symptomStop || (entry.symptomStops && entry.symptomStops.length) ? ' &middot; symptom stop' : ''}</div>
+      <div class="history-hits">${isPt ? (stat === 'completed' ? 'PT&rsquo;s list done' : stat === 'stopped' ? 'PT&rsquo;s list &middot; stopped for symptoms' : 'PT&rsquo;s list &middot; partly done') : `${hitCount}/${totalEx} HITs`}${entry.skipped&&entry.skipped.length?' &middot; '+entry.skipped.length+' skipped':''}${entry.symptomStop || (entry.symptomStops && entry.symptomStops.length) ? ' &middot; symptom stop' : ''}</div>
       <div class="history-detail">${detail}<button class="btn btn-small btn-danger" style="margin-top:12px;" onclick="event.stopPropagation(); confirmDeleteSession(${logIdx})">Delete this session</button></div>
     </div>`;
   }).join('');
@@ -2624,7 +2634,7 @@ function renderReference(){
     html += `<div class="block-label">${cat.label}</div>`;
     if(cat.pt){
       html += `<div class="ref-exercise"><div class="ref-ladder">${PT_LIST.rule} PT&rsquo;s movements, doses inside PT&rsquo;s limits; updated ${formatDate(PT_LIST.updated)}.</div></div>`;
-      PT_LIST.items.forEach((i, idx)=>{ html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ref-name">${i.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ptDoseLine(i)}</span></div><button class="ref-btn" style="margin-top:0;" onclick="showPtRef(${idx})">&#9654;</button></div><div class="ref-ladder">${i.block === 'adds' || i.block === 'open' ? 'Train adds (optional, inside PT\u2019s limits)' : i.source === 'clinic' ? 'Shown in clinic' : 'My Ivy Care home program'}</div></div>`; });
+      ptItemsAll().forEach((i, idx)=>{ html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ref-name">${i.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ptDoseLine(i)}</span></div><button class="ref-btn" style="margin-top:0;" onclick="showPtRef(${idx})">&#9654;</button></div><div class="ref-ladder">${i.block === 'adds' || i.block === 'open' ? 'Train adds (optional, inside PT\u2019s limits)' : i.source === 'clinic' ? 'Shown in clinic' : 'My Ivy Care home program'}</div></div>`; });
       return;
     }
     if(cat.form){
