@@ -2332,7 +2332,7 @@ function ptItemDone(status){
   // A second symptom stop offers to end today's list (it still counts), like the ring-day rule.
   if(status === 'stopped' && !PTS.viewOnly && Object.values(PTS.status).filter(v=> v === 'stopped').length >= 2){
     showModal('End today\u2019s list?', 'Two movements have crossed the line today. Ending now still counts as today\u2019s list. If symptoms linger or keep getting worse, tell PT. New or worsening weakness means same-day medical care (tell PT too); the red flags on the list screen apply.', [
-      { text:'End today\u2019s list', cls:'btn-primary', action:()=>{ hideModal(); finishPtSession(); } },
+      { text:'End today\u2019s list', cls:'btn-primary', action:()=>{ hideModal(); finishPtSession(true); } },
       { text:'Keep going gently', cls:'btn-secondary', action:()=>hideModal() }
     ]);
   }
@@ -2457,15 +2457,16 @@ function renderPtScreen(){
 function ptSessionStatus(){
   const st = ptItemsAll().map((it,i)=> (it.block || 'pt') === 'pt' ? (PTS.status[i] || 'not done') : null).filter(Boolean);
   // Only PT's own items set the record; an optional add that stops is logged per item instead.
-  if(st.includes('stopped')) return 'stopped';
+  if(st.includes('stopped') || Object.values(PTS.status).filter(v=> v === 'stopped').length >= 2) return 'stopped';
   return st.every(v=> v === 'done') ? 'completed' : 'partial';
 }
 function ptAllPtDone(){ return ptItemsAll().every((it,i)=> (it.block || 'pt') !== 'pt' || !!PTS.status[i]); }
 function closePtSession(){ ptStopTimer(); ptWakeOff(); PTS = null; showScreen('home'); }
-function finishPtSession(){
+function finishPtSession(endedForSymptoms){
   if(!PTS || !PT_LIST){ showScreen('home'); return; }
   if(PTS.viewOnly){ closePtSession(); return; }   // once a day: a reopened list never logs twice
-  if(!ptItemsAll().some((it,i)=> (it.block || 'pt') === 'pt' && PTS.status[i] && PTS.status[i] !== 'skipped')){
+  // Ending for symptoms always logs (the record says stopped); otherwise Finish needs one PT item.
+  if(!endedForSymptoms && !ptItemsAll().some((it,i)=> (it.block || 'pt') === 'pt' && PTS.status[i] && PTS.status[i] !== 'skipped')){
     showModal('Nothing done yet', 'Do at least one of PT\u2019s movements before Finish, or close the list and come back later. Nothing is logged.', [
       { text:'Close the list', cls:'btn-secondary', action:()=>{ hideModal(); closePtSession(); } },
       { text:'Keep going', cls:'btn-primary', action:()=>hideModal() }

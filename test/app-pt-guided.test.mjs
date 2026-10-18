@@ -199,3 +199,18 @@ test('review fixes: Next while paused starts the next step fresh; dose logged as
   assert.match(h, /not done/);
   ctx.ptStopTimer();
 });
+
+test('ending for symptoms after two optional-item stops logs a stopped list, never "Nothing done yet"', () => {
+  const { ctx } = boot();
+  ctx.recordArmCheck('same');
+  ctx.startPtSession();
+  const items = ctx.PT_LIST.items;
+  const opener = items.findIndex(it=> it.block === 'open'), add = items.findIndex(it=> it.block === 'adds');
+  ctx.ptOpen(opener); ctx.ptItemDone('stopped');
+  ctx.ptOpen(add); ctx.ptItemDone('stopped');
+  assert.match(ctx.document.getElementById('modal-title').textContent, /End today/);
+  ctx.finishPtSession(true);
+  const e = ctx.getState().log.slice(-1)[0];
+  assert.equal(e.sessionType, 'PT');
+  assert.equal(e.sessionStatus, 'stopped');
+});
