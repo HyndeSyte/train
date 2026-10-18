@@ -62,12 +62,12 @@ test('allowlist: Pages and the Capacitor shell, plus ALLOWED_ORIGIN extras, matc
   assert.deepEqual(allowedOrigins({ ALLOWED_ORIGIN: 'https://Example.test, https://two.test' }), [PAGES, SHELL, 'https://example.test', 'https://two.test']);
   const h = corsHeaders({ headers: { Origin: 'https://HyndeSyte.github.io' } }, {});
   assert.equal(h['Access-Control-Allow-Origin'], 'https://HyndeSyte.github.io', 'echoes the request Origin as sent');
-  assert.equal(h.Vary, 'Origin');
+  assert.equal(h.Vary, 'Origin, X-Train-Client');
   const shell = corsHeaders({ headers: { origin: SHELL } }, {});
   assert.equal(shell['Access-Control-Allow-Origin'], SHELL);
   const other = corsHeaders({ headers: { origin: 'https://evil.example' } }, {});
   assert.equal('Access-Control-Allow-Origin' in other, false, 'no ACAO for an unlisted origin');
-  assert.equal(other.Vary, 'Origin');
+  assert.equal(other.Vary, 'Origin, X-Train-Client');
   const none = corsHeaders({ headers: {} }, {});
   assert.equal('Access-Control-Allow-Origin' in none, false, 'no ACAO without an Origin');
 });
@@ -78,7 +78,7 @@ test('OPTIONS preflight: 204 with the echoed origin on POST and OPTIONS; unliste
   assert.equal(r.statusCode, 204);
   assert.equal(r.headers['Access-Control-Allow-Origin'], SHELL);
   assert.equal(r.headers['Access-Control-Allow-Methods'], 'POST, OPTIONS');
-  assert.equal(r.headers.Vary, 'Origin');
+  assert.equal(r.headers.Vary, 'Origin, X-Train-Client');
   r = await handler(req('OPTIONS', null, 'https://evil.example'));
   assert.equal(r.statusCode, 204);
   assert.equal('Access-Control-Allow-Origin' in r.headers, false);
@@ -86,7 +86,7 @@ test('OPTIONS preflight: 204 with the echoed origin on POST and OPTIONS; unliste
   r = await handler(req('GET', null, PAGES));
   assert.equal(r.statusCode, 405);
   assert.equal(r.headers['Access-Control-Allow-Origin'], PAGES);
-  assert.equal(r.headers.Vary, 'Origin');
+  assert.equal(r.headers.Vary, 'Origin, X-Train-Client');
 });
 
 test('upsert: first post creates; a re-post of the same Session ID updates the row, never a second create', async () => {
@@ -148,7 +148,7 @@ test('delete wins: a stale re-post after a delete leaves the tombstone in place'
 test('preflight allows the headers the clients send', async () => {
   env(); fakeNotion();
   const r = await handler(req('OPTIONS', null, SHELL));
-  assert.equal(r.headers['Access-Control-Allow-Headers'], 'Content-Type, X-Train-Sync-Key');
+  assert.equal(r.headers['Access-Control-Allow-Headers'], 'Content-Type, X-Train-Sync-Key, X-Train-Client');
   assert.equal(r.headers['Access-Control-Allow-Methods'], 'POST, OPTIONS');
 });
 

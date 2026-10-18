@@ -54,7 +54,7 @@ try {
     try { body = JSON.parse(req.postData() || 'null'); } catch { body = { unparsable: req.postData() }; }
     synced.push({ method: req.method(), body });
     await route.fulfill({ status: 200, contentType: 'application/json',
-      headers: { 'Access-Control-Allow-Origin': new URL(base).origin, 'Access-Control-Allow-Headers': 'Content-Type, X-Train-Sync-Key', 'Access-Control-Allow-Methods': 'POST, OPTIONS' },
+      headers: { 'Access-Control-Allow-Origin': new URL(base).origin, 'Access-Control-Allow-Headers': 'Content-Type, X-Train-Sync-Key, X-Train-Client', 'Access-Control-Allow-Methods': 'POST, OPTIONS' },
       body: JSON.stringify({ ok: true, action: 'created', notionPageId: 'stub-' + synced.length, sessionId: body && body.sessionId }) });
   });
   // Any other third-party request (YouTube thumbnails etc.) is cut off: offline-safe run.

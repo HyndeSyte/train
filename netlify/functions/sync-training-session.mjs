@@ -42,9 +42,9 @@ export function corsHeaders(event, env = process.env) {
   const match = raw && allowedOrigins(env).includes(String(raw).toLowerCase());
   const cors = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Train-Sync-Key',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Train-Sync-Key, X-Train-Client',
     'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
+    Vary: 'Origin, X-Train-Client',
   };
   if (match) cors['Access-Control-Allow-Origin'] = raw;
   return cors;
