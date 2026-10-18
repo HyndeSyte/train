@@ -104,6 +104,9 @@ export const handler = async (event) => {
     if (existing) {
       // Self-healing path: update properties only. The body blocks were written on the
       // original create (sessions are immutable after finalize except the Deleted tombstone).
+      // Delete wins: an update never touches Deleted, so a stale re-post cannot resurrect a
+      // tombstone (the PWA never un-deletes a session).
+      delete properties.Deleted;
       await notion.updatePage(existing, properties);
       return json(200, { ok: true, action: 'updated', notionPageId: existing, sessionId: body.sessionId });
     }

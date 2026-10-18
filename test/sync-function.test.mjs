@@ -129,6 +129,29 @@ test('delete: soft-deletes an existing row (Deleted + Synced At), noop when abse
   assert.equal(n.rows.size, 1, 'nothing created by a delete');
 });
 
+test('delete wins: a stale re-post after a delete leaves the tombstone in place', async () => {
+  env(); const n = fakeNotion();
+  await handler(req('POST', payload(), PAGES));
+  await handler(req('POST', { op: 'delete', sessionId: 'sid-0001' }, PAGES));
+  const r = await handler(req('POST', payload({ sessionNote: 'late retry from a stale client' }), PAGES));
+  assert.equal(JSON.parse(r.body).action, 'updated');
+  const row = n.rows.get('sid-0001');
+  assert.equal(row.properties.Deleted.checkbox, true, 'tombstone kept');
+  assert.equal(row.properties['Session Note'].rich_text[0].text.content, 'late retry from a stale client');
+  const patch = n.calls.filter((c) => c.method === 'PATCH').pop();
+  assert.equal('Deleted' in patch.body.properties, false, 'update never sends Deleted');
+  // a first-time create still writes Deleted=false
+  await handler(req('POST', payload({ sessionId: 'sid-0002' }), PAGES));
+  assert.equal(n.rows.get('sid-0002').properties.Deleted.checkbox, false);
+});
+
+test('preflight allows the headers the clients send', async () => {
+  env(); fakeNotion();
+  const r = await handler(req('OPTIONS', null, SHELL));
+  assert.equal(r.headers['Access-Control-Allow-Headers'], 'Content-Type, X-Train-Sync-Key');
+  assert.equal(r.headers['Access-Control-Allow-Methods'], 'POST, OPTIONS');
+});
+
 test('shared-secret gate still applies before any Notion call', async () => {
   env({ TRAIN_SYNC_SECRET: 'k' }); const n = fakeNotion();
   let r = await handler(req('POST', payload(), PAGES));

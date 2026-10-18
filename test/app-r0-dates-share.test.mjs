@@ -178,6 +178,36 @@ test("PT's list at 7:30 PM EST is dated the local day", () => {
   assert.equal(ctx.getState().log.slice(-1)[0].date, '2026-11-05');
 });
 
+test('a park across the Nov 1 clock change, reopened days later, is dated the day it was parked', () => {
+  const { ctx, clock } = boot({ seed: seed(), now: Date.UTC(2026, 10, 1, 0, 30, 0) });   // Oct 31, 8:30 PM EDT
+  if(ctx.needsArmCheck(ctx.getState())) ctx.recordArmCheck('same');
+  ctx.startSession('RP'); skipForm(ctx); logSet(ctx, 5);
+  ctx.parkSession();
+  const parked = ctx.getState().activeSession;
+  assert.equal(ctx.localDay(parked.parkedAt), '2026-10-31');
+  assert.equal(parked.parkExpiresAt, Date.UTC(2026, 10, 2, 5, 0, 0), 'bound = end of Nov 1 local = 00:00 EST Nov 2 (after the change)');
+  clock.now = Date.UTC(2026, 10, 3, 23, 0, 0);        // Nov 3, 6:00 PM EST: days later
+  ctx.renderHome();
+  const e = ctx.getState().log.slice(-1)[0];
+  assert.equal(ctx.getState().activeSession, null);
+  assert.equal(e.date, '2026-10-31');
+  assert.equal(e.completedAt, '2026-11-03T23:00:00.000Z');
+});
+
+test("PT's list started before midnight and finished after is dated its start day", () => {
+  const { ctx, clock } = boot({ seed: seed(), now: Date.UTC(2026, 9, 19, 3, 55, 0) });   // Oct 18, 11:55 PM EDT
+  ctx.recordArmCheck('same');
+  ctx.startPtSession();
+  const items = ctx.PT_LIST.items;
+  items.forEach((it,i)=>{ if((it.block || 'pt') === 'pt'){ ctx.ptOpen(i); ctx.ptItemDone('done'); } });
+  clock.now += 10 * 60 * 1000;                         // 12:05 AM Oct 19
+  ctx.finishPtSession();
+  const e = ctx.getState().log.slice(-1)[0];
+  assert.equal(e.date, '2026-10-18');
+  assert.equal(e.completedAt, '2026-10-19T04:05:00.000Z');
+  assert.equal(ctx.ptDoneToday(ctx.getState()), false, 'on Oct 19 the list is open again (it counted for Oct 18)');
+});
+
 test('no UTC-date idiom remains in the app script', () => {
   const html = readFileSync(join(root,'index.html'),'utf8');
   assert.equal(html.includes("toISOString().split('T')[0]"), false);
