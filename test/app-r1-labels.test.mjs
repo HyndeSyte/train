@@ -21,3 +21,12 @@ test('RPr finisher reads "Trunk"; no template block in either mode is labeled "C
     }
   }
 });
+
+test('index.html loads data.js with a cache-buster equal to the data version', () => {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const ctx = { window: {} }; ctx.window = ctx; vm.createContext(ctx);
+  vm.runInContext(readFileSync(join(root, 'data.js'), 'utf8'), ctx);
+  const m = /<script src="data\.js\?v=([^"]+)"><\/script>/.exec(html);
+  assert.ok(m, 'data.js script tag with a version query');
+  assert.equal(m[1], ctx.TRAIN_DATA_VERSION, 'cache-buster matches TRAIN_DATA_VERSION');
+});
