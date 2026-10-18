@@ -5,7 +5,7 @@
 // recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '7.3.1';
+window.TRAIN_DATA_VERSION = '7.4.0';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -206,7 +206,7 @@ window.RECOVERY_TEMPLATES = {
 // One tap-through card, one Finish; it never parks and never advances the rotation.
 window.PT_LIST = {
   name: 'PT\u2019s list',
-  updated: '2026-10-15',
+  updated: '2026-10-18',
   ivyUntil: '2026-10-29',          // tick it in My Ivy Care too until Train has carried it two weeks
   rule: 'Work up to tingling or other nerve symptoms, never into them.',
   // All-day elbow and posture habits: first-line care for cubital tunnel; no session time.
@@ -251,17 +251,17 @@ window.PT_LIST = {
         steps:['Sit tall, palms together at chest height.','Slowly lower the hands a few inches, palms staying together. Stay above the bottom of the ribs.','Rise again at the first stretch in the palm or forearm. Smooth, no bouncing.'],
         feel:'Mild stretch in the forearms and palms.', stop:'the first hint of tingling, or a pull at the old palm injury. Lower the hands less. This one loads the nerve at the wrist more than the glides below.',
         status:'video', mediaType:'youtube', videoId:'XnJu70SLsJk', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=XnJu70SLsJk', checkedAt:'2026-10-18' } },
-    { id:'median', block:'pt', source:'clinic', name:'Median nerve glide', sets:3, reps:10, perSide:true, restSec:20, tempoCue:'slow, no holding at the ends',
+    { id:'median', block:'pt', source:'clinic', name:'Median nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'slow, no holding at the ends',
       ref:{ cue:'Motion, not stretch: one end lengthens while the other slackens.',
         steps:['Arm about halfway out to the side (not shoulder height), palm up, elbow slightly bent.','Wrist back as you tilt your head toward that arm.','Wrist down as you tilt your head away. Back and forth, small range.'],
         feel:'Easy movement; at most a faint pull.', stop:'tingling starts. Make the range smaller. Anything stirred up should settle within minutes.',
         status:'video', mediaType:'youtube', videoId:'lr5_Yfdb9oM', start:null, end:null, sourceLabel:'Ortho Eval Pal (Paul Marquis, PT)', fallbackUrl:'https://www.youtube.com/watch?v=lr5_Yfdb9oM', checkedAt:'2026-10-18' } },
-    { id:'ulnar', block:'pt', source:'clinic', name:'Ulnar nerve glide', sets:3, reps:10, perSide:true, restSec:20, tempoCue:'gentle, part range at the elbow',
+    { id:'ulnar', block:'pt', source:'clinic', name:'Ulnar nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'gentle, part range at the elbow',
       ref:{ cue:'Gentlest of the three. Never push into a deep elbow bend.',
         steps:['Arm about halfway out to the side, palm facing forward (the demo shows the start position).','Bend the elbow a little and tip the wrist back as you tilt your head toward that arm.','Straighten the elbow as you tilt your head away. Small, rhythmic reps.'],
         feel:'Easy movement around the elbow; nothing sharp.', stop:'the pinky side tingles. Bend the elbow less. Skip the full OK-sign mask position.',
         status:'video', mediaType:'youtube', videoId:'_RqaQErKMpE', start:null, end:null, sourceLabel:'Ortho Eval Pal (Paul Marquis, PT)', fallbackUrl:'https://www.youtube.com/watch?v=_RqaQErKMpE', checkedAt:'2026-10-18' } },
-    { id:'radial', block:'pt', source:'clinic', name:'Radial nerve glide', sets:3, reps:10, perSide:true, restSec:20, tempoCue:'slow, easy neck',
+    { id:'radial', block:'pt', source:'clinic', name:'Radial nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'slow, easy neck',
       ref:{ cue:'Shoulder relaxed down, not forced.',
         steps:['Arm by your side, elbow straight, palm facing back.','Bend the wrist and fingers as you tilt your head toward that arm.','Release the wrist as you tilt your head away. Small, smooth reps.'],
         feel:'Easy movement along the back of the forearm.', stop:'tingling on the thumb side. Make the range smaller.',

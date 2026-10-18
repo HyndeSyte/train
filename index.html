@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0a0a">
 <title>Train</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=7.4.0">
 </head>
 <body>
 
@@ -94,14 +94,14 @@
 </div>
 
 <!-- data.js defines window.EXERCISE_LIBRARY, window.FORM, window.SESSION_TEMPLATES (+ v7.3 RECOVERY_TEMPLATES, PT_LIST); it MUST load before the inline app script below. Keep both classic (no defer/async/module). -->
-<script src="data.js?v=7.3.1"></script>
+<script src="data.js?v=7.4.0"></script>
 <script>
 "use strict";
 // ===================================================================
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 8;
-const BUILD_ID = 'v7.3.1-2026-10-15-recovery';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v7.4.0-2026-10-18-pt-guided';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -2201,7 +2201,7 @@ function ptItemShown(it){ return !(it && it.block === 'adds' && ptWorseToday());
 function ptDoseLine(it){
   if(!it) return '';
   if(it.doseText) return it.doseText;
-  const sets = it.sets || 1, reps = it.reps || 1, side = it.perSide ? ' each side' : '';
+  const sets = it.sets || 1, reps = it.reps || 1, side = it.perSide ? (it.sideWord ? ' each ' + it.sideWord : ' each side') : '';
   if(it.holdSec && reps === 1) return `${sets} x ${it.holdSec} s hold${side}`;
   if(it.holdSec) return `${sets} x ${reps}, ${it.holdSec} s hold each${side}`;
   return `${sets} x ${reps}${side}`;
@@ -2623,8 +2623,8 @@ function renderReference(){
   cats.forEach(cat=>{
     html += `<div class="block-label">${cat.label}</div>`;
     if(cat.pt){
-      html += `<div class="ref-exercise"><div class="ref-ladder">${PT_LIST.rule} Runs exactly as PT prescribed; updated ${formatDate(PT_LIST.updated)}.</div></div>`;
-      PT_LIST.items.forEach((i, idx)=>{ html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ref-name">${i.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ptDoseLine(i)}</span></div><button class="ref-btn" style="margin-top:0;" onclick="showPtRef(${idx})">&#9654;</button></div><div class="ref-ladder">${i.block === 'adds' ? 'Train adds (optional, inside PT\u2019s limits)' : i.source === 'clinic' ? 'Shown in clinic' : 'My Ivy Care home program'}</div></div>`; });
+      html += `<div class="ref-exercise"><div class="ref-ladder">${PT_LIST.rule} PT&rsquo;s movements, doses inside PT&rsquo;s limits; updated ${formatDate(PT_LIST.updated)}.</div></div>`;
+      PT_LIST.items.forEach((i, idx)=>{ html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ref-name">${i.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ptDoseLine(i)}</span></div><button class="ref-btn" style="margin-top:0;" onclick="showPtRef(${idx})">&#9654;</button></div><div class="ref-ladder">${i.block === 'adds' || i.block === 'open' ? 'Train adds (optional, inside PT\u2019s limits)' : i.source === 'clinic' ? 'Shown in clinic' : 'My Ivy Care home program'}</div></div>`; });
       return;
     }
     if(cat.form){
