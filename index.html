@@ -101,7 +101,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 8;
-const BUILD_ID = 'v7.4.0-2026-10-18-pt-guided';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v7.4.1-2026-10-18-local-day-share';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -1745,7 +1745,9 @@ function finalizeSession(statusReason){
   // left intact so the user can retry, rather than half-committing.
   try {
     const flow = currentFlow();
-    const today = new Date().toISOString().split('T')[0];
+    // Entry date is the LOCAL day (an evening session is not tomorrow's); an expired park keeps
+    // the day it was parked. completedAt stays the UTC instant.
+    const today = (statusReason === 'parkExpired' && AS.parkedAt) ? localDay(AS.parkedAt) : localDay();
     const gc = liveCoreComplete();   // the v7 core gate, computed while records are live
 
     // Build the slot-aware performed/skipped records from flow metadata (added in commit 1).
@@ -2478,7 +2480,7 @@ function finishPtSession(endedForSymptoms){
   try {
     const next = getState();
     const entry = {
-      date: new Date().toISOString().split('T')[0], sessionType: 'PT', logSchemaVersion: 2,
+      date: localDay(PTS.startedAt), sessionType: 'PT', logSchemaVersion: 2,
       mode: 'recovery', ptList: true, coreComplete: true,
       sessionId: genSessionId(),
       startedAt: new Date(PTS.startedAt).toISOString(),
@@ -2692,7 +2694,7 @@ function renderSettings(){
     </div>
     <div class="block-label">Your data</div>
     <div class="card">
-      <div class="setting-row"><div><div style="font-weight:600;">Export data</div><div style="font-size:12px;color:var(--text2);">Download full log as JSON</div></div><button class="btn btn-small btn-secondary" onclick="exportData()">Export</button></div>
+      <div class="setting-row"><div><div style="font-weight:600;">Export data</div><div style="font-size:12px;color:var(--text2);">Full log as JSON, via the share sheet</div></div><button class="btn btn-small btn-secondary" onclick="exportData()">Export</button></div>
     </div>
     <details style="margin-top:14px;">
       <summary style="font-size:13px;color:var(--text3);cursor:pointer;font-weight:600;padding:4px 0;">Advanced</summary>
@@ -2755,7 +2757,29 @@ function toggleCardioClear(){
     { text:'Yes, cleared', cls:'btn-primary', action:()=>{ hideModal(); setCardioClear(true); renderSettings(); } }
   ]);
 }
-function exportData(){ const s = getState(); const blob = new Blob([JSON.stringify(s,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=`train-backup-${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(url); }
+// Export: hand the backup to the share sheet when the browser can share files (Home Screen web
+// apps: a blob <a download> can freeze the app, WebKit bug 290847); the blob link is the fallback
+// only where files can't be shared. A cancelled share sheet is not an error.
+function exportBackupFile(){ const json = JSON.stringify(getState(),null,2); const name = `train-backup-${localDay()}.json`; return { json, name }; }
+function exportViaBlob(json, name){ const blob = new Blob([json],{type:'application/json'}); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
+function exportData(){
+  const { json, name } = exportBackupFile();
+  let file = null;
+  try {
+    if(navigator.share && navigator.canShare && typeof File === 'function'){
+      const f = new File([json], name, { type:'application/json' });
+      if(navigator.canShare({ files:[f] })) file = f;
+    }
+  } catch(e){ file = null; }
+  if(!file){ exportViaBlob(json, name); return; }
+  navigator.share({ files:[file], title:'Train backup' }).catch(err=>{
+    if(err && err.name === 'AbortError') return;   // he closed the sheet
+    showModal('Could not open the share sheet', 'Save the backup with a download instead?', [
+      { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
+      { text:'Download', cls:'btn-primary', action:()=>{ hideModal(); exportViaBlob(json, name); } }
+    ]);
+  });
+}
 function importData(ev){ const f = ev.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = e=>{ try { const data = JSON.parse(e.target.result); if(data.log && Array.isArray(data.log)){ showModal('Import data?', `Replace current data with ${data.log.length} sessions from the backup?`, [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Import',cls:'btn-primary',action:()=>{ saveState(migrate(data)); hideModal(); renderSettings(); showScreen('home'); }} ]); } else alert('Invalid backup file.'); } catch(err){ alert('Could not read file.'); } }; r.readAsText(f); }
 function confirmResetRotation(){ showModal('Reset rotation?', 'The next session returns to Heavy Rings: Pull. Session history is not changed.', [ {text:'Cancel',cls:'btn-secondary',action:()=>hideModal()}, {text:'Reset',cls:'btn-danger',action:()=>{ hideModal(); resetRotation(); }} ]); }
 function resetRotation(){ const s = getState(); s.rotationIndex = 0; saveState(s); renderSettings(); }
