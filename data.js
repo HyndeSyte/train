@@ -5,7 +5,7 @@
 // recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '7.3.1';
+window.TRAIN_DATA_VERSION = '7.4.0';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -201,21 +201,75 @@ window.RECOVERY_TEMPLATES = {
 // PT'S LIST (v7.3): PT's home program, run by Train as its own short daily session.
 // ===================================================================
 // PT owns the list (My Ivy Care). Train's copy is updated from the visit notes after each
-// visit, and it runs exactly as PT prescribed: names and doses only, no added technique.
+// visit, and it runs exactly as PT prescribed: PT's names and doses. v7.4 adds how-to and
+// demo per item (technique only), and an optional 'Train adds' block inside PT's limits.
 // One tap-through card, one Finish; it never parks and never advances the rotation.
 window.PT_LIST = {
   name: 'PT\u2019s list',
-  estimate: '15\u201320',          // the honest session length, in minutes
-  updated: '2026-10-15',
+  updated: '2026-10-18',
   ivyUntil: '2026-10-29',          // tick it in My Ivy Care too until Train has carried it two weeks
   rule: 'Work up to tingling or other nerve symptoms, never into them.',
+  // All-day elbow and posture habits: first-line care for cubital tunnel; no session time.
+  // Standing red flags (reviewed 2026-10-18): shown on the list screen every day, not only after a stop.
+  redFlags: 'Call PT for numbness that doesn\u2019t settle. Same-day medical care, and tell PT, for new or worsening weakness, new hand clumsiness (dropping things, trouble with buttons), or a change in balance or walking. Emergency room for sudden major weakness or new bladder or bowel trouble.',
+  allDay: 'All day: don\u2019t lean on your elbows, use a headset for calls, and keep the elbows from staying bent at night (a towel loosely wrapped around the elbow helps).',
   items: [
-    { name:'Doorway pec stretch', dose:'3 x 10', source:'ivy' },
-    { name:'Seated upper-trap stretch', dose:'3 x 10 each side', source:'ivy' },
-    { name:'Supine chin tuck', dose:'3 x 10', source:'ivy' },
-    { name:'Seated prayer median-nerve glide', dose:'3 x 10', source:'ivy' },
-    { name:'Median nerve glide', dose:'3 x 10', source:'clinic' },
-    { name:'Ulnar nerve glide', dose:'3 x 10', source:'clinic' },
-    { name:'Radial nerve glide', dose:'3 x 10', source:'clinic' }
+    // TRAIN ADDS (block 'adds', optional): reviewed 2026-10-18 by an internal PT red team, ChatGPT
+    // and Gemini. Kept small on purpose: everything PT gives runs first and counts as the full day.
+    // Cut after review: wall slide and open book (overhead / end-range plexus tension, possible TOS),
+    // levator stretch (rotation + side bend toward the worse side), rhomboid stretch and the
+    // shoulder-blade squeeze ("back and down" is the costoclavicular provocation position).
+    // Breathing is the opener (block 'open', runs before PT's program); shrugs close.
+    { id:'breath', block:'open', source:'train', name:'Belly breathing, lying down', doseText:'1 easy minute', sets:1, reps:1, holdSec:60, setupSec:5, restSec:0,
+      ref:{ cue:'One easy minute to settle the neck before anything else. Can\u2019t fail.',
+        steps:['Lie on your back, knees bent, hands on your belly or by your sides.','Breathe in through the nose; let the belly and lower ribs rise.','Breathe out slowly, a little longer than the in-breath. Shoulders stay soft.'],
+        feel:'The belly and lower ribs moving; the neck and shoulders quiet.', stop:'you feel light-headed. Breathe normally.', status:'text' } },
+    // PT's program (block 'pt'): PT's movements. Doses chosen 2026-10-18 at Dane's direction
+    // ("app numbers are good, but if we can find a better path I want those"): stretches use
+    // PT's own clinic dose (2 x 30 s holds); the chin tuck follows the craniocervical-flexion
+    // endurance approach (Jull): 10 reps, holds start at 5 s and build toward 10 s only when the
+    // current hold feels easy (holdSteps; Dane taps to progress); glides stay PT's 3 x 10 per arm
+    // with the head tilt PT taught. Reviewed by ChatGPT, Gemini and an internal PT red team.
+    // ref = how to do it (the standard clinical technique) and when to stop; it never changes the dose.
+    { id:'pec', block:'pt', source:'ivy', name:'Doorway pec stretch', sets:2, reps:1, holdSec:30, restSec:10,
+      ref:{ cue:'A gentle chest stretch, not a strain. Elbow below shoulder height for now.',
+        steps:['Forearm flat on the door frame, elbow bent and a little below shoulder height.','Step through with the same-side foot until the chest stretches gently.','Stand tall and breathe slowly. Let the shoulder sit naturally; don\u2019t force it down.'],
+        feel:'Stretch across the front of the chest and shoulder.', stop:'the hand or fingers tingle. Lower the elbow or step through less.',
+        status:'video', mediaType:'youtube', videoId:'M850sCj9LHQ', start:null, end:null, sourceLabel:'MedBridge', fallbackUrl:'https://www.youtube.com/watch?v=M850sCj9LHQ', checkedAt:'2026-10-18' } },
+    { id:'ut', block:'pt', source:'ivy', name:'Seated upper-trap stretch', sets:2, reps:1, holdSec:30, perSide:true, restSec:10,
+      ref:{ cue:'Ear toward the shoulder, nothing forced.',
+        steps:['Sit tall, hands resting in your lap. Don\u2019t hold the chair or push the shoulder down.','Tilt your ear toward the opposite shoulder. Check both arms as you go.','Want more? Rest the other hand on your head, its weight only.'],
+        feel:'Stretch along the top of the shoulder and side of the neck.', stop:'either arm tingles. Take the hand off your head and bring your head back to center. If tingling lingers after you let go, skip this stretch for today.',
+        status:'video', mediaType:'youtube', videoId:'-r0eoFS7_5Q', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=-r0eoFS7_5Q', checkedAt:'2026-10-18' } },
+    { id:'chin', block:'pt', source:'ivy', name:'Supine chin tuck', sets:1, reps:10, holdSec:5, holdSteps:[5,7,10], relaxSec:5, restSec:0,
+      ref:{ cue:'A small nod, low effort, held. Endurance, not strength. Starts at 5 s holds; when that feels easy, tap \u201cHold longer next time\u201d to build toward 10 s.',
+        steps:['Lie on your back, knees bent; a thin towel under the head if needed.','Nod gently, as if saying yes, so the back of the neck lengthens.','Hold the nod for the count, breathing normally; head stays on the floor. Relax fully, repeat.'],
+        feel:'Gentle work deep at the front of the neck; a lengthening at the back.', stop:'the front neck muscles grip hard or arm symptoms rise. Use less effort.',
+        status:'video', mediaType:'youtube', videoId:'jgz-32qjpOg', start:null, end:null, sourceLabel:'Momentum Physical Therapy', fallbackUrl:'https://www.youtube.com/watch?v=jgz-32qjpOg', checkedAt:'2026-10-18' } },
+    { id:'prayer', block:'pt', source:'ivy', name:'Seated prayer median-nerve glide', sets:3, reps:10, restSec:20, tempoCue:'slow, in and out',
+      ref:{ cue:'Lower the hands only as far as the first mild stretch.',
+        steps:['Sit tall, palms together at chest height.','Slowly lower the hands a few inches, palms staying together. Stay above the bottom of the ribs.','Rise again at the first stretch in the palm or forearm. Smooth, no bouncing.'],
+        feel:'Mild stretch in the forearms and palms.', stop:'the first hint of tingling, or a pull at the old palm injury. Lower the hands less. This one loads the nerve at the wrist more than the glides below.',
+        status:'video', mediaType:'youtube', videoId:'XnJu70SLsJk', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=XnJu70SLsJk', checkedAt:'2026-10-18' } },
+    { id:'median', block:'pt', source:'clinic', name:'Median nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'slow, no holding at the ends',
+      ref:{ cue:'Motion, not stretch: one end lengthens while the other slackens.',
+        steps:['Arm about halfway out to the side (not shoulder height), palm up, elbow slightly bent.','Wrist back as you tilt your head toward that arm.','Wrist down as you tilt your head away. Back and forth, small range.'],
+        feel:'Easy movement; at most a faint pull.', stop:'tingling starts. Make the range smaller. Anything stirred up should settle within minutes.',
+        status:'video', mediaType:'youtube', videoId:'lr5_Yfdb9oM', start:null, end:null, sourceLabel:'Ortho Eval Pal (Paul Marquis, PT)', fallbackUrl:'https://www.youtube.com/watch?v=lr5_Yfdb9oM', checkedAt:'2026-10-18' } },
+    { id:'ulnar', block:'pt', source:'clinic', name:'Ulnar nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'gentle, part range at the elbow',
+      ref:{ cue:'Gentlest of the three. Never push into a deep elbow bend.',
+        steps:['Arm about halfway out to the side, palm facing forward (the demo shows the start position).','Bend the elbow a little and tip the wrist back as you tilt your head toward that arm.','Straighten the elbow as you tilt your head away. Small, rhythmic reps.'],
+        feel:'Easy movement around the elbow; nothing sharp.', stop:'the pinky side tingles. Bend the elbow less. Skip the full OK-sign mask position.',
+        status:'video', mediaType:'youtube', videoId:'_RqaQErKMpE', start:null, end:null, sourceLabel:'Ortho Eval Pal (Paul Marquis, PT)', fallbackUrl:'https://www.youtube.com/watch?v=_RqaQErKMpE', checkedAt:'2026-10-18' } },
+    { id:'radial', block:'pt', source:'clinic', name:'Radial nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'slow, easy neck',
+      ref:{ cue:'Shoulder relaxed down, not forced.',
+        steps:['Arm by your side, elbow straight, palm facing back.','Bend the wrist and fingers as you tilt your head toward that arm.','Release the wrist as you tilt your head away. Small, smooth reps.'],
+        feel:'Easy movement along the back of the forearm.', stop:'tingling on the thumb side. Make the range smaller.',
+        status:'video', mediaType:'youtube', videoId:'vL7yF9TXCCo', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=vL7yF9TXCCo', checkedAt:'2026-10-18' } },
+
+    { id:'shrug', block:'adds', source:'train', name:'Slow shoulder shrugs', sets:1, reps:10, restSec:0, tempoCue:'smooth up, 3 s down, no pause at the top',
+      ref:{ cue:'Lifting the shoulders opens the space at the collarbone. A gentle counter to the day\u2019s slump.',
+        steps:['Sit or stand tall, arms hanging relaxed.','Lift both shoulders smoothly toward your ears. No squeeze or pause at the top.','Lower them slowly over about 3 seconds, all the way, then let go.'],
+        feel:'Easy work on top of the shoulders; a release on the way down.', stop:'arm symptoms start. Make the shrug smaller.', status:'text' } }
   ]
 };

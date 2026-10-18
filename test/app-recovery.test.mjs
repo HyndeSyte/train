@@ -349,9 +349,12 @@ test("PT's list: runs outside the slot while a ring session is parked; never tou
   assert.match(html(ctx, 'home-content'), /startPtSession\(\)/, 'PT list startable while a ring session is parked');
   ctx.startPtSession();
   assert.ok(ctx.__PTS());
-  ctx.togglePtItem(0);
+  ctx.ptOpen(0); ctx.ptItemDone('done');
+  ctx.ptBackToList();
   ctx.document.getElementById('pt-note').value = 'glides tingly at rep 8';
-  ctx.togglePtItem(1);   // a re-render keeps the typed note
+  ctx.ptOpen(1);   // opening an item keeps the typed note
+  ctx.ptItemDone('stopped');
+  ctx.ptBackToList();
   assert.equal(ctx.__PTS().note, 'glides tingly at rep 8');
   ctx.finishPtSession();
   s = ctx.getState();
@@ -360,10 +363,14 @@ test("PT's list: runs outside the slot while a ring session is parked; never tou
   assert.equal(e.mode, 'recovery');
   assert.equal(e.ptList, true);
   assert.equal(e.coreComplete, true);
-  assert.equal(e.sessionStatus, 'completed');
+  assert.equal(e.sessionStatus, 'stopped', 'one item stopped for symptoms: the record says so');
   assert.equal(e.armCheck, 'same');
   assert.equal(e.notes, 'glides tingly at rep 8');
   assert.deepEqual(plain(e.ptItems.map(i=> i.name)), plain(ctx.PT_LIST.items.map(i=> i.name)));
+  assert.equal(e.ptItems[0].status, 'done');
+  assert.equal(e.ptItems[1].status, 'stopped');
+  assert.equal(e.ptItems[2].status, 'not done');
+  assert.equal(e.ptItems[0].dose, ctx.ptDoseLine(ctx.PT_LIST.items[0]));
   assert.equal(JSON.stringify(s.activeSession), parked, 'the parked session is untouched');
   assert.equal(s.rotationIndex, 0);
   assert.equal(s.nextSessionOverride, 'LS');
@@ -379,7 +386,9 @@ test("PT's list: runs outside the slot while a ring session is parked; never tou
   assert.equal(p['Mode'].select.name, 'Recovery');
   assert.equal(p['Arm Check'].select.name, 'Same');
   assert.equal(wire.detail.exercises[0].role, 'pt');
-  assert.equal(wire.detail.exercises[0].reps, '3 x 10');
+  assert.equal(wire.detail.exercises[0].reps, ctx.ptDoseLine(ctx.PT_LIST.items[0]));
+  assert.equal(wire.detail.exercises[1].issue, 'stopped for symptoms');
+  assert.equal(wire.detail.exercises[0].role, 'pt');
 });
 
 test('sync payload contract: every session type in every mode validates and maps Mode / Arm Check / PT List', () => {
@@ -561,8 +570,13 @@ test("PT's list is once a day: reopening it is view-only and never logs a second
   const { ctx } = recoveryBoot();
   ctx.recordArmCheck('same');
   ctx.startPtSession();
+  ctx.finishPtSession();   // nothing done yet: Finish logs nothing
+  assert.equal(ctx.getState().log.length, 0);
+  assert.equal(ctx.document.getElementById('modal-title').textContent, 'Nothing done yet');
+  ctx.ptOpen(1); ctx.ptItemDone('done');
   ctx.finishPtSession();
   const n = ctx.getState().log.length;
+  assert.equal(n, 1);
   ctx.startPtSession();
   assert.equal(ctx.__PTS().viewOnly, true);
   ctx.renderPtScreen();
