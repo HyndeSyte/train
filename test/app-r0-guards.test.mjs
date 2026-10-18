@@ -77,7 +77,7 @@ test('code comments no longer name the condition or the PT portal (user-facing c
   const files = ['index.html', 'data.js'];
   for(const f of files){
     const src = readFileSync(join(root, f), 'utf8');
-    const comments = [...src.matchAll(/\/\/[^\n]*/g)].map(m=>m[0]).join('\n');
+    const comments = [...src.matchAll(/\/\/[^\n]*|\/\*[\s\S]*?\*\/|<!--[\s\S]*?-->/g)].map(m=>m[0]).join('\n');
     assert.doesNotMatch(comments, banned, f + ' comments');
   }
 });
