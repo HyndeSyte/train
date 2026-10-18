@@ -639,7 +639,9 @@ function buildSyncPayload(entry){
   }) : [];
   // PT's list (v7.3): no set logging; its items + doses ride as the exercise detail.
   if(entry.sessionType === 'PT' && Array.isArray(entry.ptItems)){
-    entry.ptItems.forEach(i=> exercises.push({ name: i.name, role: 'pt', reps: i.dose || '' }));
+    entry.ptItems.forEach(i=> exercises.push({ name: i.name, role: i.block === 'adds' ? 'train adds' : 'pt', reps: i.dose || '',
+      issue: i.status === 'stopped' ? 'stopped for symptoms' : undefined,
+      note: (i.status && i.status !== 'done' && i.status !== 'stopped') ? i.status : undefined }));
   }
   const { notionSync, ...rawEntry } = entry;   // keep transport state out of the stored raw
   const payload = {
@@ -1583,12 +1585,17 @@ function buildEmbedUrl(ref){
 }
 function showRef(exId){
   const ex = EXERCISE_LIBRARY[exId]; if(!ex) return;
-  const ref = ex.reference || {};
+  showRefFor(getVariationName(exId), ex.reference || {}, refCue(ex));
+}
+// Shared reference modal (library exercises and, since v7.4, PT's list items).
+function showRefFor(title, ref, cueText){
+  ref = ref || {};
   const status = ref.status || 'text';
-  const cue = refCue(ex) || 'Text cue coming soon.';
-  const title = getVariationName(exId);
+  const cue = cueText || ref.cue || 'Text cue coming soon.';
   const embedUrl = (status === 'video') ? buildEmbedUrl(ref) : null;
   let html = `<div style="font-size:14px;color:var(--text);line-height:1.45;">${cue}</div>`;
+  if(Array.isArray(ref.steps) && ref.steps.length) html += `<ol class="pt-steps">${ref.steps.map(s=>`<li>${s}</li>`).join('')}</ol>`;
+  if(ref.stop) html += `<div class="pt-stop"><b>Stop if:</b> ${ref.stop}</div>`;
   if(embedUrl){
     html += `<div style="position:relative;width:100%;padding-bottom:56.25%;margin-top:14px;background:#000;border-radius:8px;overflow:hidden;"><iframe src="${embedUrl}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
     if(ref.fallbackUrl) html += `<div style="margin-top:8px;"><a href="${ref.fallbackUrl}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text2);">Not loading? Open source ↗</a></div>`;
@@ -1990,7 +1997,7 @@ function renderPtCard(s){
   return `<div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <div style="display:flex;align-items:center;gap:6px;"><span class="badge badge-pt">PT</span><span style="font-size:11px;color:var(--text3);">once a day</span></div>
-        <span style="font-size:11px;color:var(--text3);">~${PT_LIST.estimate} min</span>
+        <span style="font-size:11px;color:var(--text3);">~${ptEstimateMin('pt')} min</span>
       </div>
       <div class="session-name" style="font-size:22px;">${PT_LIST.name}</div>
       ${done ? `<div style="font-size:13px;color:var(--accent);font-weight:600;margin:4px 0 10px;">&#10003; Done today</div>` : ''}
@@ -2165,40 +2172,252 @@ function startPtSession(){
   unlockAudio();
   const s = getState();
   // Once a day: after today's list is logged, reopening it is for reference only.
-  if(ptDoneToday(s)){ PTS = { viewOnly: true, startedAt: Date.now(), armCheck: null, checked: {}, note: '' }; showScreen('pt'); return; }
-  const go = (v)=>{ PTS = { startedAt: Date.now(), armCheck: v !== undefined ? v : todayArmCheck(getState()), checked: {}, note: '' }; showScreen('pt'); };
+  if(ptDoneToday(s)){ PTS = { viewOnly: true, startedAt: Date.now(), armCheck: null, status: {}, run: null, note: '' }; showScreen('pt'); return; }
+  const go = (v)=>{ PTS = { startedAt: Date.now(), armCheck: v !== undefined ? v : todayArmCheck(getState()), status: {}, run: null, note: '' }; showScreen('pt'); };
   if(needsArmCheck(s)) askArmCheck(go); else go();
+}
+// ---- v7.4: guided PT's list --------------------------------------------------------------
+// Doses are structured (sets x reps, an optional hold per rep, optional per side). Each item
+// starts on one tap, then the timer runs it hands-off: get set -> hold -> release -> next rep,
+// switch sides, rest between sets. Reps without a hold wait for "Set done". The timer is
+// absolute-time (survives backgrounding) and the screen is kept awake while one runs.
+function ptItemsAll(){ return (PT_LIST && Array.isArray(PT_LIST.items)) ? PT_LIST.items : []; }
+function ptDoseLine(it){
+  if(!it) return '';
+  const sets = it.sets || 1, reps = it.reps || 1, side = it.perSide ? ' each side' : '';
+  if(it.holdSec && reps === 1) return `${sets} x ${it.holdSec} s hold${side}`;
+  if(it.holdSec) return `${sets} x ${reps}, ${it.holdSec} s hold each${side}`;
+  return `${sets} x ${reps}${side}`;
+}
+// The step plan for one item. Pure: the tests drive it directly.
+function buildPtPlan(it){
+  const steps = [];
+  const sets = Math.max(1, it.sets || 1), reps = Math.max(1, it.reps || 1);
+  const sides = it.perSide ? (it.sides || ['Right','Left']) : [null];
+  if(it.holdSec) steps.push({ kind:'ready', sec: it.setupSec || 5, set:1, sets, side: sides[0] });
+  for(let s = 1; s <= sets; s++){
+    sides.forEach((side, si)=>{
+      if(it.holdSec){
+        for(let r = 1; r <= reps; r++){
+          steps.push({ kind:'hold', sec: it.holdSec, set:s, sets, rep:r, reps, side });
+          if(r < reps) steps.push({ kind:'relax', sec: it.relaxSec || 3, set:s, sets, rep:r+1, reps, side });
+        }
+      } else {
+        steps.push({ kind:'reps', reps, set:s, sets, side });
+      }
+      if(si < sides.length - 1) steps.push({ kind:'switch', sec: it.switchSec || 5, set:s, sets, side: sides[si+1] });
+    });
+    if(s < sets) steps.push({ kind:'rest', sec: (it.restSec != null ? it.restSec : 15), set:s+1, sets, side: sides[0] });
+  }
+  return steps;
+}
+// Honest minutes for a block: timed seconds as planned, untimed reps at ~3 s each, plus
+// ~20 s per item to get into position.
+function ptEstimateMin(block){
+  let sec = 0;
+  ptItemsAll().filter(it=> !block || (it.block || 'pt') === block).forEach(it=>{
+    sec += 20;
+    buildPtPlan(it).forEach(st=>{ sec += st.sec || (st.kind === 'reps' ? st.reps * (it.secPerRep || 3) : 0); });
+  });
+  return Math.max(1, Math.round(sec / 60));
+}
+let ptTimer = null, ptWake = null;
+function ptWakeOn(){
+  try {
+    if(ptWake || !navigator.wakeLock || !navigator.wakeLock.request) return;
+    navigator.wakeLock.request('screen').then(l=>{ ptWake = l; if(l && l.addEventListener) l.addEventListener('release', ()=>{ ptWake = null; }); }).catch(()=>{});
+  } catch(e){ /* no wake lock: the timer still runs on absolute time */ }
+}
+function ptWakeOff(){ try { if(ptWake) ptWake.release(); } catch(e){} ptWake = null; }
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && PTS && PTS.run && PTS.run.plan && !PTS.run.paused) { ptWakeOn(); ptTick(); }
+});
+function ptStopTimer(){ if(ptTimer){ clearTimeout(ptTimer); ptTimer = null; } }
+function ptStep(){ const r = PTS && PTS.run; return (r && r.plan) ? r.plan[r.k] : null; }
+function ptOpen(i){
+  if(!PTS) return;
+  ptStopTimer(); ptWakeOff();
+  const n = document.getElementById('pt-note'); if(n) PTS.note = n.value;
+  PTS.run = { i, plan: null, k: 0, endsAt: 0, paused: false, left: 0 };
+  renderPtScreen();
+}
+function ptBackToList(){
+  if(!PTS) return;
+  ptStopTimer(); ptWakeOff();
+  PTS.run = null;
+  renderPtScreen();
+}
+function ptStartItem(){
+  if(!PTS || !PTS.run) return;
+  unlockAudio();
+  const it = ptItemsAll()[PTS.run.i]; if(!it) return;
+  PTS.run.plan = buildPtPlan(it); PTS.run.k = 0; PTS.run.paused = false;
+  ptWakeOn();
+  ptEnter();
+}
+function ptEnter(){
+  const r = PTS.run, st = ptStep();
+  if(!st){ ptItemDone('done'); return; }
+  if(st.sec){
+    r.endsAt = Date.now() + st.sec * 1000;
+    if(st.kind === 'hold') cueStarted();
+    ptStopTimer(); ptTimer = setTimeout(ptTick, 200);
+  } else {
+    ptStopTimer();
+  }
+  renderPtScreen();
+}
+function ptTick(){
+  ptTimer = null;
+  if(!PTS || !PTS.run || !PTS.run.plan || PTS.run.paused) return;
+  const st = ptStep(); if(!st || !st.sec) return;
+  const left = PTS.run.endsAt - Date.now();
+  if(left <= 0){
+    if(st.kind === 'hold') cueRelease(); else cueGo();
+    ptAdvance();
+    return;
+  }
+  const el = document.getElementById('pt-count');
+  if(el) el.textContent = String(Math.ceil(left / 1000)); else renderPtScreen();
+  ptTimer = setTimeout(ptTick, 200);
+}
+function ptAdvance(){
+  if(!PTS || !PTS.run || !PTS.run.plan) return;
+  PTS.run.k++;
+  if(PTS.run.k >= PTS.run.plan.length){ ptItemDone('done'); return; }
+  ptEnter();
+}
+function ptSetDone(){ cueLogged(); ptAdvance(); }
+function ptPause(){
+  const r = PTS && PTS.run; if(!r || !r.plan) return;
+  if(r.paused){ r.paused = false; r.endsAt = Date.now() + r.left; ptWakeOn(); ptStopTimer(); ptTimer = setTimeout(ptTick, 200); }
+  else { r.paused = true; r.left = Math.max(0, r.endsAt - Date.now()); ptStopTimer(); }
+  renderPtScreen();
+}
+// done | skipped | stopped (symptoms crossed the line: stop it for today, shorter next time)
+function ptItemDone(status){
+  if(!PTS || !PTS.run) return;
+  ptStopTimer(); ptWakeOff();
+  const i = PTS.run.i;
+  PTS.status[i] = status;
+  if(status === 'done') cueLogged(); else cueNoted();
+  // Next: the first item after this one that has no status yet, else back to the list.
+  const all = ptItemsAll();
+  let next = -1;
+  for(let j = i + 1; j < all.length; j++){ if(!PTS.status[j] && (all[j].block || 'pt') === (all[i].block || 'pt')){ next = j; break; } }
+  if(next < 0){ for(let j = 0; j < all.length; j++){ if(!PTS.status[j] && (all[j].block || 'pt') === 'pt'){ next = j; break; } } }
+  PTS.run = next >= 0 ? { i: next, plan: null, k: 0, endsAt: 0, paused: false, left: 0 } : null;
+  renderPtScreen();
+}
+function ptStepLabel(st){
+  if(!st) return '';
+  const side = st.side ? ` &middot; ${st.side}` : '';
+  if(st.kind === 'ready') return `Get set${side}`;
+  if(st.kind === 'hold') return `Hold${side}`;
+  if(st.kind === 'relax') return 'Ease off';
+  if(st.kind === 'switch') return `Switch to ${st.side}`;
+  if(st.kind === 'rest') return 'Rest';
+  if(st.kind === 'reps') return `${st.reps} reps${side}`;
+  return '';
+}
+function ptStepSub(st){
+  if(!st) return '';
+  const bits = [`Set ${st.set} of ${st.sets}`];
+  if((st.kind === 'hold' || st.kind === 'relax') && st.reps > 1) bits.push(`rep ${st.rep} of ${st.reps}`);
+  return bits.join(' &middot; ');
+}
+function ptRefHtml(ref){
+  if(!ref) return '';
+  let h = '';
+  if(ref.cue) h += `<div style="font-size:14px;color:var(--text);line-height:1.45;margin-bottom:8px;">${ref.cue}</div>`;
+  if(Array.isArray(ref.steps) && ref.steps.length) h += `<ol class="pt-steps">${ref.steps.map(s=>`<li>${s}</li>`).join('')}</ol>`;
+  if(ref.feel) h += `<div class="pt-feel"><b>Feel:</b> ${ref.feel}</div>`;
+  if(ref.stop) h += `<div class="pt-stop"><b>Stop if:</b> ${ref.stop}</div>`;
+  return h;
+}
+function showPtRef(i){
+  const it = ptItemsAll()[i]; if(!it) return;
+  showRefFor(it.name, it.ref || {});
+}
+function renderPtList(){
+  const all = ptItemsAll();
+  const row = (it, i)=>{
+    const st = PTS.status[i];
+    const mark = st === 'done' ? '&#10003;' : st === 'stopped' ? '!' : st === 'skipped' ? '&ndash;' : (i+1);
+    return `<div class="pt-item${st ? ' done' : ''}${st === 'stopped' ? ' stopped' : ''}" onclick="ptOpen(${i})">
+      <span class="pt-tick">${mark}</span>
+      <span style="flex:1;"><span class="move-name" style="font-size:16px;">${it.name}</span><span style="display:block;font-size:12px;color:var(--text2);margin-top:2px;">${ptDoseLine(it)}${st === 'stopped' ? ' &middot; stopped for today' : st === 'skipped' ? ' &middot; skipped' : ''}</span></span>
+      <span style="color:var(--text3);font-size:18px;">&rsaquo;</span>
+    </div>`;
+  };
+  const pt = all.map((it,i)=>[it,i]).filter(([it])=> (it.block || 'pt') === 'pt');
+  const adds = all.map((it,i)=>[it,i]).filter(([it])=> it.block === 'adds');
+  const firstOpen = all.findIndex((it,i)=> !PTS.status[i] && (it.block || 'pt') === 'pt');
+  return `
+    <div class="block-label" style="margin-top:6px;">PT&rsquo;s program &middot; ~${ptEstimateMin('pt')} min</div>
+    <div>${pt.map(([it,i])=>row(it,i)).join('')}</div>
+    ${adds.length ? `<div class="block-label" style="margin-top:14px;">Train adds &middot; optional &middot; ~${ptEstimateMin('adds')} min</div>
+    <div style="font-size:12px;color:var(--text3);margin:2px 0 4px;">Inside PT&rsquo;s limits. Do them after PT&rsquo;s program, on a good-arm day.</div>
+    <div>${adds.map(([it,i])=>row(it,i)).join('')}</div>` : ''}
+    ${!PTS.viewOnly && firstOpen >= 0 ? `<button class="btn btn-primary" style="margin-top:14px;" onclick="ptOpen(${firstOpen})">${Object.keys(PTS.status).length ? 'Continue' : 'Start'} with ${all[firstOpen].name}</button>` : ''}`;
+}
+function renderPtItem(){
+  const r = PTS.run, all = ptItemsAll(), it = all[r.i];
+  if(!it){ PTS.run = null; return renderPtList(); }
+  const st = ptStep();
+  const isAdd = it.block === 'adds';
+  const pos = all.filter(x=> (x.block || 'pt') === (it.block || 'pt')).indexOf(it) + 1;
+  const total = all.filter(x=> (x.block || 'pt') === (it.block || 'pt')).length;
+  const hasVideo = it.ref && it.ref.status === 'video' && buildEmbedUrl(it.ref);
+  let stage;
+  if(!r.plan){
+    stage = `<div class="pt-stage idle"><div class="pt-phase">${ptDoseLine(it)}</div><div class="pt-sub">One tap starts it; the timer runs the rest.</div></div>
+      <button class="btn btn-primary" onclick="ptStartItem()">Start</button>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-secondary" style="flex:1;" onclick="ptItemDone('done')">Already did it</button>
+        <button class="btn btn-secondary" style="flex:1;" onclick="ptItemDone('skipped')">Skip</button>
+      </div>`;
+  } else if(st && st.kind === 'reps'){
+    stage = `<div class="pt-stage"><div class="pt-phase">${ptStepLabel(st)}</div><div class="pt-sub">${ptStepSub(st)}${it.tempoCue ? ' &middot; ' + it.tempoCue : ''}</div></div>
+      <button class="btn btn-primary" onclick="ptSetDone()">Set done</button>`;
+  } else if(st){
+    const left = r.paused ? r.left : Math.max(0, r.endsAt - Date.now());
+    stage = `<div class="pt-stage ${st.kind}"><div class="pt-phase">${ptStepLabel(st)}</div>
+        <div class="pt-count" id="pt-count">${Math.ceil(left/1000)}</div>
+        <div class="pt-sub">${ptStepSub(st)}${r.paused ? ' &middot; paused' : ''}</div></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" style="flex:1;" onclick="ptPause()">${r.paused ? 'Resume' : 'Pause'}</button>
+        <button class="btn btn-secondary" style="flex:1;" onclick="ptAdvance()">Next &rsaquo;</button>
+      </div>`;
+  } else stage = '';
+  return `
+    <div class="flow-meta" style="margin-top:4px;"><span class="badge ${isAdd ? 'badge-adds' : 'badge-pt'}">${isAdd ? 'Train adds' : 'PT'}</span> ${pos} of ${total}${it.source === 'clinic' ? ' &middot; as shown in clinic' : ''}</div>
+    <div class="session-name" style="font-size:22px;margin:4px 0 2px;">${it.name}</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">${ptDoseLine(it)}</div>
+    ${stage}
+    <div class="pt-guide">${ptRefHtml(it.ref)}${hasVideo ? `<button class="ref-btn" onclick="showPtRef(${r.i})">&#9654; Demo</button>` : ''}</div>
+    ${r.plan ? `<button class="btn btn-secondary symptom-btn" style="margin-top:14px;" onclick="ptItemDone('stopped')">Symptoms: stop this one</button>` : ''}
+    <button class="btn btn-secondary" style="margin-top:8px;" onclick="ptBackToList()">&lsaquo; The list</button>`;
 }
 function renderPtScreen(){
   const el = document.getElementById('pt-content');
   if(!el) return;
   if(!PTS || !PT_LIST){ el.innerHTML = '<div class="empty">Nothing running. <a href="javascript:void(0)" onclick="showScreen(\'home\')" style="color:var(--text2);">Back to Today</a></div>'; return; }
-  const items = PT_LIST.items.map((it, i)=>{
-    const on = !!PTS.checked[i];
-    return `<div class="pt-item${on ? ' done' : ''}" onclick="togglePtItem(${i})">
-      <span class="pt-tick">${on ? '&#10003;' : (i+1)}</span>
-      <span style="flex:1;"><span class="move-name" style="font-size:16px;">${it.name}</span><span style="display:block;font-size:12px;color:var(--text2);margin-top:2px;">${it.dose}${it.source === 'clinic' ? ' &middot; as shown in clinic' : ''}</span></span>
-    </div>`;
-  }).join('');
+  if(!PTS.status) PTS.status = {};
+  if(PTS.run){ el.innerHTML = renderPtItem() + '<div style="height:24px;"></div>'; return; }
   el.innerHTML = `
-    <div class="flow-meta" style="margin-top:4px;"><span class="badge badge-pt">PT</span> once a day &middot; ~${PT_LIST.estimate} min</div>
-    <div class="recovery-note" style="margin-top:6px;">${PT_LIST.rule} If one crosses the line, stop it for today; next time make it shorter. Runs exactly as PT prescribed.</div>
-    <div style="margin:10px 0 4px;">${items}</div>
+    <div class="flow-meta" style="margin-top:4px;"><span class="badge badge-pt">PT</span> once a day</div>
+    <div class="recovery-note" style="margin-top:6px;">${PT_LIST.rule} If one crosses the line, tap &ldquo;Symptoms: stop this one&rdquo;; next time make it shorter or gentler.</div>
+    ${renderPtList()}
     ${PTS.viewOnly
-      ? `<div style="font-size:13px;color:var(--accent);font-weight:600;margin:10px 0 14px;">&#10003; Logged today. This view is for reference; nothing new is logged.</div>
+      ? `<div style="font-size:13px;color:var(--accent);font-weight:600;margin:14px 0;">&#10003; Logged today. You can run any item again; nothing new is logged.</div>
     <button class="btn btn-secondary" onclick="closePtSession()">Close</button>`
-      : `<div style="font-size:11px;color:var(--text3);margin:6px 0 14px;">Tap an item to tick it off. Nothing is logged per item; Finish logs the list.</div>
-    <textarea class="note-field" id="pt-note" rows="2" placeholder="Anything to note? (optional)">${PTS.note || ''}</textarea>
-    <button class="btn btn-primary" style="margin-top:12px;" onclick="finishPtSession()">Finish</button>`}
+      : `<textarea class="note-field" id="pt-note" rows="2" placeholder="Anything to note? (optional)" style="margin-top:14px;">${PTS.note || ''}</textarea>
+    <button class="btn ${ptAllPtDone() ? 'btn-primary' : 'btn-secondary'}" style="margin-top:12px;" onclick="finishPtSession()">Finish</button>`}
     <div style="height:24px;"></div>`;
 }
-function togglePtItem(i){
-  if(!PTS) return;
-  const n = document.getElementById('pt-note'); if(n) PTS.note = n.value;   // keep a typed note across re-render
-  PTS.checked[i] = !PTS.checked[i];
-  renderPtScreen();
-}
-function closePtSession(){ PTS = null; showScreen('home'); }
+function ptAllPtDone(){ return ptItemsAll().every((it,i)=> (it.block || 'pt') !== 'pt' || !!PTS.status[i]); }
+function closePtSession(){ ptStopTimer(); ptWakeOff(); PTS = null; showScreen('home'); }
 function finishPtSession(){
   if(!PTS || !PT_LIST){ showScreen('home'); return; }
   if(PTS.viewOnly){ closePtSession(); return; }   // once a day: a reopened list never logs twice
@@ -2214,7 +2433,7 @@ function finishPtSession(){
       completedAt: new Date().toISOString(),
       attentionFlag: false,
       exercises: {}, performed: [], sessionStatus: 'completed', exerciseMeta: {},
-      ptItems: PT_LIST.items.map(i=> ({ name: i.name, dose: i.dose })),   // what was prescribed that day
+      ptItems: ptItemsAll().map((i,idx)=> ({ name: i.name, dose: ptDoseLine(i), block: i.block || 'pt', status: PTS.status[idx] || 'not done' })),   // what was prescribed that day, and what happened
       notes: note || undefined,
       duration: Math.max(1, Math.min(60, Math.round((Date.now() - PTS.startedAt)/60000)))
     };
@@ -2226,6 +2445,7 @@ function finishPtSession(){
     applyAnchorProgressionV2(next, entry);   // a recovery entry: anchors held at bodyweight (replay-safe)
     // Rotation, override and the active-session slot are untouched by design.
     saveState(next);
+    ptStopTimer(); ptWakeOff();
     PTS = null;
     cueSessionDone();
     syncEntry(entry.sessionId);   // fire-and-forget; never blocks finishing

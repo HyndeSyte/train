@@ -205,17 +205,17 @@ window.RECOVERY_TEMPLATES = {
 // One tap-through card, one Finish; it never parks and never advances the rotation.
 window.PT_LIST = {
   name: 'PT\u2019s list',
-  estimate: '15\u201320',          // the honest session length, in minutes
   updated: '2026-10-15',
   ivyUntil: '2026-10-29',          // tick it in My Ivy Care too until Train has carried it two weeks
   rule: 'Work up to tingling or other nerve symptoms, never into them.',
   items: [
-    { name:'Doorway pec stretch', dose:'3 x 10', source:'ivy' },
-    { name:'Seated upper-trap stretch', dose:'3 x 10 each side', source:'ivy' },
-    { name:'Supine chin tuck', dose:'3 x 10', source:'ivy' },
-    { name:'Seated prayer median-nerve glide', dose:'3 x 10', source:'ivy' },
-    { name:'Median nerve glide', dose:'3 x 10', source:'clinic' },
-    { name:'Ulnar nerve glide', dose:'3 x 10', source:'clinic' },
-    { name:'Radial nerve glide', dose:'3 x 10', source:'clinic' }
+    // PT's program (block 'pt'): PT's names and doses, exactly. Structured for the timer.
+    { id:'pec', block:'pt', source:'ivy', name:'Doorway pec stretch', sets:3, reps:1, holdSec:10, restSec:10 },
+    { id:'ut', block:'pt', source:'ivy', name:'Seated upper-trap stretch', sets:3, reps:1, holdSec:10, perSide:true, restSec:10 },
+    { id:'chin', block:'pt', source:'ivy', name:'Supine chin tuck', sets:3, reps:10, restSec:20 },
+    { id:'prayer', block:'pt', source:'ivy', name:'Seated prayer median-nerve glide', sets:3, reps:10, restSec:20 },
+    { id:'median', block:'pt', source:'clinic', name:'Median nerve glide', sets:3, reps:10, perSide:true, restSec:20 },
+    { id:'ulnar', block:'pt', source:'clinic', name:'Ulnar nerve glide', sets:3, reps:10, perSide:true, restSec:20 },
+    { id:'radial', block:'pt', source:'clinic', name:'Radial nerve glide', sets:3, reps:10, perSide:true, restSec:20 }
   ]
 };
