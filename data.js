@@ -224,21 +224,26 @@ window.PT_LIST = {
       ref:{ cue:'One easy minute to settle the neck before anything else. Can\u2019t fail.',
         steps:['Lie on your back, knees bent, hands on your belly or by your sides.','Breathe in through the nose; let the belly and lower ribs rise.','Breathe out slowly, a little longer than the in-breath. Shoulders stay soft.'],
         feel:'The belly and lower ribs moving; the neck and shoulders quiet.', stop:'you feel light-headed. Breathe normally.', status:'text' } },
-    // PT's program (block 'pt'): PT's names and doses, exactly. Structured for the timer.
+    // PT's program (block 'pt'): PT's movements. Doses chosen 2026-10-18 at Dane's direction
+    // ("app numbers are good, but if we can find a better path I want those"): stretches use
+    // PT's own clinic dose (2 x 30 s holds); the chin tuck follows the craniocervical-flexion
+    // endurance approach (Jull): 10 reps, holds start at 5 s and build toward 10 s only when the
+    // current hold feels easy (holdSteps; Dane taps to progress); glides stay PT's 3 x 10 per arm
+    // with the head tilt PT taught. Reviewed by ChatGPT, Gemini and an internal PT red team.
     // ref = how to do it (the standard clinical technique) and when to stop; it never changes the dose.
-    { id:'pec', block:'pt', source:'ivy', name:'Doorway pec stretch', sets:3, reps:1, holdSec:10, restSec:10,
+    { id:'pec', block:'pt', source:'ivy', name:'Doorway pec stretch', sets:2, reps:1, holdSec:30, restSec:10,
       ref:{ cue:'A gentle chest stretch, not a strain. Elbow below shoulder height for now.',
-        steps:['Forearm flat on the door frame, elbow a little below shoulder height.','Step through with the same-side foot until the chest stretches gently.','Stand tall and breathe slowly. Let the shoulder sit naturally; don\u2019t force it down.'],
+        steps:['Forearm flat on the door frame, elbow bent and a little below shoulder height.','Step through with the same-side foot until the chest stretches gently.','Stand tall and breathe slowly. Let the shoulder sit naturally; don\u2019t force it down.'],
         feel:'Stretch across the front of the chest and shoulder.', stop:'the hand or fingers tingle. Lower the elbow or step through less.',
         status:'video', mediaType:'youtube', videoId:'M850sCj9LHQ', start:null, end:null, sourceLabel:'MedBridge', fallbackUrl:'https://www.youtube.com/watch?v=M850sCj9LHQ', checkedAt:'2026-10-18' } },
-    { id:'ut', block:'pt', source:'ivy', name:'Seated upper-trap stretch', sets:3, reps:1, holdSec:10, perSide:true, restSec:10,
+    { id:'ut', block:'pt', source:'ivy', name:'Seated upper-trap stretch', sets:2, reps:1, holdSec:30, perSide:true, restSec:10,
       ref:{ cue:'Ear toward the shoulder, nothing forced.',
-        steps:['Sit tall, hands resting in your lap.','Tilt your ear toward the opposite shoulder.','Want more? Hold the chair seat on the stretched side, or rest the other hand on your head (weight only). Add one at a time.'],
-        feel:'Stretch along the top of the shoulder and side of the neck.', stop:'arm symptoms start. Let go of the chair, take the hand off your head, then bring your head back to center.',
+        steps:['Sit tall, hands resting in your lap. Don\u2019t hold the chair or push the shoulder down.','Tilt your ear toward the opposite shoulder. Check both arms as you go.','Want more? Rest the other hand on your head, its weight only.'],
+        feel:'Stretch along the top of the shoulder and side of the neck.', stop:'either arm tingles. Take the hand off your head and bring your head back to center. If tingling lingers after you let go, skip this stretch for today.',
         status:'video', mediaType:'youtube', videoId:'-r0eoFS7_5Q', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=-r0eoFS7_5Q', checkedAt:'2026-10-18' } },
-    { id:'chin', block:'pt', source:'ivy', name:'Supine chin tuck', sets:3, reps:10, restSec:20,
-      ref:{ cue:'A small nod, low effort. The back of the head slides along the floor.',
-        steps:['Lie on your back, knees bent; a thin towel under the head if needed.','Nod gently, as if saying yes, so the back of the neck lengthens.','Hold 3 to 5 seconds, breathing normally; head stays on the floor. Relax, repeat.'],
+    { id:'chin', block:'pt', source:'ivy', name:'Supine chin tuck', sets:1, reps:10, holdSec:5, holdSteps:[5,7,10], relaxSec:5, restSec:0,
+      ref:{ cue:'A small nod, low effort, held. Endurance, not strength. Starts at 5 s holds; when that feels easy, tap \u201cHold longer next time\u201d to build toward 10 s.',
+        steps:['Lie on your back, knees bent; a thin towel under the head if needed.','Nod gently, as if saying yes, so the back of the neck lengthens.','Hold the nod for the count, breathing normally; head stays on the floor. Relax fully, repeat.'],
         feel:'Gentle work deep at the front of the neck; a lengthening at the back.', stop:'the front neck muscles grip hard or arm symptoms rise. Use less effort.',
         status:'video', mediaType:'youtube', videoId:'jgz-32qjpOg', start:null, end:null, sourceLabel:'Momentum Physical Therapy', fallbackUrl:'https://www.youtube.com/watch?v=jgz-32qjpOg', checkedAt:'2026-10-18' } },
     { id:'prayer', block:'pt', source:'ivy', name:'Seated prayer median-nerve glide', sets:3, reps:10, restSec:20, tempoCue:'slow, in and out',

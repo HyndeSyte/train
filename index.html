@@ -2181,7 +2181,20 @@ function startPtSession(){
 // starts on one tap, then the timer runs it hands-off: get set -> hold -> release -> next rep,
 // switch sides, rest between sets. Reps without a hold wait for "Set done". The timer is
 // absolute-time (survives backgrounding) and the screen is kept awake while one runs.
-function ptItemsAll(){ return (PT_LIST && Array.isArray(PT_LIST.items)) ? PT_LIST.items : []; }
+function ptItemsAll(){
+  const items = (PT_LIST && Array.isArray(PT_LIST.items)) ? PT_LIST.items : [];
+  // Items with holdSteps carry a per-install hold level (state.ptLevels[id]); apply it here so the
+  // dose line, the plan and the log all agree.
+  let lv = {};
+  try { lv = (getState().ptLevels) || {}; } catch(e){}
+  return items.map(it=> Array.isArray(it.holdSteps) ? Object.assign({}, it, { holdSec: it.holdSteps[Math.min(lv[it.id] || 0, it.holdSteps.length - 1)] }) : it);
+}
+function ptCanHoldLonger(it){ if(!it || !Array.isArray(it.holdSteps)) return false; let lv = {}; try { lv = getState().ptLevels || {}; } catch(e){} return (lv[it.id] || 0) < it.holdSteps.length - 1; }
+function ptHoldLonger(i){
+  const it = ptItemsAll()[i]; if(!ptCanHoldLonger(it)) return;
+  const s = getState(); s.ptLevels = s.ptLevels || {}; s.ptLevels[it.id] = (s.ptLevels[it.id] || 0) + 1; saveState(s);
+  PTS.lastDone = null; cueLogged(); renderPtScreen();
+}
 // On a day the arm check says worse, Train adds sit out; PT's program runs at a smaller range.
 function ptWorseToday(){ return !!(PTS && PTS.armCheck === 'worse'); }
 function ptItemShown(it){ return !(it && it.block === 'adds' && ptWorseToday()); }
@@ -2304,6 +2317,7 @@ function ptItemDone(status){
   ptStopTimer(); ptWakeOff();
   const i = PTS.run.i;
   PTS.status[i] = status;
+  PTS.lastDone = (status === 'done' && ptCanHoldLonger(ptItemsAll()[i])) ? i : null;
   if(status === 'done') cueLogged(); else cueNoted();
   // Next: the first item after this one that has no status yet, else back to the list.
   const all = ptItemsAll();
@@ -2407,6 +2421,7 @@ function renderPtItem(){
   } else stage = '';
   return `
     <div class="flow-meta" style="margin-top:4px;"><span class="badge ${isAdd || it.block === 'open' ? 'badge-adds' : 'badge-pt'}">${isAdd ? 'Train adds' : it.block === 'open' ? 'Settle in' : 'PT'}</span> ${pos} of ${total}${it.source === 'clinic' ? ' &middot; as shown in clinic' : ''}</div>
+    ${PTS.lastDone != null && !r.plan && !PTS.viewOnly ? `<div class="recovery-note" style="margin:6px 0 8px;">${ptItemsAll()[PTS.lastDone].name}: did the ${ptItemsAll()[PTS.lastDone].holdSec} s holds feel easy, with no symptoms? <button class="mini-btn" onclick="ptHoldLonger(${PTS.lastDone})">Hold longer next time</button></div>` : ''}
     ${Object.values(PTS.status).includes('stopped') && !r.plan ? `<div class="recovery-note" style="margin:6px 0 8px;">One movement crossed the line today. Go on only once symptoms are back to how they were before you started, and keep the rest smaller and gentler. Not settling? End the list here.</div>` : ''}
     <div class="session-name" style="font-size:22px;margin:4px 0 2px;">${it.name}</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">${ptDoseLine(it)}</div>

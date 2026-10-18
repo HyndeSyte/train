@@ -149,3 +149,25 @@ test('an optional add that stops never downgrades a completed PT program', () =>
   assert.equal(e.sessionStatus, 'completed');
   assert.equal(e.ptItems[add].status, 'stopped');
 });
+
+test('chin tuck builds from 5 s holds toward 10 s only on a tap, and the level persists', () => {
+  const { ctx } = boot();
+  ctx.recordArmCheck('same');
+  ctx.startPtSession();
+  const idx = ctx.PT_LIST.items.findIndex(it=> it.id === 'chin');
+  assert.equal(ctx.ptItemsAll()[idx].holdSec, 5);
+  assert.equal(ctx.ptDoseLine(ctx.ptItemsAll()[idx]), '1 x 10, 5 s hold each');
+  ctx.ptOpen(idx); ctx.ptItemDone('done');
+  assert.equal(ctx.__PTS().lastDone, idx);
+  assert.match(ctx.document.getElementById('pt-content').innerHTML, /Hold longer next time/);
+  ctx.ptHoldLonger(idx);
+  assert.equal(ctx.ptItemsAll()[idx].holdSec, 7);
+  assert.equal(ctx.getState().ptLevels.chin, 1);
+  ctx.ptHoldLonger(idx); ctx.ptHoldLonger(idx);   // capped at the last step
+  assert.equal(ctx.ptItemsAll()[idx].holdSec, 10);
+  assert.equal(ctx.ptCanHoldLonger(ctx.ptItemsAll()[idx]), false);
+  // the plan follows the level
+  const p = JSON.parse(JSON.stringify(ctx.buildPtPlan(ctx.ptItemsAll()[idx])));
+  assert.ok(p.filter(s=> s.kind === 'hold').every(s=> s.sec === 10));
+  assert.equal(p.filter(s=> s.kind === 'hold').length, 10);
+});
