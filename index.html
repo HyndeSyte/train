@@ -2583,7 +2583,7 @@ function renderReference(){
     html += `<div class="block-label">${cat.label}</div>`;
     if(cat.pt){
       html += `<div class="ref-exercise"><div class="ref-ladder">${PT_LIST.rule} Runs exactly as PT prescribed; updated ${formatDate(PT_LIST.updated)}.</div></div>`;
-      PT_LIST.items.forEach(i=>{ html += `<div class="ref-exercise"><div class="ref-name">${i.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${i.dose}</span></div><div class="ref-ladder">${i.source === 'clinic' ? 'Shown in clinic' : 'My Ivy Care home program'}</div></div>`; });
+      PT_LIST.items.forEach((i, idx)=>{ html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div class="ref-name">${i.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ptDoseLine(i)}</span></div><button class="ref-btn" style="margin-top:0;" onclick="showPtRef(${idx})">&#9654;</button></div><div class="ref-ladder">${i.block === 'adds' ? 'Train adds (optional, inside PT\u2019s limits)' : i.source === 'clinic' ? 'Shown in clinic' : 'My Ivy Care home program'}</div></div>`; });
       return;
     }
     if(cat.form){
