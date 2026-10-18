@@ -5,7 +5,7 @@
 // recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '7.4.0';
+window.TRAIN_DATA_VERSION = '7.4.1';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -143,7 +143,7 @@ window.SESSION_TEMPLATES = {
   RPr: { name:'Ring Practice + WB', fullName:'Ring Practice + Whole-body', grip:'low', blocks:[
     { type:'builder', label:'Ring Practice', core:true, gate:true, exercises:['ring-row','ring-face-pull'] },
     { type:'builder', label:'Whole-body', exercises:['db-press','para-pushup'] },
-    { type:'finisher', label:'Core', exercises:['hanging-knee-raise'] }
+    { type:'finisher', label:'Trunk', exercises:['hanging-knee-raise'] }   // not 'Core': that word means the gate path
   ]},
   MVS: { name:'Floor — Minimum Viable', fullName:'Floor — Minimum Viable Session', grip:'none', noForm:true, blocks:[
     { type:'finisher', label:'Floor', core:true, gate:true, exercises:['pushup','reverse-lunge','hollow-body'] }
