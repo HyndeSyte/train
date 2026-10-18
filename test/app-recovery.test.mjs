@@ -363,7 +363,7 @@ test("PT's list: runs outside the slot while a ring session is parked; never tou
   assert.equal(e.mode, 'recovery');
   assert.equal(e.ptList, true);
   assert.equal(e.coreComplete, true);
-  assert.equal(e.sessionStatus, 'completed');
+  assert.equal(e.sessionStatus, 'stopped', 'one item stopped for symptoms: the record says so');
   assert.equal(e.armCheck, 'same');
   assert.equal(e.notes, 'glides tingly at rep 8');
   assert.deepEqual(plain(e.ptItems.map(i=> i.name)), plain(ctx.PT_LIST.items.map(i=> i.name)));

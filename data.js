@@ -210,6 +210,8 @@ window.PT_LIST = {
   ivyUntil: '2026-10-29',          // tick it in My Ivy Care too until Train has carried it two weeks
   rule: 'Work up to tingling or other nerve symptoms, never into them.',
   // All-day elbow and posture habits: first-line care for cubital tunnel; no session time.
+  // Standing red flags (reviewed 2026-10-18): shown on the list screen every day, not only after a stop.
+  redFlags: 'Call PT or a doctor promptly for new weakness, clumsy hands or dropping things, numbness that doesn\u2019t settle, or a change in balance or walking. New bladder or bowel trouble, or sudden major weakness: get urgent care.',
   allDay: 'All day: don\u2019t lean on your elbows, use a headset for calls, and keep the elbows from staying bent at night (a towel loosely wrapped around the elbow helps).',
   items: [
     // TRAIN ADDS (block 'adds', optional): reviewed 2026-10-18 by an internal PT red team, ChatGPT
@@ -241,7 +243,7 @@ window.PT_LIST = {
         status:'video', mediaType:'youtube', videoId:'jgz-32qjpOg', start:null, end:null, sourceLabel:'Momentum Physical Therapy', fallbackUrl:'https://www.youtube.com/watch?v=jgz-32qjpOg', checkedAt:'2026-10-18' } },
     { id:'prayer', block:'pt', source:'ivy', name:'Seated prayer median-nerve glide', sets:3, reps:10, restSec:20, tempoCue:'slow, in and out',
       ref:{ cue:'Lower the hands only as far as the first mild stretch.',
-        steps:['Sit tall, palms together at chest height.','Slowly lower the hands toward your waist, palms staying together.','Rise again at the first stretch in the palm or forearm. Smooth, no bouncing.'],
+        steps:['Sit tall, palms together at chest height.','Slowly lower the hands a few inches, palms staying together. Stay above the bottom of the ribs.','Rise again at the first stretch in the palm or forearm. Smooth, no bouncing.'],
         feel:'Mild stretch in the forearms and palms.', stop:'the first hint of tingling, or a pull at the old palm injury. Lower the hands less. This one loads the nerve at the wrist more than the glides below.',
         status:'video', mediaType:'youtube', videoId:'XnJu70SLsJk', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=XnJu70SLsJk', checkedAt:'2026-10-18' } },
     { id:'median', block:'pt', source:'clinic', name:'Median nerve glide', sets:3, reps:10, perSide:true, restSec:20, tempoCue:'slow, no holding at the ends',
@@ -260,9 +262,9 @@ window.PT_LIST = {
         feel:'Easy movement along the back of the forearm.', stop:'tingling on the thumb side. Make the range smaller.',
         status:'video', mediaType:'youtube', videoId:'vL7yF9TXCCo', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=vL7yF9TXCCo', checkedAt:'2026-10-18' } },
 
-    { id:'shrug', block:'adds', source:'train', name:'Slow shoulder shrugs', sets:1, reps:10, restSec:0, tempoCue:'up 2 s, down 2 s',
+    { id:'shrug', block:'adds', source:'train', name:'Slow shoulder shrugs', sets:1, reps:10, restSec:0, tempoCue:'smooth up, 3 s down, no pause at the top',
       ref:{ cue:'Lifting the shoulders opens the space at the collarbone. A gentle counter to the day\u2019s slump.',
-        steps:['Sit or stand tall, arms hanging relaxed.','Lift both shoulders slowly toward your ears.','Lower them slowly all the way, then let go.'],
+        steps:['Sit or stand tall, arms hanging relaxed.','Lift both shoulders smoothly toward your ears. No squeeze or pause at the top.','Lower them slowly over about 3 seconds, all the way, then let go.'],
         feel:'Easy work on top of the shoulders; a release on the way down.', stop:'arm symptoms start. Make the shrug smaller.', status:'text' } }
   ]
 };

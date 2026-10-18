@@ -2366,7 +2366,7 @@ function renderPtList(){
   const adds = ptWorseToday() ? [] : all.map((it,i)=>[it,i]).filter(([it])=> it.block === 'adds');
   const firstOpen = all.findIndex((it,i)=> !PTS.status[i] && ptItemShown(it) && (it.block || 'pt') !== 'adds');
   return `
-    ${ptWorseToday() ? `<div class="recovery-note" style="margin-top:8px;">Arm worse today: run PT&rsquo;s program at a smaller range. Train adds sit out.</div>` : ''}
+    ${ptWorseToday() ? `<div class="recovery-note" style="margin-top:8px;">Arm worse today. If it&rsquo;s your usual flare, run PT&rsquo;s program at a smaller range; Train adds sit out. If symptoms are new, spreading, or worse for days in a row, skip today and call PT.</div>` : ''}
     ${opener.length ? `<div class="block-label" style="margin-top:6px;">Settle in &middot; optional &middot; ~${ptEstimateMin('open')} min</div>
     <div>${opener.map(([it,i])=>row(it,i)).join('')}</div>` : ''}
     <div class="block-label" style="margin-top:${opener.length ? 14 : 6}px;">PT&rsquo;s program &middot; ~${ptEstimateMin('pt')} min</div>
@@ -2407,6 +2407,7 @@ function renderPtItem(){
   } else stage = '';
   return `
     <div class="flow-meta" style="margin-top:4px;"><span class="badge ${isAdd || it.block === 'open' ? 'badge-adds' : 'badge-pt'}">${isAdd ? 'Train adds' : it.block === 'open' ? 'Settle in' : 'PT'}</span> ${pos} of ${total}${it.source === 'clinic' ? ' &middot; as shown in clinic' : ''}</div>
+    ${Object.values(PTS.status).includes('stopped') && !r.plan ? `<div class="recovery-note" style="margin:6px 0 8px;">One movement crossed the line today: keep the rest smaller and gentler, or end the list here.</div>` : ''}
     <div class="session-name" style="font-size:22px;margin:4px 0 2px;">${it.name}</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">${ptDoseLine(it)}</div>
     ${stage}
@@ -2425,12 +2426,20 @@ function renderPtScreen(){
     <div class="recovery-note" style="margin-top:6px;">${PT_LIST.rule} If one crosses the line, tap &ldquo;Symptoms: stop this one&rdquo;; next time make it shorter or gentler.</div>
     ${renderPtList()}
     ${PT_LIST.allDay ? `<div style="font-size:12px;color:var(--text2);margin-top:14px;line-height:1.45;">${PT_LIST.allDay}</div>` : ''}
+    ${PT_LIST.redFlags ? `<div class="pt-stop" style="margin-top:8px;"><b>Red flags:</b> ${PT_LIST.redFlags}</div>` : ''}
     ${PTS.viewOnly
       ? `<div style="font-size:13px;color:var(--accent);font-weight:600;margin:14px 0;">&#10003; Logged today. You can run any item again; nothing new is logged.</div>
     <button class="btn btn-secondary" onclick="closePtSession()">Close</button>`
       : `<textarea class="note-field" id="pt-note" rows="2" placeholder="Anything to note? (optional)" style="margin-top:14px;">${PTS.note || ''}</textarea>
     <button class="btn ${ptAllPtDone() ? 'btn-primary' : 'btn-secondary'}" style="margin-top:12px;" onclick="finishPtSession()">Finish</button>`}
     <div style="height:24px;"></div>`;
+}
+// The record stays honest: completed only when every PT item was done; stopped if any crossed the
+// line; otherwise partial. Any of the three still counts as today's list (coreComplete).
+function ptSessionStatus(){
+  const st = ptItemsAll().map((it,i)=> (it.block || 'pt') === 'pt' ? (PTS.status[i] || 'not done') : null).filter(Boolean);
+  if(Object.values(PTS.status).includes('stopped')) return 'stopped';
+  return st.every(v=> v === 'done') ? 'completed' : 'partial';
 }
 function ptAllPtDone(){ return ptItemsAll().every((it,i)=> (it.block || 'pt') !== 'pt' || !!PTS.status[i]); }
 function closePtSession(){ ptStopTimer(); ptWakeOff(); PTS = null; showScreen('home'); }
@@ -2448,7 +2457,7 @@ function finishPtSession(){
       startedAt: new Date(PTS.startedAt).toISOString(),
       completedAt: new Date().toISOString(),
       attentionFlag: false,
-      exercises: {}, performed: [], sessionStatus: 'completed', exerciseMeta: {},
+      exercises: {}, performed: [], sessionStatus: ptSessionStatus(), exerciseMeta: {},
       ptItems: ptItemsAll().map((i,idx)=> ({ name: i.name, dose: ptDoseLine(i), block: i.block || 'pt', status: PTS.status[idx] || 'not done' })),   // what was prescribed that day, and what happened
       notes: note || undefined,
       duration: Math.max(1, Math.min(60, Math.round((Date.now() - PTS.startedAt)/60000)))
