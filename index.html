@@ -2182,8 +2182,12 @@ function startPtSession(){
 // switch sides, rest between sets. Reps without a hold wait for "Set done". The timer is
 // absolute-time (survives backgrounding) and the screen is kept awake while one runs.
 function ptItemsAll(){ return (PT_LIST && Array.isArray(PT_LIST.items)) ? PT_LIST.items : []; }
+// On a day the arm check says worse, Train adds sit out; PT's program runs at a smaller range.
+function ptWorseToday(){ return !!(PTS && PTS.armCheck === 'worse'); }
+function ptItemShown(it){ return !(it && it.block === 'adds' && ptWorseToday()); }
 function ptDoseLine(it){
   if(!it) return '';
+  if(it.doseText) return it.doseText;
   const sets = it.sets || 1, reps = it.reps || 1, side = it.perSide ? ' each side' : '';
   if(it.holdSec && reps === 1) return `${sets} x ${it.holdSec} s hold${side}`;
   if(it.holdSec) return `${sets} x ${reps}, ${it.holdSec} s hold each${side}`;
@@ -2304,10 +2308,17 @@ function ptItemDone(status){
   // Next: the first item after this one that has no status yet, else back to the list.
   const all = ptItemsAll();
   let next = -1;
-  for(let j = i + 1; j < all.length; j++){ if(!PTS.status[j] && (all[j].block || 'pt') === (all[i].block || 'pt')){ next = j; break; } }
+  for(let j = i + 1; j < all.length; j++){ if(!PTS.status[j] && ptItemShown(all[j])){ next = j; break; } }
   if(next < 0){ for(let j = 0; j < all.length; j++){ if(!PTS.status[j] && (all[j].block || 'pt') === 'pt'){ next = j; break; } } }
   PTS.run = next >= 0 ? { i: next, plan: null, k: 0, endsAt: 0, paused: false, left: 0 } : null;
   renderPtScreen();
+  // A second symptom stop offers to end today's list (it still counts), like the ring-day rule.
+  if(status === 'stopped' && !PTS.viewOnly && Object.values(PTS.status).filter(v=> v === 'stopped').length >= 2){
+    showModal('End today\u2019s list?', 'Two movements have crossed the line today. Ending now still counts as today\u2019s list. If symptoms linger or keep getting worse, tell PT; new weakness, or numbness that doesn\u2019t settle, means a prompt call to PT or a doctor.', [
+      { text:'End today\u2019s list', cls:'btn-primary', action:()=>{ hideModal(); finishPtSession(); } },
+      { text:'Keep going gently', cls:'btn-secondary', action:()=>hideModal() }
+    ]);
+  }
 }
 function ptStepLabel(st){
   if(!st) return '';
@@ -2351,13 +2362,17 @@ function renderPtList(){
     </div>`;
   };
   const pt = all.map((it,i)=>[it,i]).filter(([it])=> (it.block || 'pt') === 'pt');
-  const adds = all.map((it,i)=>[it,i]).filter(([it])=> it.block === 'adds');
-  const firstOpen = all.findIndex((it,i)=> !PTS.status[i] && (it.block || 'pt') === 'pt');
+  const opener = all.map((it,i)=>[it,i]).filter(([it])=> it.block === 'open');
+  const adds = ptWorseToday() ? [] : all.map((it,i)=>[it,i]).filter(([it])=> it.block === 'adds');
+  const firstOpen = all.findIndex((it,i)=> !PTS.status[i] && ptItemShown(it) && (it.block || 'pt') !== 'adds');
   return `
-    <div class="block-label" style="margin-top:6px;">PT&rsquo;s program &middot; ~${ptEstimateMin('pt')} min</div>
+    ${ptWorseToday() ? `<div class="recovery-note" style="margin-top:8px;">Arm worse today: run PT&rsquo;s program at a smaller range. Train adds sit out.</div>` : ''}
+    ${opener.length ? `<div class="block-label" style="margin-top:6px;">Settle in &middot; optional &middot; ~${ptEstimateMin('open')} min</div>
+    <div>${opener.map(([it,i])=>row(it,i)).join('')}</div>` : ''}
+    <div class="block-label" style="margin-top:${opener.length ? 14 : 6}px;">PT&rsquo;s program &middot; ~${ptEstimateMin('pt')} min</div>
     <div>${pt.map(([it,i])=>row(it,i)).join('')}</div>
     ${adds.length ? `<div class="block-label" style="margin-top:14px;">Train adds &middot; optional &middot; ~${ptEstimateMin('adds')} min</div>
-    <div style="font-size:12px;color:var(--text3);margin:2px 0 4px;">Inside PT&rsquo;s limits. Do them after PT&rsquo;s program, on a good-arm day.</div>
+    <div style="font-size:12px;color:var(--text3);margin:2px 0 4px;">Inside PT&rsquo;s limits. PT&rsquo;s program alone is a full day.</div>
     <div>${adds.map(([it,i])=>row(it,i)).join('')}</div>` : ''}
     ${!PTS.viewOnly && firstOpen >= 0 ? `<button class="btn btn-primary" style="margin-top:14px;" onclick="ptOpen(${firstOpen})">${Object.keys(PTS.status).length ? 'Continue' : 'Start'} with ${all[firstOpen].name}</button>` : ''}`;
 }
@@ -2391,7 +2406,7 @@ function renderPtItem(){
       </div>`;
   } else stage = '';
   return `
-    <div class="flow-meta" style="margin-top:4px;"><span class="badge ${isAdd ? 'badge-adds' : 'badge-pt'}">${isAdd ? 'Train adds' : 'PT'}</span> ${pos} of ${total}${it.source === 'clinic' ? ' &middot; as shown in clinic' : ''}</div>
+    <div class="flow-meta" style="margin-top:4px;"><span class="badge ${isAdd || it.block === 'open' ? 'badge-adds' : 'badge-pt'}">${isAdd ? 'Train adds' : it.block === 'open' ? 'Settle in' : 'PT'}</span> ${pos} of ${total}${it.source === 'clinic' ? ' &middot; as shown in clinic' : ''}</div>
     <div class="session-name" style="font-size:22px;margin:4px 0 2px;">${it.name}</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">${ptDoseLine(it)}</div>
     ${stage}
@@ -2409,6 +2424,7 @@ function renderPtScreen(){
     <div class="flow-meta" style="margin-top:4px;"><span class="badge badge-pt">PT</span> once a day</div>
     <div class="recovery-note" style="margin-top:6px;">${PT_LIST.rule} If one crosses the line, tap &ldquo;Symptoms: stop this one&rdquo;; next time make it shorter or gentler.</div>
     ${renderPtList()}
+    ${PT_LIST.allDay ? `<div style="font-size:12px;color:var(--text2);margin-top:14px;line-height:1.45;">${PT_LIST.allDay}</div>` : ''}
     ${PTS.viewOnly
       ? `<div style="font-size:13px;color:var(--accent);font-weight:600;margin:14px 0;">&#10003; Logged today. You can run any item again; nothing new is logged.</div>
     <button class="btn btn-secondary" onclick="closePtSession()">Close</button>`

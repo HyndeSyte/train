@@ -58,15 +58,19 @@ test('every PT item has a valid structured dose; every item has guidance', () =>
   const ids = new Set();
   items.forEach(it=>{
     assert.ok(it.id && !ids.has(it.id), 'unique id ' + it.id); ids.add(it.id);
-    assert.ok(['pt','adds'].includes(it.block || 'pt'));
+    assert.ok(['open','pt','adds'].includes(it.block || 'pt'));
+    assert.ok(it.ref && it.ref.cue && Array.isArray(it.ref.steps) && it.ref.steps.length >= 2 && it.ref.stop, it.id + ' guidance');
     assert.ok(Number.isInteger(it.sets) && it.sets >= 1, it.id + ' sets');
     assert.ok(Number.isInteger(it.reps) && it.reps >= 1, it.id + ' reps');
     assert.ok(it.holdSec == null || (it.holdSec > 0 && it.holdSec <= 60), it.id + ' hold');
     assert.ok(ctx.buildPtPlan(it).length >= 1);
   });
-  // PT's program comes first, Train adds after.
-  const blocks = items.map(it=> it.block || 'pt');
-  assert.ok(blocks.lastIndexOf('pt') < (blocks.indexOf('adds') === -1 ? Infinity : blocks.indexOf('adds')));
+  // Order: the opener, then PT's program, then Train adds.
+  const rank = { open:0, pt:1, adds:2 };
+  const blocks = items.map(it=> rank[it.block || 'pt']);
+  assert.deepEqual(plain(blocks), plain([...blocks].sort((a,b)=>a-b)));
+  // PT's own seven items are all present.
+  assert.equal(items.filter(it=> (it.block || 'pt') === 'pt').length, 7);
 });
 
 test('timer runs an item hands-off, then moves to the next open item', async () => {
@@ -117,10 +121,17 @@ test('a symptom stop marks the item stopped and logs it at Finish', () => {
   const { ctx } = boot();
   ctx.recordArmCheck('worse');
   ctx.startPtSession();
+  // worse day: Train adds sit out
+  ctx.renderPtScreen();
+  assert.match(ctx.document.getElementById('pt-content').innerHTML, /Train adds sit out/);
+  assert.doesNotMatch(ctx.document.getElementById('pt-content').innerHTML, /Slow shoulder shrugs/);
   ctx.ptOpen(4); ctx.ptStartItem(); ctx.ptItemDone('stopped');
   assert.equal(ctx.__PTS().status[4], 'stopped');
+  ctx.ptOpen(5); ctx.ptItemDone('stopped');
+  assert.match(ctx.document.getElementById('modal-title').textContent, /End today/, 'second stop offers to end the list');
   ctx.finishPtSession();
   const e = ctx.getState().log.slice(-1)[0];
   assert.equal(e.ptItems[4].status, 'stopped');
+  assert.equal(e.ptItems[5].status, 'stopped');
   assert.equal(e.armCheck, 'worse');
 });

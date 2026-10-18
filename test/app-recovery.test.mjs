@@ -388,6 +388,7 @@ test("PT's list: runs outside the slot while a ring session is parked; never tou
   assert.equal(wire.detail.exercises[0].role, 'pt');
   assert.equal(wire.detail.exercises[0].reps, ctx.ptDoseLine(ctx.PT_LIST.items[0]));
   assert.equal(wire.detail.exercises[1].issue, 'stopped for symptoms');
+  assert.equal(wire.detail.exercises[0].role, 'pt');
 });
 
 test('sync payload contract: every session type in every mode validates and maps Mode / Arm Check / PT List', () => {
