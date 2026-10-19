@@ -135,6 +135,12 @@ jobs:
           echo "::notice title=gate0::simulator ${{ steps.sim.outputs.name }} (${{ steps.sim.outputs.runtime }}) | ${result:-no GATE0_RESULT line in the xcodebuild log}"
           grep -E "Test Case .*(passed|failed)|\*\* TEST" "$RUNNER_TEMP/xcodebuild.log" | head -8 | while IFS= read -r line; do echo "::notice title=xctest::$line"; done
           for key in SMOKE_TRAIL SMOKE_RESULT_1 SMOKE_RESULT_2; do line=$(grep -h "$key" "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
+          # on a failure, surface what went wrong where the container can read it (annotations): compiler
+          # errors, failing assertions, and the tail of the log
+          if ! grep -q "\*\* TEST SUCCEEDED \*\*" "$RUNNER_TEMP/xcodebuild.log"; then
+            grep -E "error:|: error |failed: |XCTAssert|Assertion Failure" "$RUNNER_TEMP/xcodebuild.log" | grep -v "^\s*$" | awk '!seen[$0]++' | head -12 | while IFS= read -r line; do echo "::error title=xcodebuild::${line:0:900}"; done
+            tail -c 2500 "$RUNNER_TEMP/xcodebuild.log" | tr '\n' ' ' | sed 's/::/: :/g' | cut -c1-2400 | while IFS= read -r line; do echo "::notice title=log-tail::$line"; done
+          fi
       - name: Regenerate the project and assert no diff
         working-directory: native/ios/App
         run: |
