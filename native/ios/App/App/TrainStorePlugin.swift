@@ -152,10 +152,13 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         guard let n = failSaveOnSessions else { return nil }
         guard let obj = try? JSONSerialization.jsonObject(with: Data(bytes.utf8)) as? [String: Any], let log = obj["log"] as? [[String: Any]], log.count == n else { return nil }
         failSaveOnSessions = nil
-        let rev = store.control.rev, generation = store.control.generation
+        let rev = store.control.rev
+        let generation = store.control.generation
+        let lastId: Any = (log.last?["sessionId"] as? String).map { $0 as Any } ?? (NSNull() as Any)
+        let record: [String: Any] = ["sessions": n, "rev": rev, "lastSessionId": lastId]
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            self.testNotes["failedSave"] = ["sessions": n, "rev": rev, "lastSessionId": (log.last?["sessionId"] as? String) ?? NSNull()]
+            self.testNotes["failedSave"] = record
             self.publishSummaryFromMain()
         }
         return ["accepted": false, "reason": "write", "rev": rev, "generation": generation, "drill": true]
