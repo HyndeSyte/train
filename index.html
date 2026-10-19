@@ -101,7 +101,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 8;
-const BUILD_ID = 'v7.4.2-2026-10-19-r0-guards';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v7.5.0-2026-10-20-handoff';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -598,6 +598,140 @@ function estimateCoreDuration(type, mode){ return estimateFromTemplate(templateF
 // the scoring engine never reads it.
 const SYNC_ENDPOINT = 'https://hyndesyte-train-sync.netlify.app/.netlify/functions/sync-training-session';
 
+// ===================================================================
+// HAND-OFF (one writer, always; shipped before the native cutover)
+// ===================================================================
+// Two local switches decide which app logs and syncs: this one and the native app's "Start
+// syncing". Nothing is decided by an icon. The flag lives in its own localStorage key, outside
+// train_state, so it rides no export and Import leaves it alone. Values: 'on' (handed off:
+// no logging, no sync, no Erase; History, Export and Import still work), 'off' (this copy
+// writes) or 'unknown' (read-only until the remote flag can be read). Absent means a copy
+// that predates the hand-off or one that was never handed off: writable, no network needed.
+//
+// The remote flag (writer.json on Pages) is a BACKSTOP for one case only: iOS evicted this
+// copy's storage after a hand-off. It is read when both keys are absent, or when the flag
+// says 'unknown'; never otherwise. Its value is written into the local key, so the default
+// state a boot writes can never turn the copy writable later. writer.json exists as 'pwa'
+// before this release, so a 404 never has to authorize writing.
+//
+// The native shell runs this same file and replaces handoffSupported() with () => false
+// before DOMContentLoaded (bridge.js loads after this script): it is never handed off, never
+// fetches the flag, never shows the row, the hold or the banner.
+const HANDOFF_KEY = 'train_handoff';
+const WRITER_FLAG_URL = 'https://hyndesyte.github.io/train/writer.json';
+const HANDOFF_FETCH_MS = 3000;
+function handoffSupported(){ return true; }
+let handoffBackstopPending = false;
+function handoffValue(){ try { return localStorage.getItem(HANDOFF_KEY); } catch(e){ return null; } }
+function setHandoffValue(v){ try { localStorage.setItem(HANDOFF_KEY, v); } catch(e){ console.error('handoff flag save failed', e); } }
+// The one predicate: true while handed off, while the flag is unknown and while a backstop
+// fetch is pending. Read by renderHome, renderHistory, renderSettings, expireParkIfDue and the
+// three sync functions.
+function handoffActive(){
+  if(!handoffSupported()) return false;
+  if(handoffBackstopPending) return true;
+  const v = handoffValue();
+  return v === 'on' || v === 'unknown';
+}
+// Both keys read raw, before the first getState() (which would write a default state).
+function handoffBackstopNeeded(){
+  if(!handoffSupported()) return false;
+  let key = null, state = null;
+  try { key = localStorage.getItem(HANDOFF_KEY); state = localStorage.getItem('train_state'); } catch(e){ return false; }
+  if(key === 'unknown') return true;
+  return key === null && state === null;
+}
+// Fetch writer.json (cache-busted, no store), wait at most HANDOFF_FETCH_MS. 'native' -> on,
+// 'pwa' -> off, anything else (404, malformed, offline, no answer) -> unknown.
+async function runHandoffBackstop(){
+  handoffBackstopPending = true;
+  let value = 'unknown';
+  try {
+    const ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    let timer = null;
+    const timeout = new Promise((_, reject)=>{ timer = setTimeout(()=>{ try { if(ctl) ctl.abort(); } catch(e){} reject(new Error('writer flag timeout')); }, HANDOFF_FETCH_MS); });
+    const read = (async ()=>{
+      const res = await fetch(WRITER_FLAG_URL + '?t=' + Date.now(), { cache:'no-store', signal: ctl ? ctl.signal : undefined });
+      if(!res || !res.ok) return 'unknown';
+      const j = await res.json();
+      return (j && j.writer === 'native') ? 'on' : (j && j.writer === 'pwa') ? 'off' : 'unknown';
+    })();
+    read.catch(()=>{});   // a late rejection after the timeout won the race is not an error
+    value = await Promise.race([read, timeout]);
+    clearTimeout(timer);
+  } catch(e){ value = 'unknown'; }
+  setHandoffValue(value);
+  handoffBackstopPending = false;
+  return value;
+}
+async function retryHandoffBackstop(){
+  if(!handoffSupported()) return;
+  if(currentScreen === 'home') renderHome();
+  await runHandoffBackstop();
+  if(currentScreen === 'home') renderHome();
+  else if(currentScreen === 'settings') renderSettings();
+  refreshSyncIndicator();
+}
+// What stands in the way of a hand-off: an open or parked session, PT's list in progress,
+// anything still to sync, or a drain in flight. Empty means the switch may turn on.
+function handoffBlockers(s){
+  const out = [];
+  if(s.activeSession) out.push(s.activeSession.parkedAt ? 'the parked session (resume and finish it, or discard it)' : 'the session in progress');
+  if(typeof PTS !== 'undefined' && PTS && !PTS.viewOnly) out.push('PT’s list in progress');
+  const pendingSessions = (s.log || []).filter(e => e.sessionId && (!e.notionSync || e.notionSync.status !== 'synced')).length;
+  const pendingDeletes = Array.isArray(s.pendingDeletes) ? s.pendingDeletes.length : 0;
+  if(pendingSessions + pendingDeletes > 0) out.push(`${pendingSessions + pendingDeletes} item${pendingSessions + pendingDeletes === 1 ? '' : 's'} still to sync (Settings → Advanced → Retry sync)`);
+  if(syncDraining) out.push('a sync in progress (try again in a moment)');
+  return out;
+}
+function confirmHandoff(){
+  const blockers = handoffBlockers(getState());
+  if(blockers.length){
+    showModal('Finish first', 'The hand-off waits for: ' + blockers.join('; ') + '.', [ { text:'OK', cls:'btn-primary', action:()=>hideModal() } ]);
+    return;
+  }
+  showModal('Hand off to the Train app?', 'This copy stops logging and syncing. Your history stays here, and Export and Import keep working. You can undo it on this row.', [
+    { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
+    { text:'Hand off', cls:'btn-primary', action:()=>{ hideModal(); setHandoffValue('on'); renderSettings(); refreshSyncIndicator(); } }
+  ]);
+}
+function confirmHandoffUndo(){
+  showModal('Take the hand-off back?', 'This copy logs and syncs again, and anything still pending is sent now. Only do this as part of a rollback: the app you handed off to should no longer be syncing.', [
+    { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
+    { text:'Take it back', cls:'btn-danger', action:()=>{ hideModal(); setHandoffValue('off'); renderSettings(); refreshSyncIndicator(); pushUnsynced(); } }
+  ]);
+}
+function renderHandoffCard(){
+  const v = handoffValue();
+  if(handoffBackstopPending) return `<div class="card"><div class="session-name" style="font-size:20px;">Checking which app is in charge&hellip;</div><div style="font-size:13px;color:var(--text2);margin-top:6px;">A few seconds at most.</div></div>`;
+  if(v === 'unknown') return `<div class="promo-card" style="background:var(--warn-dim);border-color:var(--warn);">
+      <h3 style="color:var(--warn);">Can&rsquo;t tell which app is in charge</h3>
+      <p>hyndesyte.github.io didn&rsquo;t answer. This copy stays read-only until it does: no logging, no sync. History, Export and Import still work.</p>
+      <div class="promo-actions"><button class="btn btn-small btn-primary" onclick="retryHandoffBackstop()">Retry connection</button></div>
+    </div>`;
+  return `<div class="card">
+      <div class="session-name" style="font-size:20px;">Handed off to the Train app</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:6px;line-height:1.5;">This copy no longer logs or syncs. Your history stays here, and Export and Import keep working in Settings, where the hand-off can also be taken back.</div>
+    </div>`;
+}
+// Session count and a short digest of the Session IDs, the cutover check against the native
+// app: first 8 lowercase hex characters of SHA-256 over the sorted (code-point order)
+// Session IDs joined by '\n' with no trailing newline. Needs crypto.subtle (a secure context).
+function sessionIdsOf(s){ return (s.log || []).map(e => e && e.sessionId).filter(x => typeof x === 'string' && x.length).sort(); }
+async function sessionDigest(s){
+  const ids = sessionIdsOf(s);
+  const bytes = new TextEncoder().encode(ids.join('\n'));
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 8);
+}
+function fillSessionDigest(){
+  const el = document.getElementById('session-digest'); if(!el) return;
+  const s = getState();
+  const n = sessionIdsOf(s).length;
+  if(!(typeof crypto !== 'undefined' && crypto && crypto.subtle && typeof TextEncoder === 'function')){ el.textContent = `${n} session${n === 1 ? '' : 's'} · digest unavailable here`; return; }
+  sessionDigest(s).then(d => { el.textContent = `${n} session${n === 1 ? '' : 's'} · digest ${d}`; }).catch(()=>{ el.textContent = `${n} session${n === 1 ? '' : 's'} · digest unavailable`; });
+}
+
 function statusToNotion(s){ return s === 'stopped' ? 'Stopped' : s === 'partial' ? 'Partial' : 'Completed'; }
 
 // Build the heavy-anchor block for the payload from the entry alone (stable across re-pushes).
@@ -684,10 +818,13 @@ function markSync(sessionId, patch){
   saveState(s);
 }
 
+// X-Train-Client names this copy as the PWA; the sync function refuses the app that is not
+// the writer (403) and answers 503 while the writer flag is unknown. Handed off: no request.
 async function postSync(body){
+  if(handoffActive()) throw new Error('handed off');
   const res = await fetch(SYNC_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Train-Client': 'pwa' },
     body: JSON.stringify(body)
   });
   if(!res.ok) throw new Error('sync ' + res.status);
@@ -696,6 +833,7 @@ async function postSync(body){
 
 // Push a single entry (upsert). Non-blocking caller; updates notionSync + the indicator.
 async function syncEntry(sessionId){
+  if(handoffActive()) return;
   const s = getState();
   const entry = (s.log || []).find(x => x.sessionId === sessionId);
   if(!entry) return;
@@ -715,7 +853,7 @@ async function syncEntry(sessionId){
 // manual retry. A verified failure is left as data, not retried in a tight loop.
 let syncDraining = false;
 async function pushUnsynced(){
-  if(syncDraining) return;
+  if(syncDraining || handoffActive()) return;
   syncDraining = true;
   try {
     // tombstones first
@@ -1688,6 +1826,7 @@ function parkSession(){
 // Finalize an expired park as-is (Completed iff core done), quietly. Returns true if it
 // finalized — that path re-renders Home; the caller must stop rendering stale state.
 function expireParkIfDue(){
+  if(handoffActive()) return false;   // a handed-off copy writes nothing, not even an expiry
   const s = getState();
   const a = s.activeSession;
   if(a && a.parkedAt && a.parkExpiresAt && Date.now() > a.parkExpiresAt){
@@ -1891,6 +2030,9 @@ function showScreen(name){
 // HOME
 // ===================================================================
 function renderHome(){
+  // Handed off, flag unknown or backstop pending: one card in place of Start, PT's list and
+  // the Resume block. No getState() here, so a pending backstop writes no default state.
+  if(handoffActive()){ document.getElementById('home-content').innerHTML = renderHandoffCard(); return; }
   // Lazy park expiry — if it finalized, Home re-rendered with fresh state; stop here.
   if(expireParkIfDue()) return;
   const s = getState();
@@ -2521,6 +2663,7 @@ function renderHistory(){
   const s = getState();
   if(!s.log.length){ document.getElementById('history-content').innerHTML = `<div class="empty"><div class="empty-icon">&#128203;</div>No sessions yet.<br>Complete your first session to see history.</div>`; return; }
   const total = s.log.length;
+  const handedOff = handoffActive();   // a handed-off copy deletes nothing (no tombstone could sync)
   const html = [...s.log].reverse().map((entry, revIdx)=>{
     const logIdx = total - 1 - revIdx;   // true index into state.log (list is reversed for display)
     const hitCount = entry.exercises ? Object.entries(entry.exercises).filter(([id,r])=>checkHit(id,r)).length : 0;
@@ -2538,7 +2681,7 @@ function renderHistory(){
       <div class="history-date">${formatDate(entry.date)}${entry.duration?' &middot; '+entry.duration+' min':''}</div>
       <div class="history-type"><span class="badge badge-${entry.sessionType.toLowerCase()}">${entry.sessionType}</span> ${entryName(entry)}<span class="status-chip status-${stat}">${stat}</span>${entry.mode === 'recovery' && !isPt ? '<span class="status-chip status-recovery">recovery</span>' : ''}${entry.coreComplete && stat !== 'completed' ? '<span style="font-size:10px;color:var(--accent);margin-left:6px;">core done</span>' : ''}</div>
       <div class="history-hits">${isPt ? (stat === 'completed' ? 'PT&rsquo;s list done' : stat === 'stopped' ? 'PT&rsquo;s list &middot; stopped for symptoms' : 'PT&rsquo;s list &middot; partly done') : `${hitCount}/${totalEx} HITs`}${entry.skipped&&entry.skipped.length?' &middot; '+entry.skipped.length+' skipped':''}${entry.symptomStop || (entry.symptomStops && entry.symptomStops.length) ? ' &middot; symptom stop' : ''}</div>
-      <div class="history-detail">${detail}<button class="btn btn-small btn-danger" style="margin-top:12px;" onclick="event.stopPropagation(); confirmDeleteSession(${logIdx})">Delete this session</button></div>
+      <div class="history-detail">${detail}${handedOff ? '' : `<button class="btn btn-small btn-danger" style="margin-top:12px;" onclick="event.stopPropagation(); confirmDeleteSession(${logIdx})">Delete this session</button>`}</div>
     </div>`;
   }).join('');
   document.getElementById('history-content').innerHTML = html;
@@ -2673,6 +2816,13 @@ function renderSettings(){
   const soundOn = soundEnabled();
   const recOn = isRecoveryOn(s), clear = cardioCleared(s);
   const sinceLine = (recOn && s.recovery.since) ? ` &middot; on since ${formatDate(localDay(s.recovery.since))}` : '';
+  // Hand-off row (hidden in the native shell). Three faces: writable (offer the hand-off),
+  // handed off (offer the undo), unknown (offer the retry).
+  const hv = handoffValue(), handedOff = handoffActive();
+  const handoffRow = !handoffSupported() ? '' : handoffBackstopPending ? `<div class="setting-row"><div><div style="font-weight:600;">Hand-off</div><div style="font-size:12px;color:var(--text2);">Checking which app is in charge&hellip;</div></div></div>`
+    : hv === 'unknown' ? `<div class="setting-row"><div><div style="font-weight:600;">Hand-off</div><div style="font-size:12px;color:var(--text2);">Can&rsquo;t tell which app is in charge; read-only until hyndesyte.github.io answers</div></div><button class="btn btn-small btn-primary" onclick="retryHandoffBackstop()">Retry connection</button></div>`
+    : hv === 'on' ? `<div class="setting-row"><div><div style="font-weight:600;">Handed off to the Train app</div><div style="font-size:12px;color:var(--text2);">This copy no longer logs or syncs. Undo only as part of a rollback.</div></div><button class="btn btn-small btn-secondary" onclick="confirmHandoffUndo()">Undo</button></div>`
+    : `<div class="setting-row"><div><div style="font-weight:600;">Hand off to the Train app</div><div style="font-size:12px;color:var(--text2);">Cutover step 1: this copy stops logging and syncing once everything is finished and synced</div></div><button class="btn btn-small btn-secondary" onclick="confirmHandoff()">Hand off</button></div>`;
   document.getElementById('settings-content').innerHTML = `
     <div class="block-label" style="margin-top:8px;">Recovery mode</div>
     <div class="card">
@@ -2697,22 +2847,25 @@ function renderSettings(){
     <div class="block-label">Your data</div>
     <div class="card">
       <div class="setting-row"><div><div style="font-weight:600;">Export data</div><div style="font-size:12px;color:var(--text2);">Full log as JSON, via the share sheet</div></div><button class="btn btn-small btn-secondary" onclick="exportData()">Export</button></div>
+      <div id="session-digest" style="font-size:12px;color:var(--text3);margin-top:8px;">${sessionIdsOf(s).length} sessions &middot; digest &hellip;</div>
+      ${handoffRow}
     </div>
     <details style="margin-top:14px;">
       <summary style="font-size:13px;color:var(--text3);cursor:pointer;font-weight:600;padding:4px 0;">Advanced</summary>
       <div class="card" style="margin-top:8px;">
         <div style="font-weight:700;margin-bottom:8px;">Notion sync</div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">${syncStatusText}</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">${handedOff ? 'Paused: this copy is handed off' : syncStatusText}</div>
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Last synced: ${lastSyncedDisplay}</div>
-        <button class="btn btn-small btn-secondary" onclick="pushUnsynced()">Retry sync</button>
+        ${handedOff ? '' : `<button class="btn btn-small btn-secondary" onclick="pushUnsynced()">Retry sync</button>`}
       </div>
       <div class="card" style="margin-top:8px;">
         <div class="setting-row"><div><div style="font-weight:600;">Import data</div><div style="font-size:12px;color:var(--text2);">Restore from a backup</div></div><button class="btn btn-small btn-secondary" onclick="document.getElementById('import-file').click()">Import</button><input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)"></div>
         <div class="setting-row"><div><div style="font-weight:600;">Reset rotation</div><div style="font-size:12px;color:var(--text2);">Next session back to Heavy Rings: Pull</div></div><button class="btn btn-small btn-secondary" onclick="confirmResetRotation()">Reset</button></div>
-        <div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>
+        ${handedOff ? '' : `<div class="setting-row"><div><div style="font-weight:600;color:#ef4444;">Erase all data</div><div style="font-size:12px;color:var(--text2);">Permanently delete everything</div></div><button class="btn btn-small btn-danger" onclick="confirmErase()">Erase</button></div>`}
       </div>
     </details>
     <div class="card" style="margin-top:12px;"><div style="font-size:13px;color:var(--text3);"><strong>Build</strong>: ${BUILD_ID} · data ${window.TRAIN_DATA_VERSION} · ${s.log.length} sessions</div></div>`;
+  fillSessionDigest();
 }
 function toggleSound(){ setSoundEnabled(!soundEnabled()); renderSettings(); }
 // ---- RECOVERY MODE SWITCHES (v7.3) ----
@@ -2805,15 +2958,23 @@ function hideModal(){ document.getElementById('modal').classList.remove('visible
 // INIT
 // ===================================================================
 document.addEventListener('DOMContentLoaded', async ()=>{
+  // Hand-off backstop first, from the raw keys, before anything calls getState(): with no
+  // state and no flag (an evicted copy, or a fresh install), or with the flag unknown, read
+  // writer.json and hold Home for up to 3 seconds. Every other boot skips this entirely.
+  if(handoffBackstopNeeded()){
+    handoffBackstopPending = true;
+    renderHome();
+    await runHandoffBackstop();
+  }
   renderHome();
   // Ask the browser to keep this origin's storage out of eviction under storage pressure
   // (best effort; a refusal changes nothing).
   try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{}); } catch(e){}
   // Mirror to Notion in the background: drains pending tombstones and pushes any unsynced
   // sessions oldest-first (this is what backfills existing history on first launch). Never
-  // blocks the UI; the indicator reflects progress.
+  // blocks the UI; the indicator reflects progress. A handed-off copy skips it.
   refreshSyncIndicator();
-  pushUnsynced();
+  if(!handoffActive()) pushUnsynced();
 });
 
 // Re-sync timer display when returning to the app (handles backgrounding/lock).

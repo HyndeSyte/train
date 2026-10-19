@@ -14,6 +14,7 @@ import { webkit, chromium, devices } from 'playwright';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const browserName = process.env.E2E_BROWSER || 'webkit';
 const SYNC_HOST = 'hyndesyte-train-sync.netlify.app';
+const WRITER_HOST = 'hyndesyte.github.io';
 const EVENING = new Date('2026-10-18T20:30:00-04:00');   // 8:30 PM EDT = 00:30Z next day
 const LOCAL_DAY = '2026-10-18';
 
@@ -50,15 +51,25 @@ try {
   // One writer: the sync endpoint is a stub. Nothing leaves this process.
   await page.route(`https://${SYNC_HOST}/**`, async (route) => {
     const req = route.request();
+    const corsHeaders = { 'Access-Control-Allow-Origin': new URL(base).origin, 'Access-Control-Allow-Headers': 'Content-Type, X-Train-Sync-Key, X-Train-Client', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
+    // The X-Train-Client header makes every post a preflighted request: answer OPTIONS, count POSTs.
+    if (req.method() === 'OPTIONS') { await route.fulfill({ status: 204, headers: corsHeaders, body: '' }); return; }
     let body = null;
     try { body = JSON.parse(req.postData() || 'null'); } catch { body = { unparsable: req.postData() }; }
-    synced.push({ method: req.method(), body });
-    await route.fulfill({ status: 200, contentType: 'application/json',
-      headers: { 'Access-Control-Allow-Origin': new URL(base).origin, 'Access-Control-Allow-Headers': 'Content-Type, X-Train-Sync-Key, X-Train-Client', 'Access-Control-Allow-Methods': 'POST, OPTIONS' },
+    const client = req.headers()['x-train-client'];
+    synced.push({ method: req.method(), body, client });
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: corsHeaders,
       body: JSON.stringify({ ok: true, action: 'created', notionPageId: 'stub-' + synced.length, sessionId: body && body.sessionId }) });
   });
+  // The hand-off backstop reads writer.json on a fresh install: stub it as 'pwa' (the live file says
+  // the same until cutover), and count the reads.
+  const writerReads = [];
+  await page.route(`https://${WRITER_HOST}/train/writer.json**`, async (route) => {
+    writerReads.push(route.request().url());
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ writer: 'pwa' }) });
+  });
   // Any other third-party request (YouTube thumbnails etc.) is cut off: offline-safe run.
-  await page.route((url) => !url.href.startsWith(base) && url.host !== SYNC_HOST, (route) => route.abort());
+  await page.route((url) => !url.href.startsWith(base) && url.host !== SYNC_HOST && url.host !== WRITER_HOST, (route) => route.abort());
 
   await page.clock.install({ time: EVENING });
   await page.goto(base + 'index.html', { waitUntil: 'load' });
@@ -67,10 +78,19 @@ try {
   const clickBtn = async (name) => { const b = btn(name).first(); await b.waitFor({ state: 'visible', timeout: 5000 }); await b.click(); await page.waitForTimeout(30); };
   const text = async (sel) => (await page.locator(sel).innerText()).replace(/\s+/g, ' ').trim();
 
-  // ---- 0. Fresh install: Home renders; turn recovery mode on from Settings (as on his phone).
+  // ---- 0. Fresh install: the hand-off backstop read writer.json once (no state, no flag) and found
+  // 'pwa', so Home is writable; Settings carries the hand-off row and the count-and-digest line.
   expect((await text('#home-content')).length > 20, 'Home renders');
+  expect(writerReads.length === 1 && /writer\.json\?t=\d+/.test(writerReads[0]), 'one cache-busted writer.json read: ' + JSON.stringify(writerReads));
+  expect((await page.evaluate(() => localStorage.getItem('train_handoff'))) === 'off', 'flag written as off');
+  expect(/Start Today/.test(await text('#home-content')), 'Home is writable after the backstop');
   await clickBtn('Settings');
   expect((await text('#settings-content')).includes('Recovery mode'), 'Settings has the recovery row');
+  expect((await text('#settings-content')).includes('Hand off to the Train app'), 'Settings has the hand-off row');
+  const digest0 = await page.evaluate(() => sessionDigest(getState()));
+  expect(/^[0-9a-f]{8}$/.test(digest0), 'digest computes in the page: ' + digest0);
+  await page.waitForTimeout(50);
+  expect((await text('#session-digest')).includes('0 sessions') && (await text('#session-digest')).includes(digest0), 'digest line shows: ' + (await text('#session-digest')));
   const recRow = page.locator('.setting-row', { hasText: 'Recovery mode' }).first();
   await recRow.getByRole('button').first().click();
   expect((await text('#modal-title')).includes('Turn on recovery mode'), 'recovery confirm modal');
@@ -122,6 +142,7 @@ try {
   await tick(2000);                                       // let the fire-and-forget sync run
   await page.waitForTimeout(100);
   expect(synced.length >= 1, 'PT entry reached the (stubbed) sync endpoint');
+  expect(synced[synced.length - 1].client === 'pwa', 'sync post names the client: ' + synced[synced.length - 1].client);
   const ptPayload = synced[synced.length - 1].body || {};
   expect(ptPayload.date === LOCAL_DAY && ptPayload.ptList === true && ptPayload.mode === 'Recovery', 'PT sync payload carries date/ptList/mode: ' + JSON.stringify({ date: ptPayload.date, ptList: ptPayload.ptList, mode: ptPayload.mode, status: ptPayload.status }));
   expect(/done today|Open the list again|Logged today/i.test(await text('#home-content')), 'Home marks PT’s list done today');
