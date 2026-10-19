@@ -615,7 +615,7 @@ const SYNC_ENDPOINT = 'https://hyndesyte-train-sync.netlify.app/.netlify/functio
 // before this release, so a 404 never has to authorize writing.
 //
 // The native shell runs this same file and replaces handoffSupported() with () => false
-// before DOMContentLoaded (bridge.js loads after this script): it is never handed off, never
+// before DOMContentLoaded (the shell's bridge script loads after this one): it is never handed off, never
 // fetches the flag, never shows the row, the hold or the banner.
 const HANDOFF_KEY = 'train_handoff';
 const WRITER_FLAG_URL = 'https://hyndesyte.github.io/train/writer.json';
