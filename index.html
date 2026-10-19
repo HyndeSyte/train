@@ -654,19 +654,23 @@ async function runHandoffBackstop(){
       const res = await fetch(WRITER_FLAG_URL + '?t=' + Date.now(), { cache:'no-store', signal: ctl ? ctl.signal : undefined });
       if(!res || !res.ok) return 'unknown';
       const j = await res.json();
-      return (j && j.writer === 'native') ? 'on' : (j && j.writer === 'pwa') ? 'off' : 'unknown';
+      // the same reading as the sync function: trimmed, case-folded, nothing else accepted
+      const w = (j && typeof j.writer === 'string') ? j.writer.trim().toLowerCase() : null;
+      return w === 'native' ? 'on' : w === 'pwa' ? 'off' : 'unknown';
     })();
     read.catch(()=>{});   // a late rejection after the timeout won the race is not an error
-    value = await Promise.race([read, timeout]);
-    clearTimeout(timer);
+    try { value = await Promise.race([read, timeout]); } finally { clearTimeout(timer); }
   } catch(e){ value = 'unknown'; }
   setHandoffValue(value);
   handoffBackstopPending = false;
   return value;
 }
+// The banner's Retry: one run at a time; Home shows the hold while it runs.
 async function retryHandoffBackstop(){
-  if(!handoffSupported()) return;
+  if(!handoffSupported() || handoffBackstopPending) return;
+  handoffBackstopPending = true;
   if(currentScreen === 'home') renderHome();
+  refreshSyncIndicator();
   await runHandoffBackstop();
   if(currentScreen === 'home') renderHome();
   else if(currentScreen === 'settings') renderSettings();
@@ -715,8 +719,10 @@ function renderHandoffCard(){
     </div>`;
 }
 // Session count and a short digest of the Session IDs, the cutover check against the native
-// app: first 8 lowercase hex characters of SHA-256 over the sorted (code-point order)
-// Session IDs joined by '\n' with no trailing newline. Needs crypto.subtle (a secure context).
+// app: first 8 lowercase hex characters of SHA-256 over the sorted Session IDs joined by '\n'
+// with no trailing newline. The sort is JavaScript's default (UTF-16 code units), which is
+// code-point order for the ASCII ids this app generates (UUIDs and 'sid-…'); the mirror script
+// sorts the same way. Needs crypto.subtle (a secure context).
 function sessionIdsOf(s){ return (s.log || []).map(e => e && e.sessionId).filter(x => typeof x === 'string' && x.length).sort(); }
 async function sessionDigest(s){
   const ids = sessionIdsOf(s);
@@ -889,6 +895,7 @@ function refreshSyncIndicator(){
   const failed = pendingSessions.filter(e => e.notionSync && e.notionSync.status === 'failed').length;
   const outstanding = pendingSessions.length + (Array.isArray(s.pendingDeletes) ? s.pendingDeletes.length : 0);
   if(outstanding === 0){ el.innerHTML = '<span class="sync-dot synced"></span>Synced'; return; }
+  if(handoffActive()){ el.innerHTML = `<span class="sync-dot error"></span>${outstanding} pending &middot; paused`; return; }   // nothing drains while handed off
   el.innerHTML = `<span class="sync-dot ${failed ? 'error' : 'syncing'}"></span>${outstanding} pending`;
 }
 
@@ -1015,6 +1022,7 @@ function persistAS(){ markActive(); const s = getState(); s.activeSession = AS; 
 // Start a rotation (or Floor) session. In recovery mode the day's first session opens with
 // the one-tap arm check, then the session starts.
 function startSession(type){
+  if(handoffActive()){ showScreen('home'); return; }   // a handed-off copy starts nothing (stale tab guard)
   unlockAudio();
   const s = getState();
   const mode = sessionModeFor(s, type);
@@ -1050,6 +1058,7 @@ function beginSession(type, mode, tappedArmCheck){
 }
 
 function resumeSession(asked){
+  if(handoffActive()){ showScreen('home'); return; }
   const s = getState();
   if(!s.activeSession){ renderHome(); return; }
   // v7.3: a recovery session resumed on a new day opens with that day's arm check, and the
@@ -2314,6 +2323,7 @@ function discardActiveSession(){
 // One tap-through card (ticks are visual only, nothing logged per set), one Finish.
 let PTS = null;
 function startPtSession(){
+  if(handoffActive()){ showScreen('home'); return; }
   if(!PT_LIST) return;
   unlockAudio();
   const s = getState();
@@ -2720,6 +2730,7 @@ function rebuildAnchorProgress(state){
 // Delete one log entry by its true index into state.log, then rebuild the scoreboard.
 // Single saveState (build the whole next state, then write once), then re-render History.
 function deleteLogEntry(logIdx){
+  if(handoffActive()){ hideModal(); renderHistory(); return; }   // no tombstone could sync
   const s = getState();
   if(!Array.isArray(s.log) || logIdx < 0 || logIdx >= s.log.length) return; // stale index guard
   const removed = s.log[logIdx];
@@ -2854,7 +2865,7 @@ function renderSettings(){
       <summary style="font-size:13px;color:var(--text3);cursor:pointer;font-weight:600;padding:4px 0;">Advanced</summary>
       <div class="card" style="margin-top:8px;">
         <div style="font-weight:700;margin-bottom:8px;">Notion sync</div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">${handedOff ? 'Paused: this copy is handed off' : syncStatusText}</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">${syncStatusText}${handedOff ? ' &middot; paused: ' + (handoffBackstopPending ? 'checking which app is in charge' : hv === 'unknown' ? 'which app is in charge is unknown' : 'this copy is handed off') : ''}</div>
         <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Last synced: ${lastSyncedDisplay}</div>
         ${handedOff ? '' : `<button class="btn btn-small btn-secondary" onclick="pushUnsynced()">Retry sync</button>`}
       </div>

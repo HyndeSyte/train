@@ -94,6 +94,35 @@ is `created | updated | soft-deleted | noop-absent`.
 { "op": "delete", "sessionId": "uuid" }
 ```
 
+### One writer: the client header and the writer flag (2026-10-20)
+
+Every request names its client with `X-Train-Client: pwa` or `X-Train-Client: native` (a
+missing header counts as `pwa`, so a PWA that predates the header keeps syncing). Before any
+Notion call the function reads `https://hyndesyte.github.io/train/writer.json` (`{"writer":
+"pwa"}` until the native cutover, `native` after it, back to `pwa` at rollback), cache-busted,
+three tries of 500 ms, cached 60 seconds per instance; the cache expires on time whether or
+not the refresh succeeds. Outcomes, all with the usual CORS headers and `Vary: Origin,
+X-Train-Client`:
+
+| Case | Response |
+| --- | --- |
+| client equals the flag | the normal 200 |
+| client is not the flag (or is unrecognised) | `403 { ok:false, error:"not the writer", writer }` |
+| no readable flag and no unexpired cached value | `503 { ok:false, error:"writer unknown" }`, `Retry-After: 60` |
+
+Neither refusal touches Notion. The flag file is committed as `pwa` before the writer check
+deploys; a `writer.json`-only commit is pre-authorized at any hour and starts no native build.
+The PWA sends `pwa`; the native shell sends `native` and treats a 403 as terminal for that
+drain (the entry stays pending for a manual retry).
+
+### CORS
+
+The matching `Origin` is echoed from an allowlist (`https://hyndesyte.github.io`,
+`capacitor://localhost`, plus comma-separated `ALLOWED_ORIGIN` extras, case-insensitive) on
+POST and OPTIONS; an unlisted origin gets no `Access-Control-Allow-Origin`. Preflight allows
+`Content-Type, X-Train-Sync-Key, X-Train-Client`. CORS is not auth. An update never clears
+`Deleted` (delete wins), so a stale re-post cannot resurrect a tombstone.
+
 ## Environment variables
 
 Set these in **Netlify - Site configuration - Environment variables**. Never commit them.
@@ -103,7 +132,7 @@ Set these in **Netlify - Site configuration - Environment variables**. Never com
 | `NOTION_TOKEN` | yes | Notion internal integration secret |
 | `NOTION_DATA_SOURCE_ID` | yes | Data source ID of "Training - Session Log": `bb53c37f-c472-4ca1-b5cd-7dfe2b03ce37` |
 | `TRAIN_SYNC_SECRET` | optional | Shared key; if set, the PWA must send a matching `X-Train-Sync-Key` header |
-| `ALLOWED_ORIGIN` | optional | CORS origin; defaults to `https://hyndesyte.github.io` |
+| `ALLOWED_ORIGIN` | optional | Extra CORS origin(s), comma-separated; the built-in allowlist (`https://hyndesyte.github.io`, `capacitor://localhost`) always applies |
 
 The Notion integration must be **explicitly shared with the database** (database ... menu ->
 Connections), or every write returns 403.
@@ -123,5 +152,5 @@ create via `POST /v1/pages` with a `data_source_id` parent, update via `PATCH /v
 ## Test
 
 ```
-npm test      # node --test over the pure mapping/validation module
+npm test      # node --test: the mapping module, the handler (CORS, upsert, delete, writer check) and the app
 ```

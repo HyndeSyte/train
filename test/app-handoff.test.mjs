@@ -336,5 +336,73 @@ test('the Settings row offers the hand-off only when writable', () => {
   const on = boot({ seed: seed(), key:'on' });
   assert.match(on.settings(), /confirmHandoffUndo\(\)/);
   assert.doesNotMatch(on.settings(), /onclick="confirmHandoff\(\)"/);
-  assert.match(on.settings(), /Paused: this copy is handed off/);
+  assert.match(on.settings(), /All sessions synced &middot; paused: this copy is handed off/, 'the sync status keeps its count and names the state');
+  const onPending = boot({ seed: seed({ log:[ entry(1), entry(2, { notionSync:{ status:'pending' } }) ] }), key:'on' });
+  assert.match(onPending.settings(), /1 pending &middot; paused: this copy is handed off/, 'the pending count stays visible for the rollback check');
+  onPending.ctx.refreshSyncIndicator();
+  assert.match(onPending.els['sync-indicator'].innerHTML, /1 pending &middot; paused/, 'Home indicator says paused, not syncing');
+  assert.doesNotMatch(onPending.els['sync-indicator'].innerHTML, /syncing/);
+  const unknown = boot({ seed: seed(), key:'unknown' });
+  assert.match(unknown.settings(), /paused: which app is in charge is unknown/);
+});
+
+test('a stale tab cannot start, resume, start PT or delete while handed off (direct guards)', () => {
+  const b = boot({ seed: seed({ activeSession:{ type:'RP', parkedAt: NOW - 1000, parkExpiresAt: NOW + 86400000, records:{}, cursor:0 } }), key:'on' });
+  // Home rendered with a parked session and the flag on: no Resume path
+  b.ctx.renderHome();
+  assert.match(b.home(), /Handed off/);
+  assert.doesNotMatch(b.home(), /resumeSession\(|Resume/);
+  b.ctx.resumeSession();
+  assert.equal(b.ctx.__AS(), null, 'resume refused');
+  const logBefore = b.ctx.getState().log.length;
+  b.ctx.startSession('RP');
+  assert.equal(b.ctx.__AS(), null, 'start refused');
+  b.ctx.startPtSession();
+  assert.equal(b.ctx.__PTS(), null, 'PT start refused');
+  b.ctx.deleteLogEntry(0);
+  assert.equal(b.ctx.getState().log.length, logBefore, 'delete refused');
+  assert.deepEqual(b.ctx.getState().pendingDeletes, [], 'no tombstone queued');
+  assert.ok(b.ctx.getState().activeSession, 'the parked session is still there (nothing wrote)');
+});
+
+test('the in-progress session blocks the switch with its own wording', () => {
+  const b = boot({ seed: seed({ activeSession:{ type:'RP', parkedAt: null, records:{}, cursor:0 } }) });
+  b.ctx.confirmHandoff();
+  assert.equal(b.els['modal-title'].textContent, 'Finish first');
+  assert.match(b.els['modal-body'].textContent, /the session in progress/);
+});
+
+test('Retry runs once at a time and a slow earlier run cannot overwrite a later answer', async () => {
+  const b = boot({ writer:'offline' });
+  await b.runBoot();
+  assert.equal(b.storage.get('train_handoff'), 'unknown');
+  // first retry: a flag read that never answers; second tap while it is pending is a no-op
+  let resolveSlow;
+  const orig = b.ctx.fetch;
+  b.ctx.fetch = (url, init) => { if(String(url).startsWith(WRITER_URL)){ b.calls.push({ url:String(url), init }); return new Promise(r => { resolveSlow = r; }); } return orig(url, init); };
+  const reads0 = b.writerFetches();
+  const first = b.ctx.retryHandoffBackstop();
+  assert.ok(b.ctx.handoffActive(), 'read-only while the retry is pending');
+  assert.match(b.home(), /Checking which app is in charge/, 'Home shows the hold at once');
+  await b.ctx.retryHandoffBackstop();   // second tap: returns without a second read
+  assert.equal(b.writerFetches(), reads0 + 1, 'one read in flight, not two');
+  resolveSlow({ ok:true, status:200, json: async()=>({ writer:'pwa' }) });
+  await first;
+  assert.equal(b.storage.get('train_handoff'), 'off');
+  assert.match(b.home(), /startSession\(/);
+});
+
+test('the flag value is read trimmed and case-folded, like the function reads it', async () => {
+  const b = boot();
+  b.ctx.fetch = (url) => Promise.resolve({ ok:true, status:200, json: async()=>({ writer:' Native ' }) });
+  await b.runBoot();
+  assert.equal(b.storage.get('train_handoff'), 'on');
+  const c = boot();
+  c.ctx.fetch = (url) => Promise.resolve({ ok:true, status:200, json: async()=>({ writer:'PWA', extra:true }) });
+  await c.runBoot();
+  assert.equal(c.storage.get('train_handoff'), 'off');
+  const d = boot();
+  d.ctx.fetch = (url) => Promise.resolve({ ok:true, status:200, json: async()=>({ writer:'both' }) });
+  await d.runBoot();
+  assert.equal(d.storage.get('train_handoff'), 'unknown');
 });

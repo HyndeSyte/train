@@ -81,9 +81,12 @@ try {
   // ---- 0. Fresh install: the hand-off backstop read writer.json once (no state, no flag) and found
   // 'pwa', so Home is writable; Settings carries the hand-off row and the count-and-digest line.
   expect((await text('#home-content')).length > 20, 'Home renders');
+  // The backstop's answer arrives through the stubbed route after DOMContentLoaded; page timers are
+  // under the installed clock, so wait from this side with real time.
+  const settle = async (fn, ms = 5000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return true; await new Promise((r) => setTimeout(r, 50)); } return fn(); };
+  expect(await settle(() => page.evaluate(() => localStorage.getItem('train_handoff') === 'off')), 'flag written as off after the backstop');
   expect(writerReads.length === 1 && /writer\.json\?t=\d+/.test(writerReads[0]), 'one cache-busted writer.json read: ' + JSON.stringify(writerReads));
-  expect((await page.evaluate(() => localStorage.getItem('train_handoff'))) === 'off', 'flag written as off');
-  expect(/Start Today/.test(await text('#home-content')), 'Home is writable after the backstop');
+  expect(await settle(() => page.evaluate(() => /Start Today/.test(document.getElementById('home-content').innerText))), 'Home is writable after the backstop');
   await clickBtn('Settings');
   expect((await text('#settings-content')).includes('Recovery mode'), 'Settings has the recovery row');
   expect((await text('#settings-content')).includes('Hand off to the Train app'), 'Settings has the hand-off row');
