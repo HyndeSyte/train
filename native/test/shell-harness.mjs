@@ -263,7 +263,7 @@ export class World {
         world.syncRequests.push({ url: u, init }); return Promise.reject(new Error('no network in the shell tests'));
       },
       location: { origin: 'capacitor://localhost', href: 'capacitor://localhost/index.html', reload() { world.reloads++; } },
-      URL: { createObjectURL() { return 'blob:x'; }, revokeObjectURL() {} },
+      URL: class extends URL { static createObjectURL() { return 'blob:x'; } static revokeObjectURL() {} },
       Blob: class { constructor(parts, o) { this.parts = parts; this.type = (o && o.type) || ''; } }, FileReader: FakeFileReader, File: FakeFile,
       isSecureContext: true,
       Capacitor: { Plugins: plugins, PluginHeaders: Object.keys(plugins).map((name) => ({ name })) },
@@ -298,6 +298,8 @@ export class World {
       // bridge's handlers run in registration order) and native releases the idle timer in between
       async hide() { documentStub.visibilityState = 'hidden'; fire(listeners, 'visibilitychange'); await sleep(5); world.store.background(); await sleep(5); },
       async show() { documentStub.visibilityState = 'visible'; fire(listeners, 'visibilitychange'); await sleep(20); },
+      hideOnly() { documentStub.visibilityState = 'hidden'; fire(listeners, 'visibilitychange'); },
+      showOnly() { documentStub.visibilityState = 'visible'; fire(listeners, 'visibilitychange'); },
       postMessage(data, origin = 'https://hyndesyte.github.io') { fire(winListeners, 'message', { type: 'message', data, origin }); },
       // the modal's HTML (the reference modal renders its embed iframe into modal-body)
       modalHtml() { return els['modal-body'] ? els['modal-body'].innerHTML : ''; },

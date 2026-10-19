@@ -89,16 +89,18 @@ final class ParityUITests: XCTestCase {
         var e = embed(store)
         let wrapper = e["wrapper"]
         print("PARITY_EMBED_PROBE " + String(describing: e))
-        if (wrapper as? NSNumber)?.intValue == 200 {
+        if (wrapper as? NSNumber)?.intValue == 404 {
+            // exactly 404: the wrapper lives on Pages (main) and is not published yet. Reported, not asserted.
+            sleep(5)
+            e = embed(store)
+            print("PARITY_EMBED wrapper not published yet (404): player-ready not observable on this branch; state " + String(describing: e["state"]))
+        } else {
+            // anything else is a verdict: ready passes; a 5xx, a fetch error, a player error or a timeout fails
             let ready = waitLabel(store, contains: "\"state\":\"ready\"", timeout: 75)
             e = embed(store)
             print("PARITY_EMBED " + String(describing: e))
+            XCTAssertEqual((wrapper as? NSNumber)?.intValue, 200, "the wrapper answered: " + String(describing: e))
             XCTAssertTrue(ready, "the player reported ready through the wrapper: " + String(describing: e))
-        } else {
-            // the wrapper lives on Pages (main); on a branch it is not there yet. Reported, not asserted.
-            sleep(5)
-            e = embed(store)
-            print("PARITY_EMBED wrapper not reachable (" + String(describing: wrapper) + "): player-ready not observable on this branch; state " + String(describing: e["state"]))
         }
         let attachment = XCTAttachment(string: store.label)
         attachment.name = "parity.txt"

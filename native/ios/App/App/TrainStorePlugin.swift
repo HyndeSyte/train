@@ -462,9 +462,9 @@ final class TrainStore {
             _ = writeControl(c)
         }
         if let d = recoveredData {
-            return ["rev": control.rev, "generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(d), "bytes": String(decoding: d, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "recovered": true]
+            return ["rev": control.rev, "generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(d), "bytes": String(decoding: d, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "recovered": true]
         }
-        return ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "recovered": true]
+        return ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "recovered": true]
     }
 
     // MARK: compare-and-swap save

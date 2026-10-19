@@ -556,7 +556,16 @@ test('Import and Erase abort after the quiescing wait when a sync request is sti
   // the default wait is 10 seconds
   const defaults = new World({ config: {} });
   const d = await defaults.boot();
-  same(d.bridge.config, { readRetryMs: 5000, quiesceMs: 10000, exportWaitMs: 3000, embedTimeoutMs: 45000 });
+  same(d.bridge.config, { readRetryMs: 5000, quiesceMs: 10000, exportWaitMs: 3000 });
+});
+
+test('the embed probe window is 45 seconds by default and configurable for the tests', async () => {
+  const defaults = new World({ config: {} });
+  const d = await defaults.boot();
+  assert.equal(d.bridge.embedTimeoutMs, 45000);
+  const short = new World();
+  const s = await short.boot();
+  assert.equal(s.bridge.embedTimeoutMs, 300);
 });
 
 // ---- Export -----------------------------------------------------------------------------------------
@@ -740,42 +749,84 @@ test('one audio path: unlockAudio and toneW are no-ops and the shell never creat
   const w = seededWorld();
   const page = await w.boot();
   await page.settle();
+  assert.equal(page.audioContexts.length, 0, 'none at boot');
   page.ctx.unlockAudio(); page.ctx.toneW(523, 0, 0.1, 0.3, 'sine');
-  page.ctx.cueGo(); page.ctx.cueSessionDone();
-  // a session start and a logged set run the app's own cue calls
+  // a session: the app's own unlockAudio calls and cues (arm check, Form, Prep, a logged set)
   page.ctx.startSession('RP');
   if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
   page.ctx.advanceForm(); page.ctx.advanceForm();
-  if (typeof page.ctx.logRepSet === 'function' && page.ctx.__AS() && page.ctx.__AS().phase !== 'rest') { try { page.ctx.logRepSet(); } catch (e) { /* a station that is not a rep set */ } }
+  if (page.ctx.__AS() && page.ctx.__AS().phase !== 'rest') { try { page.ctx.logRepSet(); } catch (e) { /* a station that is not a rep set */ } }
   await sleep(20);
-  assert.equal(page.audioContexts.length, 0, 'no AudioContext constructed');
-  assert.ok(w.store.count('cue') >= 2, 'the native cue path was used instead');
   page.ctx.discardCurrentSession();
+  assert.equal(page.audioContexts.length, 0, 'no AudioContext through a session');
+  // PT's list: startPtSession, ptStartItem and ptSetDone call unlockAudio and the cues
+  const cuesBefore = w.store.count('cue');
+  page.ctx.startPtSession();
+  if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
+  page.ctx.ptOpen(0);
+  page.ctx.ptStartItem();
+  await sleep(20);
+  if (typeof page.ctx.ptSetDone === 'function') { try { page.ctx.ptSetDone(); } catch (e) { /* a timed step */ } }
+  await sleep(20);
+  page.ctx.closePtSession();
+  assert.equal(page.audioContexts.length, 0, 'no AudioContext through the PT list');
+  assert.ok(w.store.count('cue') > cuesBefore, 'the list used the native cue path: ' + (w.store.count('cue') - cuesBefore));
+  // the counter is live: a direct construction is counted
+  new page.ctx.AudioContext();
+  assert.equal(page.audioContexts.length, 1);
 });
 
-test('the sound key rides in the control sidecar: the store’s value hydrates an evicted WebView; a local value with none in the store seeds the store; setSoundEnabled writes both', async () => {
+test('the sound key rides in the control sidecar: the page’s key wins and is pushed to the store when it differs; the store’s value applies only to an evicted WebView; setSoundEnabled writes both; a kill after a toggle keeps the toggle', async () => {
   const w = seededWorld();
   w.store.control.soundOff = true;                   // he turned sound off on an earlier install of this phone
   const page = await w.boot();
-  assert.equal(w.storage.get('train_sound_off'), '1', 'hydrated from the store');
+  assert.equal(w.storage.get('train_sound_off'), '1', 'an empty WebView takes the store’s copy');
   assert.equal(page.ctx.soundEnabled(), false);
   page.ctx.setSoundEnabled(true);
-  assert.ok(await until(() => w.store.control.soundOff === false));
-  assert.equal(w.storage.get('train_sound_off'), '0');
+  assert.equal(w.storage.get('train_sound_off'), '0', 'the app’s own write lands first');
+  assert.ok(await until(() => w.store.control.soundOff === false), 'the store follows');
   w.evict();
   const again = await w.boot();
   assert.equal(w.storage.get('train_sound_off'), '0', 'survives eviction through the store');
   assert.equal(again.ctx.soundEnabled(), true);
-  // a store with no value yet takes the page's
+  // the page's key wins over a store that disagrees, and the store is brought in line
   const w2 = seededWorld();
+  w2.store.control.soundOff = false;
   w2.storage.set('train_sound_off', '1');
-  await w2.boot();
-  assert.ok(await until(() => w2.store.control.soundOff === true), 'seeded from the local key');
-  // not in an export
   const p2 = await w2.boot();
-  await p2.ctx.exportData();
-  assert.equal('train_sound_off' in JSON.parse(w2.fsWrites[0].data), false);
-  assert.equal('soundOff' in JSON.parse(w2.fsWrites[0].data), false);
+  assert.equal(w2.storage.get('train_sound_off'), '1', 'local untouched');
+  assert.equal(p2.ctx.soundEnabled(), false);
+  assert.ok(await until(() => w2.store.control.soundOff === true), 'pushed to the store');
+  // agreement means no write
+  const w3 = seededWorld();
+  w3.store.control.soundOff = true; w3.storage.set('train_sound_off', '1');
+  await w3.boot(); await sleep(20);
+  assert.equal(w3.store.count('setSoundOff'), 0);
+  // a kill right after the toggle, before the store write: the relaunch pushes the toggle through
+  const w4 = seededWorld();
+  const p4 = await w4.boot();
+  w4.store.hooks.setSoundOff = async () => new Promise(() => {});   // the write never reaches the plugin
+  p4.ctx.toggleSound();
+  assert.equal(w4.storage.get('train_sound_off'), '1');
+  assert.equal(w4.store.control.soundOff, undefined, 'the store never heard');
+  w4.kill(); delete w4.store.hooks.setSoundOff;
+  const p5 = await w4.boot();
+  assert.equal(p5.ctx.soundEnabled(), false, 'the toggle held');
+  assert.ok(await until(() => w4.store.control.soundOff === true), 'and reached the store on relaunch');
+  // not in an export
+  await p5.ctx.exportData();
+  assert.equal('train_sound_off' in JSON.parse(w4.fsWrites[0].data), false);
+  assert.equal('soundOff' in JSON.parse(w4.fsWrites[0].data), false);
+});
+
+test('Settings in the shell tells the truth about the silent switch (the playback category sounds through it)', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  const html = page.settings();
+  assert.doesNotMatch(html, /only play when your phone's silent switch is off/);
+  assert.match(html, /Cues play with the silent switch on; turn Cue sounds off to silence them\./);
+  assert.match(html, /Cue sounds/, 'the toggle is still there');
+  assert.match(html, /toggleSound\(\)/, 'with its handler');
 });
 
 test('navigator.wakeLock polyfill: request returns a sentinel with release() and a release event; hidden releases it natively; the PT list re-acquires on visible; a native release the page did not see re-acquires too', async () => {
@@ -819,7 +870,14 @@ test('navigator.wakeLock polyfill: request returns a sentinel with release() and
   w.store.background();
   assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 3), 're-acquired after the native event: ' + JSON.stringify(w.store.wake));
   assert.equal(page.wake.listener, 'plugin');
-  assert.ok(page.bridge.events.some((e) => e.nativeWakeReleased !== undefined && e.held === true));
+  assert.ok(page.bridge.events.some((e) => e.nativeWakeReleased !== undefined && e.released === 1));
+  // the native event re-acquires only while the app's own condition holds: paused, it does not
+  page.ctx.__PTS().run.paused = true;
+  w.store.background();
+  await sleep(30);
+  assert.equal(page.wake.sentinels.length, 0, 'the sentinel was released');
+  assert.equal(w.store.wake.acquires, acquiresBefore + 3, 'no re-acquire while paused');
+  page.ctx.__PTS().run.paused = false;
   // closing the list releases
   page.ctx.closePtSession();
   assert.ok(await until(() => w.store.wake.held === false));
@@ -829,6 +887,51 @@ test('navigator.wakeLock polyfill: request returns a sentinel with release() and
   await w.boot();
   assert.equal(w.store.wake.held, false, 'released on hydration');
   assert.equal(w.store.wake.lastRelease, 'all');
+});
+
+test('wake lock sentinels: two live sentinels keep native held until both are released; a native event releases only the sentinels it covered; an acquire that resolves on a hidden page is given back', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  const wl = page.ctx.navigator.wakeLock;
+  // two live sentinels: releasing the newer one keeps native held for the older
+  const older = await wl.request('screen');
+  const newer = await wl.request('screen');
+  assert.equal(w.store.wake.token, 2);
+  const releasesBefore = w.store.wake.releases;
+  await newer.release();
+  assert.equal(newer.released, true); assert.equal(older.released, false);
+  assert.equal(w.store.wake.held, true, 'native still held for the older sentinel');
+  assert.equal(w.store.wake.releases, releasesBefore, 'no native release yet');
+  await older.release();
+  assert.equal(w.store.wake.held, false, 'released once none remain');
+  assert.equal(w.store.wake.releases, releasesBefore + 1);
+  // a native event covers only the sentinels acquired before it: a sentinel acquired after stays live
+  const a = await wl.request('screen');                       // token 3
+  w.store.background();                                       // releases token 3, bumps to 4, event token 4
+  await sleep(10);
+  assert.equal(a.released, true);
+  const b = await wl.request('screen');                       // token 5
+  w.store.wakeListeners.forEach((fn) => fn({ token: 4, reason: 'late' }));   // a late copy of the earlier event
+  assert.equal(b.released, false, 'a sentinel acquired after the release is not touched by its event');
+  assert.equal(w.store.wake.held, true);
+  await b.release();
+  // an acquire that resolves while the page is hidden is released and rejected
+  w.store.delays.wakeAcquire = 40;
+  const pending = wl.request('screen');
+  await sleep(5);
+  page.hideOnly();
+  await assert.rejects(() => pending, /hidden/);
+  await sleep(10);
+  assert.equal(w.store.wake.held, false, 'given back to native');
+  assert.equal(page.wake.sentinels.length, 0);
+  assert.ok(page.bridge.events.some((e) => e.wakeAcquireWhileHidden));
+  page.showOnly();
+  delete w.store.delays.wakeAcquire;
+  // a request while hidden is refused outright
+  page.hideOnly();
+  await assert.rejects(() => wl.request('screen'), /hidden/);
+  page.showOnly();
 });
 
 test('embeds: buildEmbedUrl points YouTube at the https wrapper on Pages (Vimeo unchanged); the reference modal uses it; the wrapper’s postMessage states are recorded; the uiTest button probes the wrapper', async () => {
@@ -849,6 +952,9 @@ test('embeds: buildEmbedUrl points YouTube at the https wrapper on Pages (Vimeo 
   assert.equal(page.bridge.embed.origin, 'https://hyndesyte.github.io');
   page.postMessage({ type: 'other' });
   assert.equal(page.bridge.embed.state, 'ready', 'unrelated messages are ignored');
+  page.postMessage({ type: 'train-embed', state: 'error', code: 999, id: 'abc' }, 'https://evil.example');
+  assert.equal(page.bridge.embed.state, 'ready', 'a message from another origin is ignored');
+  assert.ok(page.bridge.events.some((e) => e.embedMessageIgnored === 'https://evil.example'));
   assert.ok(await until(() => w.store.testNotes.embed && w.store.testNotes.embed.state === 'ready'), 'the test summary carries it');
   // the uiTest button: Settings offers it, it opens the modal on the known video and probes the wrapper
   assert.match(page.settings(), /Embed test/);

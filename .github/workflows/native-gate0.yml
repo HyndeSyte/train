@@ -145,7 +145,7 @@ jobs:
       - name: Parity result (wake, audio, embed lines from the UI tests)
         if: always()
         run: |
-          { echo '### Parity'; echo; echo '```'; grep -hE "PARITY_|SMOKE_AUDIO|SMOKE_DEBUG_BOOT" "$RUNNER_TEMP/xcodebuild.log" | sed 's/^.*\(PARITY_\|SMOKE_\)/\1/' | cut -c1-1200 || echo 'no parity lines'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### Parity'; echo; echo '```'; grep -hE "PARITY_|SMOKE_AUDIO|SMOKE_DEBUG_BOOT" "$RUNNER_TEMP/xcodebuild.log" | sed -E 's/^.*(PARITY_|SMOKE_)/\1/' | cut -c1-1200 || echo 'no parity lines'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           for key in SMOKE_DEBUG_BOOT SMOKE_DEBUG_AFTER_START SMOKE_AUDIO PARITY_WAKE_1 PARITY_WAKE_2 PARITY_WAKE_3 PARITY_EMBED_PROBE PARITY_EMBED; do line=$(grep -h "$key " "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
       - name: Regenerate the project and assert no diff
         working-directory: native/ios/App

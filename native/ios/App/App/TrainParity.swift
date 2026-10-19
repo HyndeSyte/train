@@ -68,24 +68,29 @@ final class TrainAudio: NSObject, AVAudioPlayerDelegate {
             return status(ok: false)
         }
         do {
-            let player: AVAudioPlayer
-            if let p = players[name] { player = p } else { player = try AVAudioPlayer(contentsOf: url); player.prepareToPlay(); players[name] = player }
-            player.delegate = self
+            // the category and its options first: a player created or prepared before this would activate
+            // the session under the launch category (solo ambient) and stop his music instead of ducking it
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
             try session.setActive(true)
             active = true
-            playing += 1
+            let player: AVAudioPlayer
+            if let p = players[name] { player = p } else { player = try AVAudioPlayer(contentsOf: url); players[name] = player }
+            player.delegate = self
+            player.currentTime = 0
+            guard player.play() else {       // play() prepares the player itself, under the category set above
+                players[name] = nil           // never reuse a player that failed
+                throw NSError(domain: "train.audio", code: 1, userInfo: [NSLocalizedDescriptionKey: "play() returned false"])
+            }
+            playing += 1                      // counted only once the cue is actually playing
             plays += 1
             lastCue = name
-            player.currentTime = 0
-            if !player.play() { throw NSError(domain: "train.audio", code: 1, userInfo: [NSLocalizedDescriptionKey: "play() returned false"]) }
             scheduleRestore(after: player.duration + 0.5)
             return status(ok: true)
         } catch {
             failures += 1
             lastError = error.localizedDescription
-            playing = max(0, playing - 1)
-            if playing == 0 { restore() }
+            players[name] = nil
+            if playing == 0 { restore() }     // nothing else is playing: put the session back
             return status(ok: false)
         }
     }

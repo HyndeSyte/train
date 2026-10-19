@@ -50,7 +50,7 @@
     refused: false, pendingSaves: 0, inflightSaves: 0, lastSaveFailed: false, lastCommitted: null,
     chain: Promise.resolve(), txHold: null, snapshot: null, banner: null, hydrated: false, readyPromise: null, events: [], logRing: [],
     launch: null, embed: null,
-    config: { readRetryMs: READ_RETRY_MS, quiesceMs: QUIESCE_MS, exportWaitMs: EXPORT_WAIT_MS, embedTimeoutMs: EMBED_TIMEOUT_MS }
+    config: { readRetryMs: READ_RETRY_MS, quiesceMs: QUIESCE_MS, exportWaitMs: EXPORT_WAIT_MS }, embedTimeoutMs: EMBED_TIMEOUT_MS
   };
   function note(ev) { store.events.push(ev); if (store.events.length > 200) store.events.shift(); }
   function msg(e) { return String(e && e.message || e); }
@@ -562,11 +562,20 @@
   w.__exportSnapshot = exportSnapshot;
 
   // --- Settings: the store line and the snapshot row ---
+  var SILENT_LINE_PWA = 'Audio cues only play when your phone\'s silent switch is off.';
+  var SILENT_LINE_SHELL = 'Cues play with the silent switch on; turn Cue sounds off to silence them.';
   var origRenderSettings = w.renderSettings;
   w.renderSettings = function () {
     if (typeof origRenderSettings === 'function') origRenderSettings.apply(this, arguments);
+    fixSilentSwitchLine();
     appendStoreCard();
   };
+  // the shell's cues use the playback category (ducking needs it), so they sound with the silent switch on
+  function fixSilentSwitchLine() {
+    var c = w.document.getElementById('settings-content'); if (!c) return;
+    var html = c.innerHTML;
+    if (html && html.indexOf(SILENT_LINE_PWA) !== -1) c.innerHTML = html.split(SILENT_LINE_PWA).join(SILENT_LINE_SHELL);
+  }
   function appendStoreCard() {
     var c = w.document.getElementById('settings-content'); if (!c) return;
     var card = w.document.createElement('div');
@@ -604,7 +613,7 @@
   // event (ptWakeOn re-acquires only after one). Native owns UIApplication.isIdleTimerDisabled with a
   // generation token; it releases on background and tells this page, and this page releases on hidden,
   // pagehide and hydration, dispatching 'release' to every sentinel it held.
-  var wake = w.__wake = { sentinels: [], listener: null };
+  var wake = w.__wake = { sentinels: [], listener: null, lastToken: 0 };
   function makeSentinel(token) {
     var listeners = [];
     var s = { type: 'screen', released: false, onrelease: null, __token: token };
@@ -621,11 +630,14 @@
     };
     return s;
   }
+  // Native is released only when no live sentinel remains, with the newest token this page knows (a
+  // newer acquire still in flight keeps its lock: its token will not match).
   function releaseSentinel(s) {
     if (s.released) return Promise.resolve();
     s.__dispatch();
-    note({ wakeRelease: s.__token });
-    return call('TrainStore', 'wakeRelease', { token: s.__token }).then(function () {}, function (e) { note({ wakeReleaseFailed: msg(e) }); });
+    note({ wakeRelease: s.__token, live: wake.sentinels.length });
+    if (wake.sentinels.length) return Promise.resolve();
+    return call('TrainStore', 'wakeRelease', { token: wake.lastToken }).then(function () {}, function (e) { note({ wakeReleaseFailed: msg(e) }); });
   }
   function releaseAllSentinels(why) {
     var held = wake.sentinels.slice();
@@ -639,11 +651,21 @@
     if (w.document.visibilityState === 'hidden') return Promise.reject(new Error('NotAllowedError: the document is hidden'));
     return call('TrainStore', 'wakeAcquire').then(function (r) {
       if (!r || !r.ok) throw new Error('wake lock refused');
+      if (r.token > wake.lastToken) wake.lastToken = r.token;
+      if (w.document.visibilityState === 'hidden') {
+        // the page went to the background while the acquire was in flight: give the lock back
+        note({ wakeAcquireWhileHidden: r.token });
+        return call('TrainStore', 'wakeRelease', { token: r.token }).catch(function () {}).then(function () { throw new Error('NotAllowedError: the document is hidden'); });
+      }
       var s = makeSentinel(r.token);
       wake.sentinels.push(s);
       note({ wakeAcquire: r.token });
       return s;
     });
+  }
+  // the app's own condition for holding the screen (ptWakeOn's callers): a running, unpaused PT item
+  function ptRunning() {
+    try { return !!(typeof PTS !== 'undefined' && PTS && PTS.run && PTS.run.plan && !PTS.run.paused); } catch (e) { return false; }
   }
   try {
     Object.defineProperty(w.navigator, 'wakeLock', { configurable: true, enumerable: true, value: { request: requestWakeLock } });
@@ -654,11 +676,14 @@
   }
   if (typeof w.addEventListener === 'function') w.addEventListener('pagehide', function () { releaseAllSentinels('pagehide'); });
   function onNativeWakeReleased(ev) {
-    var held = wake.sentinels.length > 0;
-    wake.sentinels.slice().forEach(function (s) { s.__dispatch(); });
-    note({ nativeWakeReleased: ev && ev.token, reason: ev && ev.reason, held: held });
-    // a release this page had not seen (the hidden event did not run before suspension): give the app its re-acquire
-    if (held && w.document.visibilityState === 'visible' && typeof w.ptWakeOn === 'function') { try { w.ptWakeOn(); } catch (e) { logLine('error', ['ptWakeOn', e]); } }
+    // only the sentinels that release covered: native's token is past every lock it released
+    var token = ev && typeof ev.token === 'number' ? ev.token : Infinity;
+    var covered = wake.sentinels.filter(function (s) { return s.__token < token; });
+    covered.forEach(function (s) { s.__dispatch(); });
+    note({ nativeWakeReleased: ev && ev.token, reason: ev && ev.reason, released: covered.length, live: wake.sentinels.length });
+    // a release this page had not seen (the hidden event did not run before suspension): the app re-acquires
+    // under its own condition, as its visibilitychange handler would
+    if (covered.length && w.document.visibilityState === 'visible' && ptRunning() && typeof w.ptWakeOn === 'function') { try { w.ptWakeOn(); } catch (e) { logLine('error', ['ptWakeOn', e]); } }
   }
   (function listenNativeWake() {
     var p = pl('TrainStore');
@@ -677,7 +702,7 @@
     var h = CUES[name];
     var haptic = h[0] === 'impact' ? call('Haptics', 'impact', { style: h[1] }) : call('Haptics', 'notification', { type: h[1] });
     haptic.catch(function (e) { note({ hapticFailed: name, error: msg(e) }); });
-    return call('TrainStore', 'cue', { name: name }).then(function (r) { return r; }, function (e) { note({ cueFailed: name, error: msg(e) }); return { error: msg(e) }; });
+    return call('TrainStore', 'cue', { name: name }).then(function (r) { if (r && r.ok) testNote({ cue: { name: name, options: r.options, active: r.active, playing: r.playing } }); else note({ cueRefused: name, error: r && r.lastError }); return r; }, function (e) { note({ cueFailed: name, error: msg(e) }); return { error: msg(e) }; });
   }
   Object.keys(CUES).forEach(function (name) { w[name] = function () { return playCue(name); }; });
   w.unlockAudio = function () {};
@@ -687,8 +712,13 @@
   function hydrateSoundKey(res) {
     var fileOff = res && (res.soundOff === true || res.soundOff === false) ? res.soundOff : null;
     var local = lsGet(SOUND_KEY);
-    if (fileOff !== null) { lsSet(SOUND_KEY, fileOff ? '1' : '0'); return; }          // the store's copy survives eviction
-    if (local === '1' || local === '0') call('TrainStore', 'setSoundOff', { off: local === '1' }).catch(function () {});
+    if (local === '1' || local === '0') {
+      // the page's key is the setting he last tapped (setSoundEnabled writes it first); the store follows it
+      var localOff = local === '1';
+      if (fileOff !== localOff) call('TrainStore', 'setSoundOff', { off: localOff }).catch(function (e) { note({ soundSaveFailed: msg(e) }); });
+      return;
+    }
+    if (fileOff !== null) lsSet(SOUND_KEY, fileOff ? '1' : '0');                       // an evicted WebView takes the store's copy
   }
   var origSetSoundEnabled = w.setSoundEnabled;
   w.setSoundEnabled = function (on) {
@@ -708,10 +738,14 @@
     }
     return typeof origBuildEmbedUrl === 'function' ? origBuildEmbedUrl(ref) : null;
   };
+  var EMBED_ORIGIN = (function () {
+    try { return new w.URL(EMBED_BASE).origin; } catch (e) { var m = /^(https?:\/\/[^/]+)/.exec(EMBED_BASE); return m ? m[1] : ''; }
+  })();
   if (typeof w.addEventListener === 'function') {
     w.addEventListener('message', function (ev) {
       var d = ev && ev.data;
       if (!d || d.type !== 'train-embed') return;
+      if (!ev || ev.origin !== EMBED_ORIGIN) { note({ embedMessageIgnored: ev && ev.origin }); return; }
       store.embed = Object.assign(store.embed || {}, { id: d.id, state: d.state, code: d.code == null ? undefined : d.code, origin: ev.origin, at: new Date().toISOString() });
       note({ embed: d.state, code: d.code, id: d.id });
       testNote({ embed: store.embed });
