@@ -1,0 +1,74 @@
+{
+ "schemaVersion": 8,
+ "progressionEngineVersion": 3,
+ "rotationIndex": 0,
+ "nextSessionOverride": null,
+ "nextSessionSequence": 3,
+ "pendingDeletes": [],
+ "activeSession": null,
+ "legacy": {
+  "promotions": {},
+  "exerciseVariations": {},
+  "promotionLog": []
+ },
+ "anchorProgress": {},
+ "recovery": {
+  "on": true,
+  "cardioClear": false,
+  "since": "2026-09-30T12:00:00.000Z",
+  "offAt": null
+ },
+ "armCheck": null,
+ "log": [
+  {
+   "sessionId": "fx-0001",
+   "sessionSequence": 1,
+   "date": "2026-10-01",
+   "startedAt": 1792086400000,
+   "completedAt": 1792087600000,
+   "sessionType": "PT",
+   "sessionStatus": "completed",
+   "duration": 6,
+   "coreComplete": true,
+   "mode": "recovery",
+   "performed": [],
+   "exercises": {},
+   "skipped": [],
+   "issues": [],
+   "notes": "",
+   "notionSync": {
+    "status": "synced",
+    "syncedAt": "2026-10-01T22:00:00.000Z",
+    "notionPageId": "fx-page",
+    "error": null,
+    "lastAttemptAt": null
+   },
+   "ptList": true,
+   "ptItems": []
+  },
+  {
+   "sessionId": "fx-0002",
+   "sessionSequence": 2,
+   "date": "2026-10-02",
+   "startedAt": 1792172800000,
+   "completedAt": 1792174000000,
+   "sessionType": "LP",
+   "sessionStatus": "completed",
+   "duration": 18,
+   "coreComplete": true,
+   "mode": "recovery",
+   "performed": [],
+   "exercises": {},
+   "skipped": [],
+   "issues": [],
+   "notes": "",
+   "notionSync": {
+    "status": "synced",
+    "syncedAt": "2026-10-01T22:00:00.000Z",
+    "notionPageId": "fx-page",
+    "error": null,
+    "lastAttemptAt": null
+   }
+  }
+ ]
+}

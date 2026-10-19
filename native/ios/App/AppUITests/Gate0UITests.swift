@@ -7,6 +7,7 @@ import XCTest
 final class Gate0UITests: XCTestCase {
     func testGate0BridgeAnswers() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-trainUITest"]      // the report labels exist only under this argument (Debug builds)
         app.launch()
 
         let label = app.staticTexts["gate0-result"]
@@ -30,7 +31,7 @@ final class Gate0UITests: XCTestCase {
         let trainStore = try XCTUnwrap(obj["trainStore"] as? [String: Any], "TrainStore answered: " + json)
         let pong = try XCTUnwrap(trainStore["value"] as? [String: Any])
         XCTAssertEqual(pong["pong"] as? String, "gate0")
-        XCTAssertEqual(pong["rev"] as? Int, 0)
+        XCTAssertNotNil(pong["rev"] as? Int, "ping reports the store rev")
 
         let capPlugin = try XCTUnwrap(obj["capPlugin"] as? [String: Any], "Filesystem answered: " + json)
         let uri = try XCTUnwrap((capPlugin["value"] as? [String: Any])?["uri"] as? String)

@@ -1,8 +1,10 @@
-# Native shell, gate 0 (plan v4, R2): on a fresh clone, generate the Xcode project with XcodeGen, sync
-# Capacitor (SPM), build for the simulator, run the one XCUITest that proves the bridge (TrainStore.ping,
-# Filesystem.getUri, secure context, capacitor://localhost), then regenerate the project and assert no
-# diff. Native-lane only: a path check fails any run whose change set touches both native/ and a PWA
-# file. Actions are GitHub-owned and pinned by commit SHA.
+# Native shell (plan v4, R2): on a fresh clone, run the shell's Node tests (copy step, durable store),
+# generate the Xcode project with XcodeGen, sync Capacitor (SPM), build for the simulator and run the
+# UI tests: gate 0 (the bridge answers at capacitor://localhost) and the durable-store smoke (a
+# synthetic fixture, one session through the UI, relaunch: no banner, the session in History and in
+# the file, the store line in Settings). Then regenerate the project and assert no diff. Native-lane
+# only: a path check fails any run whose change set touches both native/ and a PWA file. Actions are
+# GitHub-owned and pinned by commit SHA.
 name: native gate 0
 on:
   push:
@@ -67,6 +69,12 @@ jobs:
           echo "::notice title=deps::$deps"
       - name: Copy step (patches the shell's own copy of index.html)
         run: node scripts/copy-www.mjs
+      - name: Shell Node tests (copy step, durable store against the fake plugin)
+        run: |
+          node --check www/bridge.js
+          node --test 2>&1 | tee "$RUNNER_TEMP/node-tests.log" | tail -12
+          grep -q '^# fail 0' "$RUNNER_TEMP/node-tests.log"
+          echo "::notice title=node-tests::$(grep -E '^# (tests|pass|fail)' "$RUNNER_TEMP/node-tests.log" | tr '\n' ' ')"
       - name: Generate the Xcode project (bootstrap; cap sync reads the project)
         working-directory: native/ios/App
         run: xcodegen generate
@@ -105,7 +113,7 @@ jobs:
               if (devs.length) { console.log(JSON.stringify({ runtime: rt, name: devs[0].name, udid: devs[0].udid })); require('fs').appendFileSync(process.env.GITHUB_OUTPUT, 'udid=' + devs[0].udid + '\nname=' + devs[0].name + '\nruntime=' + rt + '\n'); process.exit(0); }
             }
             console.error('no available iPhone simulator'); process.exit(1);"
-      - name: Build and run the gate 0 UI test in the simulator
+      - name: Build and run the UI tests in the simulator (gate 0 + durable-store smoke)
         working-directory: native/ios/App
         run: |
           set -euo pipefail
@@ -116,7 +124,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/gate0.xcresult" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO \
-            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "GATE0_RESULT|error:|warning: .*TrainStore|Test Case|Test Suite|\*\* TEST|BUILD" || true
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "GATE0_RESULT|SMOKE_|error:|warning: .*TrainStore|Test Case|Test Suite|\*\* TEST|BUILD" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" "$RUNNER_TEMP/xcodebuild.log"
       - name: Gate 0 result
         if: always()
@@ -125,7 +133,14 @@ jobs:
           grep -h 'GATE0_RESULT' "$RUNNER_TEMP/xcodebuild.log" | head -1 || true
           result=$(grep -h 'GATE0_RESULT' "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed 's/.*GATE0_RESULT //' || true)
           echo "::notice title=gate0::simulator ${{ steps.sim.outputs.name }} (${{ steps.sim.outputs.runtime }}) | ${result:-no GATE0_RESULT line in the xcodebuild log}"
-          grep -E "Test Case .*(passed|failed)|\*\* TEST" "$RUNNER_TEMP/xcodebuild.log" | head -5 | while IFS= read -r line; do echo "::notice title=xctest::$line"; done
+          grep -E "Test Case .*(passed|failed)|\*\* TEST" "$RUNNER_TEMP/xcodebuild.log" | head -8 | while IFS= read -r line; do echo "::notice title=xctest::$line"; done
+          for key in SMOKE_DEBUG_BOOT SMOKE_DEBUG_AFTER_START SMOKE_TRAIL SMOKE_RESULT_1 SMOKE_RESULT_2; do line=$(grep -h "$key" "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
+          # on a failure, surface what went wrong where the container can read it (annotations): compiler
+          # errors, failing assertions, and the tail of the log
+          if ! grep -q "\*\* TEST SUCCEEDED \*\*" "$RUNNER_TEMP/xcodebuild.log"; then
+            grep -E "error:|: error |failed: |XCTAssert|Assertion Failure" "$RUNNER_TEMP/xcodebuild.log" | grep -v "^\s*$" | awk '!seen[$0]++' | head -12 | while IFS= read -r line; do echo "::error title=xcodebuild::${line:0:900}"; done
+            tail -c 2500 "$RUNNER_TEMP/xcodebuild.log" | tr '\n' ' ' | sed 's/::/: :/g' | cut -c1-2400 | while IFS= read -r line; do echo "::notice title=log-tail::$line"; done
+          fi
       - name: Regenerate the project and assert no diff
         working-directory: native/ios/App
         run: |

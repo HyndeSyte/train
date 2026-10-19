@@ -1,1 +1,3 @@
 CAPACITOR_DEBUG = true
+// the test-only surfaces (labels, launch arguments, summary publishing) compile under #if DEBUG
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DEBUG

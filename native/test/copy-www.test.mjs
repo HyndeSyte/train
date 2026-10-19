@@ -14,7 +14,8 @@ test('copy: the three served files land in the destination; index.html is patche
   const before = Object.fromEntries(COPIED.map((n) => [n, statSync(join(root, n)).mtimeMs]));
   const dest = mkdtempSync(join(tmpdir(), 'train-www-'));
   const written = copyWww({ root, dest });
-  assert.deepEqual(written.map((w) => w.replace(dest + '/', '')).sort(), [...COPIED].sort());
+  assert.deepEqual(written.map((w) => w.replace(dest + '/', '')).sort(), [...COPIED, 'fixtures/smoke.json'].sort());
+  assert.equal(JSON.parse(readFileSync(join(dest, 'fixtures', 'smoke.json'), 'utf8')).log.length, 2, 'the synthetic smoke fixture rides along');
   assert.equal(existsSync(join(dest, 'writer.json')), false);
   for (const n of COPIED) assert.equal(statSync(join(root, n)).mtimeMs, before[n], n + ' at the repo root untouched');
   const html = readFileSync(join(dest, 'index.html'), 'utf8');
