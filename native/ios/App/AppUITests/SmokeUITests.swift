@@ -104,6 +104,21 @@ final class SmokeUITests: XCTestCase {
         let rev1 = (after["rev"] as? NSNumber)?.intValue ?? -1
         XCTAssertGreaterThan(rev1, 1, "rev advanced past the fixture import")
         print("SMOKE_RESULT_1 " + afterText)
+        // the session's cues played natively: the audio session is back to mix-only and inactive
+        let audio = try XCTUnwrap(after["audio"] as? [String: Any], "audio status in the summary: " + afterText)
+        XCTAssertGreaterThan((audio["plays"] as? NSNumber)?.intValue ?? 0, 0, "cues played: " + afterText)
+        XCTAssertEqual((audio["failures"] as? NSNumber)?.intValue, 0, "no cue failed: " + afterText)
+        XCTAssertEqual(audio["active"] as? Bool, false, "the audio session is deactivated after the last cue: " + afterText)
+        XCTAssertEqual(audio["options"] as? [String], ["mixWithOthers"], "category back to mix-only: " + afterText)
+        XCTAssertEqual(audio["category"] as? String, "AVAudioSessionCategoryPlayback")
+        XCTAssertGreaterThan((audio["deactivations"] as? NSNumber)?.intValue ?? 0, 0, "deactivated with notifyOthersOnDeactivation: " + afterText)
+        XCTAssertTrue(audio["lastError"] is NSNull || audio["lastError"] == nil, "no audio error: " + afterText)
+        // one cue's own result, recorded by bridge.js as it played: ducking was on while the cue sounded
+        let cue = try XCTUnwrap((after["bridge"] as? [String: Any])?["cue"] as? [String: Any], "a cue result in the summary: " + afterText)
+        XCTAssertEqual(cue["active"] as? Bool, true, "the session was active during the cue: " + String(describing: cue))
+        XCTAssertTrue((cue["options"] as? [String] ?? []).contains("duckOthers"), "duckOthers set during the cue: " + String(describing: cue))
+        XCTAssertTrue((cue["options"] as? [String] ?? []).contains("mixWithOthers"), "mixWithOthers kept during the cue: " + String(describing: cue))
+        print("SMOKE_AUDIO " + afterText)
 
         // 3. relaunch: no banner, same file, the session in History, Settings shows the store line
         app.terminate()

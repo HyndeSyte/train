@@ -36,10 +36,27 @@ export class FakeStore {
     this.hooks = {};             // method -> fn(args) returning a result to use instead, or throwing
     this.holdAcks = {};          // method -> array of resolvers; a held ack settles only on release()
     this.queue = Promise.resolve();
-    this.launch = { fixture: null, smoke: false, reset: false };
+    this.launch = { fixture: null, smoke: false, reset: false, uiTest: false };
     this.failAfterDisarm = false; // the state write fails after the first control write: the plugin answers refuse('write')
     this.killAt = null;           // 'afterFirstControl' | 'afterState': the app dies inside Import/Erase, nothing answers
+    // parity: the idle timer (generation token), native cues and the audio session, the sound key, test notes
+    this.wake = { held: false, token: 0, acquires: 0, releases: 0, lastRelease: null, idleTimerDisabled: false };
+    this.audio = { category: 'AVAudioSessionCategoryPlayback', options: ['mixWithOthers'], active: false, plays: 0, failures: 0, lastCue: null, playing: 0 };
+    this.cueMs = 0;               // how long a cue "plays" before the session is restored
+    this.testNotes = {};
+    this.wakeListeners = [];
   }
+  // native releases the idle timer when the app backgrounds and tells the page (notifyListeners)
+  background() {
+    if (this.wake.held) { this.releaseWake(null, 'background'); const data = { token: this.wake.token, reason: 'background' }; this.wakeListeners.forEach((fn) => fn(data)); }
+  }
+  releaseWake(token, reason) {
+    if (token != null && token !== this.wake.token) return false;
+    if (!this.wake.held) return false;
+    this.wake.held = false; this.wake.releases += 1; this.wake.lastRelease = reason; this.wake.token += 1; this.wake.idleTimerDisabled = false;
+    return true;
+  }
+  get soundOff() { return this.control.soundOff; } set soundOff(v) { this.control.soundOff = v; }
   get rev() { return this.control.rev; } set rev(v) { this.control.rev = v; }
   get generation() { return this.control.generation; } set generation(v) { this.control.generation = v; }
   get syncArmed() { return this.control.syncArmed; } set syncArmed(v) { this.control.syncArmed = v; }
@@ -84,8 +101,20 @@ export class FakeStore {
       ping: (a) => self.run('ping', a, async () => ({ pong: a && a.echo, rev: self.rev })),
       report: (a) => self.run('report', a, async () => ({ stored: true })),
       launchOptions: (a) => self.run('launchOptions', a, async () => ({ ...self.launch })),
+      addListener: (eventName, cb) => { if (eventName === 'wakeReleased') self.wakeListeners.push(cb); return { remove() { self.wakeListeners = self.wakeListeners.filter((f) => f !== cb); } }; },
+      wakeAcquire: (a) => self.run('wakeAcquire', a, async () => { self.wake.token += 1; self.wake.held = true; self.wake.acquires += 1; self.wake.idleTimerDisabled = true; return { ok: true, token: self.wake.token }; }),
+      wakeRelease: (a) => self.run('wakeRelease', a, async () => ({ ok: true, released: self.releaseWake(a && typeof a.token === 'number' ? a.token : null, a && typeof a.token === 'number' ? 'sentinel' : 'all') })),
+      cue: (a) => self.run('cue', a, async () => {
+        const au = self.audio;
+        if (!a || !a.name) { au.failures += 1; return { ok: false, error: 'no cue' }; }
+        au.options = ['mixWithOthers', 'duckOthers']; au.active = true; au.playing += 1; au.plays += 1; au.lastCue = a.name;
+        setTimeout(() => { au.playing = Math.max(0, au.playing - 1); if (au.playing === 0) { au.options = ['mixWithOthers']; au.active = false; au.deactivations = (au.deactivations || 0) + 1; au.lastDeactivation = 'notifyOthersOnDeactivation'; } }, self.cueMs);
+        return { ok: true, ...au };
+      }),
+      setSoundOff: (a) => self.run('setSoundOff', a, async () => { self.writeControl({ soundOff: !!(a && a.off) }); return { ok: true, soundOff: self.control.soundOff }; }),
+      testNote: (a) => self.run('testNote', a, async () => { Object.assign(self.testNotes, JSON.parse(a.json)); return { ok: true }; }),
       read: (a) => self.run('read', a, async () => {
-        const base = () => ({ generation: self.generation, recoveredFrom: self.recoveredFrom, syncArmed: self.syncArmed });
+        const base = () => ({ generation: self.generation, recoveredFrom: self.recoveredFrom, syncArmed: self.syncArmed, soundOff: self.control.soundOff == null ? null : self.control.soundOff });
         if (self.file == null) {
           const healed = self.rev !== 0; if (healed) self.writeControl({ rev: 0 });
           return { rev: 0, hasFile: false, hash: null, ...base(), ...(healed ? { healed: true } : {}) };
@@ -145,7 +174,7 @@ export class FakeStore {
         self.events.push({ erased: true, generation: self.generation });
         return { accepted: true, rev: 0, generation: self.generation, hash: null };
       }),
-      status: (a) => self.run('status', a, async () => ({ rev: self.rev, generation: self.generation, committedAt: self.committedAt, syncArmed: self.syncArmed, recoveredFrom: self.recoveredFrom, hasFile: self.file != null, snapshots: self.snapshots.length })),
+      status: (a) => self.run('status', a, async () => ({ rev: self.rev, generation: self.generation, committedAt: self.committedAt, syncArmed: self.syncArmed, recoveredFrom: self.recoveredFrom, hasFile: self.file != null, snapshots: self.snapshots.length, soundOff: self.control.soundOff == null ? null : self.control.soundOff, wake: { ...self.wake }, audio: { ...self.audio } })),
       summary: (a) => self.run('summary', a, async () => { const o = self.parse(self.file) || {}; const log = o.log || []; const last = log[log.length - 1]; return { rev: self.rev, generation: self.generation, hasFile: self.file != null, sessions: log.length, sessionIds: log.map((e) => e.sessionId), lastSessionId: last && last.sessionId, logTail: self.logTail(3) }; }),
       setSyncArmed: (a) => self.run('setSyncArmed', a, async () => { self.writeControl({ syncArmed: !!a.on }); return { ok: true, syncArmed: self.syncArmed }; }),
       // Library/Logs/train.log in Swift: appended, rotated at 200 KB
@@ -182,7 +211,7 @@ export class World {
     this.fsWrites = [];
     this.shares = [];
     this.syncRequests = [];
-    this.config = opts.config || { readRetryMs: 400, quiesceMs: 400, exportWaitMs: 300 };
+    this.config = opts.config || { readRetryMs: 400, quiesceMs: 400, exportWaitMs: 300, embedTimeoutMs: 300 };
     this.now = opts.now || null;
   }
   evict() { this.storage.clear(); }
@@ -192,26 +221,36 @@ export class World {
   // Launch the page. Resolves once the (patched) DOMContentLoaded handler has run, i.e. after hydration,
   // unless `noWait` (for tests that inspect the loading view while a read hangs).
   async boot(opts = {}) {
-    const world = this; const els = {}; const listeners = {}; const created = [];
+    const world = this; const els = {}; const listeners = {}; const winListeners = {}; const created = [];
     const storage = this.storage;
+    const on = (reg) => (type, fn) => { (reg[type] = reg[type] || []).push(fn); };
+    const fire = (reg, type, ev) => (reg[type] || []).slice().forEach((fn) => fn(ev || { type }));
     const documentStub = {
       getElementById(id) { if (!els[id]) els[id] = makeEl(els, 'div'); return els[id]; },
-      querySelectorAll() { return []; }, addEventListener(type, fn) { listeners[type] = fn; },
+      querySelectorAll() { return []; }, addEventListener: on(listeners),
+      removeEventListener(type, fn) { listeners[type] = (listeners[type] || []).filter((f) => f !== fn); },
       createElement(tag) { const el = makeEl(els, tag); created.push(el); return el; },
       body: { addEventListener() {}, innerHTML: '', appendChild(c) { if (c && c.id) els[c.id] = c; return c; } },
       documentElement: { appendChild(c) { if (c && c.id) els[c.id] = c; return c; } },
       visibilityState: 'visible', readyState: 'loading'
     };
+    const audioContexts = [];
+    class SpyAudioContext { constructor() { audioContexts.push(this); this.state = 'running'; } resume() {} createOscillator() { return { connect() {}, start() {}, stop() {}, frequency: {} }; } createGain() { return { connect() {}, gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} } }; } }
     class FakeFile { constructor(parts, name, o) { this.parts = parts; this.name = name; this.type = (o && o.type) || ''; this.text = parts.join(''); } }
     class FakeFileReader { readAsText(f) { Promise.resolve().then(() => this.onload({ target: { result: f.text } })); } }
     const plugins = {
       TrainStore: this.store.plugin(),
       Filesystem: { writeFile: async (a) => { world.fsWrites.push(a); return { uri: 'file:///cache/' + a.path }; }, getUri: async (a) => ({ uri: 'file:///lib/' + a.path }) },
-      Share: { share: async (a) => { world.shares.push(a); if (world.shareError) throw world.shareError; return { activityType: 'test' }; } }
+      Share: { share: async (a) => { world.shares.push(a); if (world.shareError) throw world.shareError; return { activityType: 'test' }; } },
+      Haptics: { impact: async (a) => { world.haptics.push({ impact: a.style }); }, notification: async (a) => { world.haptics.push({ notification: a.type }); }, vibrate: async (a) => { world.haptics.push({ vibrate: a.duration }); } }
     };
+    this.haptics = this.haptics || [];
     const ctx = {
       localStorage: { getItem: (k) => storage.has(k) ? storage.get(k) : null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k), clear: () => storage.clear() },
-      document: documentStub, navigator: {}, setTimeout, clearTimeout, setInterval, clearInterval,
+      document: documentStub, navigator: { vibrate() { world.vibrates = (world.vibrates || 0) + 1; return true; } }, setTimeout, clearTimeout, setInterval, clearInterval,
+      addEventListener: on(winListeners), removeEventListener(type, fn) { winListeners[type] = (winListeners[type] || []).filter((f) => f !== fn); },
+      dispatchEvent(ev) { fire(winListeners, ev.type, ev); return true; },
+      AudioContext: SpyAudioContext, webkitAudioContext: SpyAudioContext,
       // a per-context console (bridge.js wraps it for its log ring); warnings and errors reach the test output, chatter does not
       console: { log: () => {}, info: () => {}, debug: () => {}, warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) },
       Date, Math, JSON, Object, Array, Number, String, Boolean, Error, Promise, Uint8Array, Set, Map, RegExp, Symbol, Proxy, Reflect,
@@ -220,10 +259,11 @@ export class World {
       fetch(url, init) {
         const u = String(url);
         if (/^fixtures\//.test(u)) { const data = readFileSync(join(nativeDir, 'test', u), 'utf8'); return Promise.resolve({ ok: true, json: async () => JSON.parse(data), text: async () => data }); }
+        if (/\/embed\.html$/.test(u)) { world.embedProbes = (world.embedProbes || 0) + 1; const status = world.embedWrapperStatus || 200; return Promise.resolve({ ok: status === 200, status }); }
         world.syncRequests.push({ url: u, init }); return Promise.reject(new Error('no network in the shell tests'));
       },
       location: { origin: 'capacitor://localhost', href: 'capacitor://localhost/index.html', reload() { world.reloads++; } },
-      URL: { createObjectURL() { return 'blob:x'; }, revokeObjectURL() {} },
+      URL: class extends URL { static createObjectURL() { return 'blob:x'; } static revokeObjectURL() {} },
       Blob: class { constructor(parts, o) { this.parts = parts; this.type = (o && o.type) || ''; } }, FileReader: FakeFileReader, File: FakeFile,
       isSecureContext: true,
       Capacitor: { Plugins: plugins, PluginHeaders: Object.keys(plugins).map((name) => ({ name })) },
@@ -252,12 +292,23 @@ export class World {
       loadingDisplay() { const v = els['store-loading']; return v ? v.style.display : undefined; },
       state() { return ctx.getState(); },
       bridge: ctx.__store,
+      wake: ctx.__wake,
+      audioContexts,
+      // the phone goes to the background and comes back: the document's visibility flips (the app's and the
+      // bridge's handlers run in registration order) and native releases the idle timer in between
+      async hide() { documentStub.visibilityState = 'hidden'; fire(listeners, 'visibilitychange'); await sleep(5); world.store.background(); await sleep(5); },
+      async show() { documentStub.visibilityState = 'visible'; fire(listeners, 'visibilitychange'); await sleep(20); },
+      hideOnly() { documentStub.visibilityState = 'hidden'; fire(listeners, 'visibilitychange'); },
+      showOnly() { documentStub.visibilityState = 'visible'; fire(listeners, 'visibilitychange'); },
+      postMessage(data, origin = 'https://hyndesyte.github.io') { fire(winListeners, 'message', { type: 'message', data, origin }); },
+      // the modal's HTML (the reference modal renders its embed iframe into modal-body)
+      modalHtml() { return els['modal-body'] ? els['modal-body'].innerHTML : ''; },
       // wait until the save chain has drained (every queued save settled)
       async settle(ms = 2000) { const t0 = Date.now(); while (ctx.__store.pendingSaves > 0 && Date.now() - t0 < ms) await sleep(5); return ctx.__store.pendingSaves === 0; }
     };
-    const handler = listeners.DOMContentLoaded;
-    assert.ok(handler, 'DOMContentLoaded handler registered');
-    page.ready = Promise.resolve().then(() => handler());
+    const handlers = listeners.DOMContentLoaded || [];
+    assert.ok(handlers.length, 'DOMContentLoaded handler registered');
+    page.ready = Promise.resolve().then(async () => { for (const h of handlers) await h(); });
     if (!opts.noWait) await page.ready;
     return page;
   }
