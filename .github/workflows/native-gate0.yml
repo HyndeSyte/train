@@ -118,13 +118,17 @@ jobs:
               if (devs.length) { console.log(JSON.stringify({ runtime: rt, name: devs[0].name, udid: devs[0].udid })); require('fs').appendFileSync(process.env.GITHUB_OUTPUT, 'udid=' + devs[0].udid + '\nname=' + devs[0].name + '\nruntime=' + rt + '\n'); process.exit(0); }
             }
             console.error('no available iPhone simulator'); process.exit(1);"
-      - name: Build and run the UI tests in the simulator (gate 0 + durable-store smoke)
+      - name: Build and run the UI tests in the simulator (gate 0, smoke, parity, drill, probe)
         working-directory: native/ios/App
+        env:
+          # the X-Train-Client the tombstone probe sends: pwa until cutover, native after (flipped here at cutover)
+          TRAIN_PROBE_CLIENT: pwa
         run: |
           set -euo pipefail
           xcrun simctl boot "${{ steps.sim.outputs.udid }}" || true
           xcodebuild test -project App.xcodeproj -scheme App \
             -destination "id=${{ steps.sim.outputs.udid }}" \
+            TEST_RUNNER_TRAIN_PROBE_CLIENT="$TRAIN_PROBE_CLIENT" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -resultBundlePath "$RUNNER_TEMP/gate0.xcresult" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
@@ -152,7 +156,7 @@ jobs:
         run: |
           { echo '### Parity and cutover'; echo; echo '```'; grep -hE "PARITY_|SMOKE_AUDIO|SMOKE_DEBUG_BOOT|DRILL_|PROBE_" "$RUNNER_TEMP/xcodebuild.log" | sed -E 's/^.*(PARITY_|SMOKE_|DRILL_|PROBE_)/\1/' | cut -c1-1200 || echo 'no parity lines'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           # at most ten notices per step
-          for key in SMOKE_DEBUG_BOOT SMOKE_AUDIO PARITY_WAKE_1 PARITY_WAKE_2 PARITY_WAKE_3 PARITY_EMBED_PROBE PARITY_EMBED DRILL_BEFORE DRILL_RESULT PROBE_RESULT; do line=$(grep -h "$key " "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
+          for key in SMOKE_AUDIO PARITY_WAKE_1 PARITY_WAKE_2 PARITY_WAKE_3 PARITY_SWITCH PARITY_EMBED_PROBE PARITY_EMBED DRILL_BEFORE DRILL_RESULT PROBE_RESULT; do line=$(grep -h "$key " "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
       - name: Regenerate the project and assert no diff
         working-directory: native/ios/App
         run: |

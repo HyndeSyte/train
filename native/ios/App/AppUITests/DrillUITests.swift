@@ -10,6 +10,15 @@ import XCTest
 final class DrillUITests: XCTestCase {
     private let args = ["-trainFixture", "smoke", "-trainSmoke", "-trainUITest"]
 
+    // the app's formatDate: "Sun, Oct 19" from "2026-10-19"
+    private func historyDate(_ iso: String?) -> String? {
+        guard let iso = iso else { return nil }
+        let inF = DateFormatter(); inF.locale = Locale(identifier: "en_US_POSIX"); inF.timeZone = TimeZone.current; inF.dateFormat = "yyyy-MM-dd"
+        guard let d = inF.date(from: iso) else { return nil }
+        let outF = DateFormatter(); outF.locale = Locale(identifier: "en_US_POSIX"); outF.timeZone = TimeZone.current; outF.dateFormat = "E, MMM d"
+        return outF.string(from: d)
+    }
+
     func testForcedFailureDrill() throws {
         let app = XCUIApplication()
         app.launchArguments = args + ["-trainResetStore", "-trainFailSaveOnSessions", "3"]
@@ -51,8 +60,13 @@ final class DrillUITests: XCTestCase {
             XCTAssertEqual(after["lastStatus"] as? String, "completed", afterText)
             XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot'")).firstMatch.exists, "no conflict banner in the write-through case")
             web.buttons.matching(NSPredicate(format: "label CONTAINS 'History'")).firstMatch.tap()
-            XCTAssertTrue(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'RP'")).firstMatch.waitForExistence(timeout: 15), "History lists the RP session")
-            print("DRILL_RESULT write-through: " + newId + " in the file and in History | " + afterText)
+            // History rows show formatDate(entry.date) ("Sun, Oct 19") and the type badge; the fixture rows are
+            // PT and LP on other dates, so the RP badge plus this session's own date names its row. The file
+            // assertions above (Session ID and payload fields) remain the proof.
+            let dayText = try XCTUnwrap(historyDate(after["lastDate"] as? String), "the session's date formats: " + afterText)
+            XCTAssertTrue(web.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", dayText)).firstMatch.waitForExistence(timeout: 15), "History lists the session's day " + dayText + "; " + labelsOf(app))
+            XCTAssertTrue(web.staticTexts.matching(NSPredicate(format: "label == 'RP'")).firstMatch.exists, "with the RP badge; " + labelsOf(app))
+            print("DRILL_RESULT write-through: " + newId + " in the file and in History (" + dayText + ") | " + afterText)
         } else {
             // the conflict case: both copies kept, the snapshot export offered beside Export, the snapshot holds the session
             XCTAssertTrue(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot'")).firstMatch.waitForExistence(timeout: 15), "the conflict banner; " + afterText)

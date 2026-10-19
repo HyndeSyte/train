@@ -137,7 +137,7 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve(["accepted": false, "reason": "invalid", "rev": store.control.rev, "generation": store.control.generation])
                 return
             }
-            if let refusal = self?.drillRefusal(bytes: bytes) {
+            if let refusal = self?.drillRefusal(bytes: bytes, base: base, generation: generation) {
                 call.resolve(refusal)
                 return
             }
@@ -147,9 +147,12 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    // On the store queue. The drill's one refusal, recorded in the test notes.
-    private func drillRefusal(bytes: String) -> [String: Any]? {
+    // On the store queue. The drill's one refusal, recorded in the test notes. It simulates a failed write,
+    // so it answers only where the compare-and-swap would have passed: a stale base or another generation
+    // gets the store's real answer (and its lineage marker on the page).
+    private func drillRefusal(bytes: String, base: Int, generation: Int) -> [String: Any]? {
         guard let n = failSaveOnSessions else { return nil }
+        guard base == store.control.rev, generation == store.control.generation else { return nil }
         guard let obj = try? JSONSerialization.jsonObject(with: Data(bytes.utf8)) as? [String: Any], let log = obj["log"] as? [[String: Any]], log.count == n else { return nil }
         failSaveOnSessions = nil
         let rev = store.control.rev
@@ -220,14 +223,16 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         var smoke = false
         var reset = false
         var probe = false
+        var probeClient = "pwa"
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-trainFixture"), i + 1 < args.count { fixture = args[i + 1] }
         smoke = args.contains("-trainSmoke")
         reset = args.contains("-trainResetStore")
         probe = TrainStorePlugin.uiTest && args.contains("-trainProbeTombstone")   // the one live call a CI run may make
+        if let i = args.firstIndex(of: "-trainProbeClient"), i + 1 < args.count { probeClient = args[i + 1] }   // the X-Train-Client the probe sends
         #endif
-        call.resolve(["fixture": fixture, "smoke": smoke, "reset": reset, "uiTest": TrainStorePlugin.uiTest, "probeTombstone": probe])
+        call.resolve(["fixture": fixture, "smoke": smoke, "reset": reset, "uiTest": TrainStorePlugin.uiTest, "probeTombstone": probe, "probeClient": probeClient])
     }
 
     // bridge.js writes its log ring here when a banner shows or a save is refused.
@@ -568,6 +573,7 @@ final class TrainStore {
             var first = control
             first.syncArmed = false
             first.generation += 1
+            first.verified = nil              // the previous Import's record never outlives its state
             guard writeControl(first) else { return refuse("disarm") }
             guard writeState(data) else { return refuse("write") }
             var c = control
@@ -585,6 +591,7 @@ final class TrainStore {
             var first = control
             first.syncArmed = false
             first.generation += 1
+            first.verified = nil
             guard writeControl(first) else { return refuse("disarm") }
             if fm.fileExists(atPath: stateURL.path) {
                 do { try fm.removeItem(at: stateURL) } catch { return refuse("write") }
@@ -626,7 +633,7 @@ final class TrainStore {
     }
 
     func summary() -> [String: Any] {
-        var out: [String: Any] = ["rev": control.rev, "generation": control.generation, "hasFile": false, "sessions": 0]
+        var out: [String: Any] = ["rev": control.rev, "generation": control.generation, "hasFile": false, "sessions": 0, "syncArmed": control.syncArmed]
         guard let data = stateData(), let parsed = parse(data) else { return out }
         out["hasFile"] = true
         out["hash"] = TrainStore.sha256Hex(data)

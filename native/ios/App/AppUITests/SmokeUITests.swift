@@ -19,6 +19,9 @@ final class SmokeUITests: XCTestCase {
         print("SMOKE_DEBUG_BOOT store=" + store.label)
         XCTAssertTrue(waitLabel(store, contains: "\"sessions\":2"), "the fixture was imported into the store: " + store.label)
         XCTAssertTrue(web.buttons["Start Today's Session"].waitForExistence(timeout: 60), "Home is writable after hydration; " + labelsOf(app))
+        // the fixture import recorded verification like a real Import; at the record's rev the state is verified
+        XCTAssertTrue(waitSummary(store, timeout: 20) { (($0["bridge"] as? [String: Any])?["verified"] as? [String: Any])?["ok"] as? Bool == true }, "verified after the import: " + store.label)
+        XCTAssertEqual(bridgeNote(store, "verified")["changedSince"] as? Bool, false, store.label)
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind'")).firstMatch.exists, "no banner on first launch")
 
         // 1. one recovery ring session through the real UI
@@ -68,6 +71,12 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(again["lastSessionId"] as? String, lastId)
         XCTAssertEqual((again["rev"] as? NSNumber)?.intValue, rev1, "no write on an equal-hash relaunch: before " + afterText + " after " + againText)
         XCTAssertEqual(again["hash"] as? String, after["hash"] as? String, "same bytes after the relaunch")
+        // the Import's verdict is read back from the sidecar after the kill and reopen; the state moved on since
+        XCTAssertTrue(waitSummary(store, timeout: 20) { (($0["bridge"] as? [String: Any])?["verified"] as? [String: Any])?["changedSince"] as? Bool == true }, "verified record after relaunch: " + store.label)
+        let verified = bridgeNote(store, "verified")
+        XCTAssertEqual(verified["ok"] as? Bool, true, "the verdict made at the import's rev stands: " + String(describing: verified))
+        XCTAssertEqual(int(verified["rev"]), 1, "the record's rev is the fixture import's")
+        XCTAssertEqual(int(verified["sessionsNow"]), 3)
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind' OR label CONTAINS 'did not reach'")).firstMatch.exists, "no banner after relaunch")
 
         web.buttons.matching(NSPredicate(format: "label CONTAINS 'History'")).firstMatch.tap()

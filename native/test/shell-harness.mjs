@@ -36,7 +36,7 @@ export class FakeStore {
     this.hooks = {};             // method -> fn(args) returning a result to use instead, or throwing
     this.holdAcks = {};          // method -> array of resolvers; a held ack settles only on release()
     this.queue = Promise.resolve();
-    this.launch = { fixture: null, smoke: false, reset: false, uiTest: false, probeTombstone: false };
+    this.launch = { fixture: null, smoke: false, reset: false, uiTest: false, probeTombstone: false, probeClient: 'pwa' };
     this.failAfterDisarm = false; // the state write fails after the first control write: the plugin answers refuse('write')
     this.killAt = null;           // 'afterFirstControl' | 'afterState': the app dies inside Import/Erase, nothing answers
     // parity: the idle timer (generation token), native cues and the audio session, the sound key, test notes
@@ -152,8 +152,8 @@ export class FakeStore {
         if (typeof a.base === 'number' && a.base !== self.rev) return refuse('stale');
         if (newRev !== self.rev + 1) return refuse('invalid');
         self.snapshot('import');
-        // 1. disarm and bump the generation in one control write, rev unchanged
-        self.writeControl({ syncArmed: false, generation: self.generation + 1 });
+        // 1. disarm, bump the generation and drop the previous Import's record in one control write, rev unchanged
+        self.writeControl({ syncArmed: false, generation: self.generation + 1, verified: null });
         self.events.push({ disarmed: true, before: 'import' });
         if (self.killAt === 'afterFirstControl') return self.hang();
         if (self.failAfterDisarm) return refuse('write');
@@ -165,7 +165,7 @@ export class FakeStore {
       }),
       erase: (a) => self.run('erase', a, async () => {
         self.snapshot('erase');
-        self.writeControl({ syncArmed: false, generation: self.generation + 1 });
+        self.writeControl({ syncArmed: false, generation: self.generation + 1, verified: null });
         self.events.push({ disarmed: true, before: 'erase' });
         if (self.killAt === 'afterFirstControl') return self.hang();
         if (self.failAfterDisarm) return { accepted: false, reason: 'write', rev: self.rev, generation: self.generation };
@@ -176,7 +176,7 @@ export class FakeStore {
         return { accepted: true, rev: 0, generation: self.generation, hash: null };
       }),
       status: (a) => self.run('status', a, async () => ({ rev: self.rev, generation: self.generation, committedAt: self.committedAt, syncArmed: self.syncArmed, recoveredFrom: self.recoveredFrom, hasFile: self.file != null, snapshots: self.snapshots.length, soundOff: self.control.soundOff == null ? null : self.control.soundOff, verified: self.control.verified || null, wake: { ...self.wake }, audio: { ...self.audio }, bridge: { ...self.testNotes } })),
-      summary: (a) => self.run('summary', a, async () => { const o = self.parse(self.file) || {}; const log = o.log || []; const last = log[log.length - 1]; return { rev: self.rev, generation: self.generation, hasFile: self.file != null, sessions: log.length, sessionIds: log.map((e) => e.sessionId), lastSessionId: last && last.sessionId, logTail: self.logTail(3) }; }),
+      summary: (a) => self.run('summary', a, async () => { const o = self.parse(self.file) || {}; const log = o.log || []; const last = log[log.length - 1]; return { rev: self.rev, generation: self.generation, hasFile: self.file != null, sessions: log.length, sessionIds: log.map((e) => e.sessionId), lastSessionId: last && last.sessionId, logTail: self.logTail(3), syncArmed: self.syncArmed }; }),
       setSyncArmed: (a) => self.run('setSyncArmed', a, async () => { self.writeControl({ syncArmed: !!a.on }); return { ok: true, syncArmed: self.syncArmed }; }),
       // Library/Logs/train.log in Swift: appended, rotated at 200 KB
       appendLog: (a) => self.run('appendLog', a, async () => { if (self.log.length > 200 * 1024) { self.logRotated = self.log; self.log = ''; } self.log += (a.text.endsWith('\n') ? a.text : a.text + '\n'); return { ok: true }; })
@@ -201,7 +201,9 @@ function makeEl(registry, tag) {
     remove() {}, click() { if (typeof el.onclick === 'function') el.onclick(); }, focus() {}, blur() {},
     querySelector() { return null; }, querySelectorAll() { return []; }
   };
-  return new Proxy(el, { set(t, k, v) { t[k] = v; if (k === 'id' && v) registry[v] = t; return true; } });
+  // like the DOM: assigning innerHTML replaces the children, so handlers attached to them are gone
+  const detach = (node) => { node.onclick = null; node.onchange = null; (node.children || []).forEach(detach); node.children = []; };
+  return new Proxy(el, { set(t, k, v) { if (k === 'innerHTML' && t.children && t.children.length) { t.children.forEach(detach); t.children = []; } t[k] = v; if (k === 'id' && v) registry[v] = t; return true; } });
 }
 
 export class World {

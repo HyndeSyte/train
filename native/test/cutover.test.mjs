@@ -86,11 +86,11 @@ test('the switch: a confirm turns syncing on, persisted through setSyncArmed; Sy
   assert.equal(w.syncRequests[n].body.sessionId, last.sessionId);
   await page.settle(); await sleep(40);
   assert.equal(page.state().log.find((e) => e.sessionId === last.sessionId).notionSync.status, 'synced');
-  // off needs no confirm
+  // off needs no confirm, and takes effect before the round trip
   page.settings();
   page.els['store-sync-switch'].onclick();
-  assert.ok(await until(() => page.ctx.__sync.armed === false));
-  assert.equal(w.store.syncArmed, false);
+  assert.equal(page.ctx.__sync.armed, false, 'off at once');
+  assert.ok(await until(() => w.store.syncArmed === false), 'then persisted');
   assert.notEqual(page.modalTitle(), 'Start syncing from this app?');
   // the persisted switch decides the next run: on again, then relaunch posts at boot; off, relaunch posts nothing
   await page.ctx.__setSyncArmed(true);
@@ -274,42 +274,75 @@ test('verified: after an Import the committed state matches the file (fingerprin
   same(rec.syncedIds, ['sid-0004', 'sid-0006']);
   assert.equal(rec.sessions, 3);
   assert.match(rec.digest, /^[0-9a-f]{8}$/);
-  // the reload: verified
+  assert.equal(rec.rev, 4, 'the record carries the committed rev');
+  // the reload: verified at the record's rev, and the verdict is persisted into the record
   const again = await w.boot();
   await sleep(30);
   assert.equal(again.bridge.verified && again.bridge.verified.ok, true, JSON.stringify(again.bridge.verified));
+  assert.equal(again.bridge.verified.changedSince, false);
+  assert.equal(w.store.control.verified.ok, true, 'the verdict is in the sidecar');
+  assert.ok(w.store.control.verified.checkedAt);
   again.settings(); await sleep(20);
-  assert.match(again.els['store-verified'].textContent, /^Import verified · imported \d{4}-\d{2}-\d{2} .+ · 3 sessions · digest [0-9a-f]{8}$/);
+  assert.match(again.els['store-verified'].textContent, /^Import of .+ verified · 3 sessions · digest [0-9a-f]{8}$/);
   // a kill and reopen: still verified (the record is in the sidecar, recomputed on boot)
   w.kill();
   const third = await w.boot();
   await sleep(30);
   assert.equal(third.bridge.verified.ok, true, 'still verified after the relaunch');
-  // the pending entry syncing later does not un-verify (notionSync is outside the fingerprint; synced ids only grow)
-  const s = third.state(); s.log[1].notionSync = { status: 'synced', syncedAt: 'now' }; third.ctx.saveState(s); await third.settle();
-  await third.ctx.__checkVerified();
-  assert.equal(third.bridge.verified.ok, true, 'a later sync keeps it verified');
-  // a covered field differs: not verified
+  assert.equal(third.bridge.verified.changedSince, false);
+  // he trains: the state moves past the record's rev; the verdict stands as history, never a live alarm
   const s2 = third.state(); s2.rotationIndex = 4; third.ctx.saveState(s2); await third.settle();
   await third.ctx.__checkVerified();
-  assert.equal(third.bridge.verified.ok, false);
-  assert.equal(third.bridge.verified.fingerprintMatch, false);
+  assert.equal(third.bridge.verified.ok, true);
+  assert.equal(third.bridge.verified.changedSince, true);
   third.settings(); await sleep(20);
-  assert.match(third.els['store-verified'].textContent, /not verified \(state differs\)/);
-  // synced flag lost on an entry that was synced in the import: not verified either
+  assert.match(third.els['store-verified'].textContent, /^Import of .+ verified; state has changed since \(3 sessions now\)$/);
+  // a covered field differs AT the record's rev (the state is not the imported one): not verified
   const w2 = seededWorld();
   const p2 = await w2.boot(); await p2.settle();
   p2.ctx.importData({ target: { files: [{ text: JSON.stringify(incoming) }] } });
   await sleep(5); await p2.pressModal('Import');
   assert.ok(await until(() => w2.reloads === 1));
+  // the committed state at the record's rev is not the imported one (both copies, same _rev, different content)
+  const tampered = JSON.parse(w2.raw()); tampered.nextSessionSequence = 99; w2.storage.set('train_state', JSON.stringify(tampered)); w2.store.writeExternally(JSON.stringify(tampered));
   const p3 = await w2.boot(); await sleep(30);
-  assert.equal(p3.bridge.verified.ok, true);
-  const s3 = p3.state(); s3.log[0].notionSync = { status: 'pending' }; p3.ctx.saveState(s3); await p3.settle();
-  await p3.ctx.__checkVerified();
-  assert.equal(p3.bridge.verified.ok, false);
-  assert.equal(p3.bridge.verified.fingerprintMatch, true);
-  assert.equal(p3.bridge.verified.syncedOk, false);
-  same(p3.bridge.verified.unsynced, ['sid-0004']);
+  assert.equal(p3.bridge.verified.ok, false, JSON.stringify(p3.bridge.verified));
+  assert.equal(p3.bridge.verified.fingerprintMatch, false);
+  assert.equal(w2.store.control.verified.ok, false, 'the verdict persisted');
+  p3.settings(); await sleep(20);
+  assert.match(p3.els['store-verified'].textContent, /^Import of .+ not verified \(state differs\)$/);
+  // synced flag lost on an entry that was synced in the import, same rev: not verified either
+  const w3 = seededWorld();
+  const p4 = await w3.boot(); await p4.settle();
+  p4.ctx.importData({ target: { files: [{ text: JSON.stringify(incoming) }] } });
+  await sleep(5); await p4.pressModal('Import');
+  assert.ok(await until(() => w3.reloads === 1));
+  const lost = JSON.parse(w3.raw()); lost.log[0].notionSync = { status: 'pending' }; w3.storage.set('train_state', JSON.stringify(lost)); w3.store.writeExternally(JSON.stringify(lost));
+  const p5 = await w3.boot(); await sleep(30);
+  assert.equal(p5.bridge.verified.ok, false);
+  assert.equal(p5.bridge.verified.fingerprintMatch, true);
+  assert.equal(p5.bridge.verified.syncedOk, false);
+  same(p5.bridge.verified.unsynced, ['sid-0004']);
+  p5.settings(); await sleep(20);
+  assert.match(p5.els['store-verified'].textContent, /not verified \(synced flags changed\)$/);
+  // Erase clears the record: the next boot shows nothing about an import
+  p5.ctx.confirmErase(); await p5.pressModal('Erase everything');
+  assert.ok(await until(() => w3.reloads === 2));
+  assert.equal(w3.store.control.verified, null);
+  const p6 = await w3.boot(); await sleep(30);
+  assert.equal(p6.bridge.verified, null);
+  p6.settings(); await sleep(20);
+  assert.equal(p6.els['store-verified'].textContent, '');
+});
+
+test('the fixture import records verification too, so the simulator smoke exercises the same path', async () => {
+  const w = new World();
+  w.store.launch = { fixture: 'smoke', smoke: true, reset: false, uiTest: true, probeTombstone: false, probeClient: 'pwa' };
+  const page = await w.boot();
+  await sleep(30);
+  assert.ok(w.store.control.verified && w.store.control.verified.rev === 1);
+  assert.equal(page.bridge.verified.ok, true);
+  assert.equal(w.store.testNotes.verified.ok, true, 'in the test summary');
 });
 
 // ---- 3. the forced-failure drill -----------------------------------------------------------------
@@ -395,4 +428,163 @@ test('tombstone probe: on the CI launch argument, exactly one delete for the fix
   w2.syncResponder = ok;
   await w2.boot(); await sleep(30);
   assert.equal(w2.syncRequests.length, 0);
+});
+
+// ---- review fixes: the switch under transactions, mid-drain off, refusals and History deletes ------
+
+test('a failed Import leaves the switch off everywhere: the page re-reads the sidecar and a later finalize posts nothing', async () => {
+  const w = seededWorld();
+  w.store.syncArmed = true;
+  w.store.failAfterDisarm = true;                   // the state write fails after the first control write (which disarmed)
+  w.syncResponder = ok;
+  const page = await w.boot();
+  await page.settle();
+  assert.equal(page.ctx.__sync.armed, true);
+  await importViaUi(page, seedState({ log: [entry(8)] }));
+  assert.ok(await until(() => page.modalTitle() === 'Import did not happen'));
+  assert.equal(w.store.syncArmed, false, 'the sidecar says off');
+  assert.ok(await until(() => page.ctx.__sync.armed === false), 'the page re-read it');
+  await page.settle();
+  w.syncRequests = [];
+  w.store.failAfterDisarm = false;
+  await completeSession(page);
+  await page.settle(); await sleep(40);
+  assert.equal(w.syncRequests.length, 0, 'zero requests after the failed import');
+  page.settings();
+  assert.equal(page.els['store-sync-switch'].textContent, 'Off');
+  // the same for a failed Erase
+  await page.ctx.__setSyncArmed(true);
+  w.store.failAfterDisarm = true;
+  page.ctx.confirmErase(); await page.pressModal('Erase everything');
+  assert.ok(await until(() => page.modalTitle() === 'Erase did not happen'));
+  assert.ok(await until(() => page.ctx.__sync.armed === false));
+  w.store.failAfterDisarm = false; w.syncRequests = [];
+  await page.ctx.syncEntry(page.state().log[0].sessionId);
+  assert.equal(w.syncRequests.length, 0);
+});
+async function importViaUi(page, data) {
+  page.ctx.importData({ target: { files: [{ text: JSON.stringify(data) }] } });
+  await sleep(5);
+  return page.pressModal('Import');
+}
+
+test('the live switch is asked before every request: a store disarmed behind the page stops the drain at once, the rest stay pending', async () => {
+  const w = seededWorld(pendingState());
+  w.store.syncArmed = true;
+  let calls = 0;
+  w.syncResponder = () => { calls++; if (calls === 1) w.store.syncArmed = false; return ok(); };   // disarmed after the first answer
+  const page = await w.boot();
+  assert.ok(await until(() => w.syncRequests.length === 1 && page.ctx.__sync.armed === false), 'one request, then off: ' + w.syncRequests.length);
+  await sleep(40);
+  assert.equal(w.syncRequests.length, 1, 'nothing after the live check said off');
+  const s = page.state();
+  assert.equal(s.pendingDeletes.length, 0, 'the first item (the tombstone) went through');
+  assert.equal(s.log[0].notionSync.status, 'pending', 'the next entry was never attempted');
+  assert.ok(page.bridge.events.some((e) => e.syncDisarmedLive));
+  assert.ok(page.bridge.events.some((e) => e.stopped === 'off'));
+  assert.equal(w.store.count('status') >= 1, true, 'one status read per request');
+});
+
+test('switching off mid-drain leaves the remaining entries pending, not failed with an "off" error', async () => {
+  const w = seededWorld(pendingState());
+  w.store.syncArmed = true;
+  const page = await w.boot();
+  let answered = 0;
+  w.syncResponder = async () => { answered++; await sleep(30); return ok(); };
+  const drain = page.ctx.__syncNow();
+  await sleep(10);
+  await page.ctx.__setSyncArmed(false);                // off while the tombstone is in flight
+  const r = await drain;
+  assert.equal(r.stopped, 'off');
+  assert.equal(w.syncRequests.length, 1);
+  const s = page.state();
+  assert.equal(s.log[0].notionSync.status, 'pending');
+  assert.equal(s.log[1].notionSync.status, 'failed', 'as seeded, untouched');
+  assert.doesNotMatch(String(s.log[0].notionSync.error || ''), /off/);
+  // a finalize's syncEntry while off is skipped, not failed
+  const last = await completeSession(page);
+  await page.settle(); await sleep(20);
+  assert.equal(w.syncRequests.length, 1);
+  assert.notEqual(page.state().log.find((e) => e.sessionId === last.sessionId).notionSync && page.state().log.find((e) => e.sessionId === last.sessionId).notionSync.status, 'failed');
+});
+
+test('after a 403 a History delete does not re-post (the app’s own pushUnsynced is skipped); Sync now and the Retry button (routed to it) start a fresh drain', async () => {
+  const w = seededWorld(pendingState());
+  w.store.syncArmed = true;
+  let calls = 0;
+  w.syncResponder = () => { calls++; return calls === 1 ? { status: 403, body: { ok: false, error: 'not the writer' } } : ok(); };
+  const page = await w.boot();
+  assert.ok(await until(() => page.banner() !== null));
+  await sleep(30);
+  assert.equal(w.syncRequests.length, 1);
+  page.ctx.deleteLogEntry(2);                          // the app ends this with pushUnsynced()
+  await page.settle(); await sleep(40);
+  assert.equal(w.syncRequests.length, 1, 'no automatic re-post after the refusal');
+  assert.ok(page.state().pendingDeletes.includes('sid-0003'), 'the tombstone waits');
+  assert.ok(page.bridge.events.filter((e) => e.syncSkipped === 'refused').length >= 1);
+  // Retry sync in Settings is Sync now in the shell
+  const html = page.settings();
+  assert.doesNotMatch(html, /onclick="pushUnsynced\(\)"/);
+  assert.match(html, /onclick="__syncNow\(\)"/);
+  const r = await page.ctx.__syncNow();
+  assert.equal(r.stopped, null);
+  assert.ok(w.syncRequests.length > 1, 'Sync now posted');
+  assert.equal(page.state().pendingDeletes.length, 0);
+});
+
+test('re-arming during a transaction’s quiesce window is refused with a message; the switch stays off', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  page.ctx.__sync.inflight = 1;
+  await importViaUi(page, seedState({ log: [entry(8)] }));
+  await sleep(5);
+  assert.equal(page.ctx.__sync.quiescing, true);
+  const armed = await page.ctx.__setSyncArmed(true);
+  assert.equal(armed, false);
+  assert.equal(page.modalTitle(), 'A change is in progress');
+  assert.equal(w.store.count('setSyncArmed'), 0, 'no write');
+  assert.ok(await until(() => page.modalTitle() === 'Still syncing'));
+  page.ctx.__sync.inflight = 0;
+  assert.equal(page.ctx.__sync.armed, false);
+});
+
+test('the probe refuses a tombstone that is not the fixture’s, and sends the client named by the launch argument', async () => {
+  const w = seededWorld(seedState({ log: [], pendingDeletes: ['sid-0042-real-row'] }));
+  w.store.launch = { fixture: null, smoke: true, reset: false, uiTest: true, probeTombstone: true, probeClient: 'pwa' };
+  w.syncResponder = ok;
+  const page = await w.boot();
+  assert.ok(await until(() => w.store.testNotes.probe));
+  assert.equal(w.store.testNotes.probe.error, 'not the probe fixture');
+  assert.equal(w.syncRequests.length, 0, 'nothing posted for a real id');
+  const w2 = new World();
+  w2.store.launch = { fixture: 'probe', smoke: true, reset: false, uiTest: true, probeTombstone: true, probeClient: 'native' };
+  w2.syncResponder = (req) => ({ status: 200, body: { ok: true, action: 'noop-absent', sessionId: req.body.sessionId } });
+  await w2.boot();
+  assert.ok(await until(() => w2.store.testNotes.probe && w2.store.testNotes.probe.status));
+  assert.equal(w2.syncRequests[0].headers['X-Train-Client'], 'native');
+  assert.equal(w2.store.testNotes.probe.client, 'native');
+  assert.equal(page.ctx.__sync.armed, false);
+});
+
+test('the store card’s buttons survive a re-parse of the container: inline handlers to globals, and the harness drops property handlers on innerHTML writes', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  const html = page.settings();
+  assert.match(html, /id="store-sync-switch"[^>]*aria-label="Start syncing from this app"[^>]*onclick="__toggleSyncArmed\(\)"/);
+  assert.match(html, /id="store-sync-now"[^>]*onclick="__syncNow\(\)"/);
+  assert.equal(typeof page.ctx.__toggleSyncArmed, 'function');
+  assert.equal(typeof page.ctx.__syncNow, 'function');
+  assert.equal(typeof page.ctx.__exportSnapshot, 'function');
+  assert.equal(typeof page.ctx.__startEmbedTest, 'function');
+  // the harness models the DOM: assigning innerHTML on a parent detaches its children's handlers
+  const parent = page.ctx.document.createElement('div'); const child = page.ctx.document.createElement('button'); child.onclick = () => 1; parent.appendChild(child);
+  parent.innerHTML = '<button>x</button>';
+  assert.equal(child.onclick, null);
+  // the inline handler path: __toggleSyncArmed opens the confirm
+  page.ctx.__toggleSyncArmed();
+  assert.equal(page.modalTitle(), 'Start syncing from this app?');
+  await page.pressModal('Cancel');
+  assert.equal(page.ctx.__sync.armed, false);
+  assert.equal(w.store.syncArmed, false);
 });
