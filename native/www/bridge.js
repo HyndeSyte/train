@@ -12,7 +12,11 @@
 //     compare-and-swap write chain with lineage (seedRev) and a store generation;
 //   - Import and Erase are native transactions (snapshot, disarm, generation bump, commit, reload);
 //   - Export waits for the last save to be acknowledged and exports the committed head, or both
-//     copies labelled when it cannot.
+//     copies labelled when it cannot;
+//   - parity (build order 3 and 4): navigator.wakeLock is polyfilled over the native idle timer; the six
+//     cues play natively (audio plus haptic) behind soundEnabled(), with unlockAudio and toneW as no-ops
+//     so the shell never creates an AudioContext; the train_sound_off key rides in the store's control
+//     sidecar; buildEmbedUrl points YouTube embeds at the https wrapper page on Pages.
 // localStorage stays the synchronous working copy; the file is the durability backstop.
 (function (w) {
   'use strict';
@@ -22,10 +26,14 @@
   var GEN_KEY = 'train_store_gen';
   var SNAP_KEY = 'train_state_snapshot';
   var REFUSED_KEY = 'train_store_refused';       // set when the store refused this page's save; cleared by the next seeding
+  var SOUND_KEY = 'train_sound_off';              // the app's own key; mirrored in the store's control sidecar
   var cfg = w.__storeConfig || {};               // tests shorten the waits; the app uses the defaults
+  var EMBED_BASE = cfg.embedBase || 'https://hyndesyte.github.io/train/embed.html';
+  var EMBED_TEST_ID = 'M7lc1UVf-VE';              // the IFrame Player API reference's example video (test only)
   var READ_RETRY_MS = cfg.readRetryMs || 5000;
   var QUIESCE_MS = cfg.quiesceMs || 10000;
   var EXPORT_WAIT_MS = cfg.exportWaitMs || 3000;
+  var EMBED_TIMEOUT_MS = cfg.embedTimeoutMs || 45000;   // the uiTest embed probe gives the player this long
 
   // --- hand-off: never in the shell ---
   w.handoffSupported = function () { return false; };
@@ -41,7 +49,8 @@
     seeded: false, base: 0, rev: 0, seedRev: 0, generation: null,
     refused: false, pendingSaves: 0, inflightSaves: 0, lastSaveFailed: false, lastCommitted: null,
     chain: Promise.resolve(), txHold: null, snapshot: null, banner: null, hydrated: false, readyPromise: null, events: [], logRing: [],
-    config: { readRetryMs: READ_RETRY_MS, quiesceMs: QUIESCE_MS, exportWaitMs: EXPORT_WAIT_MS }
+    launch: null, embed: null,
+    config: { readRetryMs: READ_RETRY_MS, quiesceMs: QUIESCE_MS, exportWaitMs: EXPORT_WAIT_MS, embedTimeoutMs: EMBED_TIMEOUT_MS }
   };
   function note(ev) { store.events.push(ev); if (store.events.length > 200) store.events.shift(); }
   function msg(e) { return String(e && e.message || e); }
@@ -199,6 +208,7 @@
     var raw = localRaw();
     if (res && res.recovered) note({ recoveredFrom: res.recoveredFrom });
     if (res && res.healed) note({ healed: file.rev });        // native filled control.rev from the bytes (a kill between two writes)
+    hydrateSoundKey(res);
     // 1. train_state missing: hydrate from the file; no candidate, no comparison
     if (raw === null) {
       if (file.bytes != null) lsSet(STATE_KEY, file.bytes);
@@ -267,6 +277,7 @@
   // store on first launch. A real launch has no such argument.
   async function maybeImportFixture() {
     var o; try { o = await call('TrainStore', 'launchOptions'); } catch (e) { return; }
+    store.launch = o || null;
     if (o && o.reset) {
       // -trainResetStore (CI only): an empty phone for this launch, so the UI tests do not share state
       try { w.localStorage.clear(); } catch (e) { /* ignore */ }
@@ -290,6 +301,7 @@
     if (!store.readyPromise) {
       showLoading('Loading your saved data…');          // cover the nav from the first IPC
       store.readyPromise = (async function () {
+        releaseAllSentinels('hydration');                // a reload never inherits an idle-timer hold
         try { await maybeImportFixture(); } catch (e) { note({ fixtureFailed: msg(e), stack: String(e && e.stack || '').slice(0, 300) }); }
         await hydrate();
         store.hydrated = true;
@@ -562,8 +574,10 @@
     card.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">App store</div>'
       + '<div id="store-status" style="font-size:12px;color:var(--text2);">Store: reading…</div>'
       + '<div id="store-loaded" style="font-size:12px;color:var(--text3);margin-top:4px;"></div>'
-      + (store.snapshot ? '<div class="setting-row" style="margin-top:8px;"><div><div style="font-weight:600;">Saved snapshot</div><div id="store-snapshot-line" style="font-size:12px;color:var(--text2);">…</div></div><button id="store-snapshot-export" class="btn btn-small btn-secondary">Export the saved snapshot</button></div>' : '');
+      + (store.snapshot ? '<div class="setting-row" style="margin-top:8px;"><div><div style="font-weight:600;">Saved snapshot</div><div id="store-snapshot-line" style="font-size:12px;color:var(--text2);">…</div></div><button id="store-snapshot-export" class="btn btn-small btn-secondary">Export the saved snapshot</button></div>' : '')
+      + ((store.launch && store.launch.uiTest) ? '<div class="setting-row" style="margin-top:8px;"><div style="font-weight:600;">Embed test</div><button id="store-embed-test" class="btn btn-small btn-secondary">Embed test</button></div>' : '');
     c.appendChild(card);
+    if (store.launch && store.launch.uiTest) el('store-embed-test', 'button').onclick = function () { startEmbedTest(); };
     call('TrainStore', 'status').then(function (st) {
       el('store-status').textContent = 'Store: rev ' + (st.rev || 0) + (st.committedAt ? ' committed ' + hhmm(st.committedAt) : ' (nothing committed yet)') + ' · generation ' + (st.generation || 0) + (store.refused ? ' · this copy is behind' : '');
     }, function (e) { el('store-status').textContent = 'Store: unavailable (' + msg(e) + ')'; });
@@ -574,6 +588,145 @@
       el('store-snapshot-export', 'button').onclick = function () { exportSnapshot(); };
     }
   }
+
+  // ====================================================================================================
+  // Parity (build order 3 and 4)
+  // ====================================================================================================
+
+  // --- test notes: bridge-side state the CI UI tests read through the native summary (uiTest launches only)
+  function testNote(obj) {
+    if (!(store.launch && store.launch.uiTest)) return Promise.resolve();
+    return call('TrainStore', 'testNote', { json: JSON.stringify(obj) }).catch(function () {});
+  }
+
+  // --- navigator.wakeLock over the native idle timer ---
+  // The app's PT list calls navigator.wakeLock.request('screen') and keeps the sentinel until a 'release'
+  // event (ptWakeOn re-acquires only after one). Native owns UIApplication.isIdleTimerDisabled with a
+  // generation token; it releases on background and tells this page, and this page releases on hidden,
+  // pagehide and hydration, dispatching 'release' to every sentinel it held.
+  var wake = w.__wake = { sentinels: [], listener: null };
+  function makeSentinel(token) {
+    var listeners = [];
+    var s = { type: 'screen', released: false, onrelease: null, __token: token };
+    s.addEventListener = function (type, fn) { if (type === 'release' && typeof fn === 'function') listeners.push(fn); };
+    s.removeEventListener = function (type, fn) { listeners = listeners.filter(function (f) { return f !== fn; }); };
+    s.release = function () { return releaseSentinel(s); };
+    s.__dispatch = function () {
+      if (s.released) return;
+      s.released = true;
+      wake.sentinels = wake.sentinels.filter(function (x) { return x !== s; });
+      var ev = { type: 'release', target: s };
+      listeners.slice().forEach(function (fn) { try { fn(ev); } catch (e) { logLine('error', ['wakeLock release listener', e]); } });
+      if (typeof s.onrelease === 'function') { try { s.onrelease(ev); } catch (e) { logLine('error', ['wakeLock onrelease', e]); } }
+    };
+    return s;
+  }
+  function releaseSentinel(s) {
+    if (s.released) return Promise.resolve();
+    s.__dispatch();
+    note({ wakeRelease: s.__token });
+    return call('TrainStore', 'wakeRelease', { token: s.__token }).then(function () {}, function (e) { note({ wakeReleaseFailed: msg(e) }); });
+  }
+  function releaseAllSentinels(why) {
+    var held = wake.sentinels.slice();
+    held.forEach(function (s) { s.__dispatch(); });
+    if (held.length) note({ wakeReleasedAll: why, count: held.length });
+    if (!held.length && why !== 'hydration') return Promise.resolve();
+    return call('TrainStore', 'wakeRelease', {}).then(function () {}, function (e) { note({ wakeReleaseFailed: msg(e) }); });
+  }
+  function requestWakeLock(type) {
+    if (type !== 'screen') return Promise.reject(new TypeError('only screen wake locks are supported'));
+    if (w.document.visibilityState === 'hidden') return Promise.reject(new Error('NotAllowedError: the document is hidden'));
+    return call('TrainStore', 'wakeAcquire').then(function (r) {
+      if (!r || !r.ok) throw new Error('wake lock refused');
+      var s = makeSentinel(r.token);
+      wake.sentinels.push(s);
+      note({ wakeAcquire: r.token });
+      return s;
+    });
+  }
+  try {
+    Object.defineProperty(w.navigator, 'wakeLock', { configurable: true, enumerable: true, value: { request: requestWakeLock } });
+  } catch (e) { logLine('error', ['wakeLock polyfill not installed', e]); }
+  if (w.document && typeof w.document.addEventListener === 'function') {
+    // the app's own visibilitychange handler was registered first; it re-acquires on 'visible' once its sentinel is released
+    w.document.addEventListener('visibilitychange', function () { if (w.document.visibilityState === 'hidden') releaseAllSentinels('hidden'); });
+  }
+  if (typeof w.addEventListener === 'function') w.addEventListener('pagehide', function () { releaseAllSentinels('pagehide'); });
+  function onNativeWakeReleased(ev) {
+    var held = wake.sentinels.length > 0;
+    wake.sentinels.slice().forEach(function (s) { s.__dispatch(); });
+    note({ nativeWakeReleased: ev && ev.token, reason: ev && ev.reason, held: held });
+    // a release this page had not seen (the hidden event did not run before suspension): give the app its re-acquire
+    if (held && w.document.visibilityState === 'visible' && typeof w.ptWakeOn === 'function') { try { w.ptWakeOn(); } catch (e) { logLine('error', ['ptWakeOn', e]); } }
+  }
+  (function listenNativeWake() {
+    var p = pl('TrainStore');
+    if (!p || typeof p.addListener !== 'function') { wake.listener = 'none'; return; }
+    try { p.addListener('wakeReleased', onNativeWakeReleased); wake.listener = 'plugin'; } catch (e) { wake.listener = 'error:' + msg(e); }
+  })();
+
+  // --- one audio path: the six cues play natively (audio plus haptic), gated like toneW and buzz ---
+  var CUES = {
+    cueGo: ['notification', 'SUCCESS'], cueRelease: ['notification', 'WARNING'], cueStarted: ['impact', 'LIGHT'],
+    cueLogged: ['impact', 'LIGHT'], cueSessionDone: ['notification', 'SUCCESS'], cueNoted: ['impact', 'MEDIUM']
+  };
+  function soundOn() { try { return typeof w.soundEnabled === 'function' ? !!w.soundEnabled() : true; } catch (e) { return true; } }
+  function playCue(name) {
+    if (!soundOn()) return Promise.resolve({ muted: true });
+    var h = CUES[name];
+    var haptic = h[0] === 'impact' ? call('Haptics', 'impact', { style: h[1] }) : call('Haptics', 'notification', { type: h[1] });
+    haptic.catch(function (e) { note({ hapticFailed: name, error: msg(e) }); });
+    return call('TrainStore', 'cue', { name: name }).then(function (r) { return r; }, function (e) { note({ cueFailed: name, error: msg(e) }); return { error: msg(e) }; });
+  }
+  Object.keys(CUES).forEach(function (name) { w[name] = function () { return playCue(name); }; });
+  w.unlockAudio = function () {};
+  w.toneW = function () {};
+
+  // --- the sound key rides in the store's control sidecar (not state, so not in an export) ---
+  function hydrateSoundKey(res) {
+    var fileOff = res && (res.soundOff === true || res.soundOff === false) ? res.soundOff : null;
+    var local = lsGet(SOUND_KEY);
+    if (fileOff !== null) { lsSet(SOUND_KEY, fileOff ? '1' : '0'); return; }          // the store's copy survives eviction
+    if (local === '1' || local === '0') call('TrainStore', 'setSoundOff', { off: local === '1' }).catch(function () {});
+  }
+  var origSetSoundEnabled = w.setSoundEnabled;
+  w.setSoundEnabled = function (on) {
+    if (typeof origSetSoundEnabled === 'function') origSetSoundEnabled(on);
+    call('TrainStore', 'setSoundOff', { off: !on }).catch(function (e) { note({ soundSaveFailed: msg(e) }); });
+  };
+
+  // --- embeds: YouTube through the https wrapper on Pages, which has a Referer to send ---
+  var origBuildEmbedUrl = w.buildEmbedUrl;
+  w.buildEmbedUrl = function (ref) {
+    if (!ref || !ref.videoId) return null;
+    if (ref.mediaType === 'youtube') {
+      var u = EMBED_BASE + '?yt=' + encodeURIComponent(ref.videoId);
+      if (ref.start) u += '&start=' + encodeURIComponent(ref.start);
+      if (ref.end) u += '&end=' + encodeURIComponent(ref.end);
+      return u;
+    }
+    return typeof origBuildEmbedUrl === 'function' ? origBuildEmbedUrl(ref) : null;
+  };
+  if (typeof w.addEventListener === 'function') {
+    w.addEventListener('message', function (ev) {
+      var d = ev && ev.data;
+      if (!d || d.type !== 'train-embed') return;
+      store.embed = Object.assign(store.embed || {}, { id: d.id, state: d.state, code: d.code == null ? undefined : d.code, origin: ev.origin, at: new Date().toISOString() });
+      note({ embed: d.state, code: d.code, id: d.id });
+      testNote({ embed: store.embed });
+    });
+  }
+  // uiTest only: opens the reference modal on a known public video and reports the wrapper's reachability
+  // (it lives on Pages, so a branch build may find it missing) and the player's state.
+  function startEmbedTest() {
+    store.embed = { id: EMBED_TEST_ID, state: 'opening', url: w.buildEmbedUrl({ mediaType: 'youtube', videoId: EMBED_TEST_ID }) };
+    testNote({ embed: store.embed });
+    w.fetch(EMBED_BASE, { cache: 'no-store' }).then(function (r) { store.embed.wrapper = r.status; }, function (e) { store.embed.wrapper = 'fetch:' + msg(e); }).then(function () { testNote({ embed: store.embed }); });
+    if (typeof w.showRefFor === 'function') w.showRefFor('Embed test', { status: 'video', mediaType: 'youtube', videoId: EMBED_TEST_ID, fallbackUrl: 'https://www.youtube.com/watch?v=' + EMBED_TEST_ID, sourceLabel: 'YouTube' }, 'Embed test: the player reports ready through the wrapper.');
+    w.setTimeout(function () { if (store.embed && (store.embed.state === 'opening' || store.embed.state === 'loaded')) { store.embed.state = 'timeout:' + store.embed.state; testNote({ embed: store.embed }); } }, EMBED_TIMEOUT_MS);
+  }
+  w.__startEmbedTest = startEmbedTest;
 
   // restore a kept snapshot's record across reloads (the bytes stay in localStorage)
   store.snapshot = safeParse(lsGet(SNAP_KEY));

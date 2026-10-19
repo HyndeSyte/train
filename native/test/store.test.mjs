@@ -556,7 +556,7 @@ test('Import and Erase abort after the quiescing wait when a sync request is sti
   // the default wait is 10 seconds
   const defaults = new World({ config: {} });
   const d = await defaults.boot();
-  same(d.bridge.config, { readRetryMs: 5000, quiesceMs: 10000, exportWaitMs: 3000 });
+  same(d.bridge.config, { readRetryMs: 5000, quiesceMs: 10000, exportWaitMs: 3000, embedTimeoutMs: 45000 });
 });
 
 // ---- Export -----------------------------------------------------------------------------------------
@@ -705,4 +705,163 @@ test('a launch with -trainResetStore empties the WebView storage and the store b
   assert.equal(w.store.count('erase'), 1);
   assert.equal(page.state().log.length, 2, 'the fixture, not the old state');
   assert.equal(w.store.generation, 3, 'erase bumped once, the import once');
+});
+
+// ---- parity: cues, one audio path, the sound key, the wake lock polyfill, embeds -------------------
+
+test('cues play natively (audio plus haptic) and are gated on soundEnabled() like toneW and buzz; the shell never vibrates through the web API', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  page.ctx.cueGo(); page.ctx.cueLogged();
+  assert.ok(await until(() => w.store.audio.plays === 2));
+  same(w.store.calls.filter((c) => c.method === 'cue').map((c) => c.args.name), ['cueGo', 'cueLogged']);
+  same(w.haptics, [{ notification: 'SUCCESS' }, { impact: 'LIGHT' }]);
+  assert.equal(w.store.audio.lastCue, 'cueLogged');
+  assert.equal(w.store.audio.plays, 2);
+  // sound off: no audio, no haptic (buzz is gated the same way in the app)
+  page.ctx.setSoundEnabled(false);
+  assert.equal(page.ctx.soundEnabled(), false);
+  assert.equal(w.storage.get('train_sound_off'), '1');
+  page.ctx.cueSessionDone(); page.ctx.cueNoted(); page.ctx.cueStarted(); page.ctx.cueRelease();
+  await sleep(20);
+  assert.equal(w.store.count('cue'), 2, 'nothing played while sound is off');
+  assert.equal(w.haptics.length, 2);
+  page.ctx.setSoundEnabled(true);
+  page.ctx.cueRelease();
+  assert.ok(await until(() => w.store.audio.plays === 3));
+  same(w.haptics[2], { notification: 'WARNING' });
+  assert.equal(w.vibrates, undefined, 'navigator.vibrate is never used');
+  // the six names are exactly the app's
+  same(['cueGo', 'cueRelease', 'cueStarted', 'cueLogged', 'cueSessionDone', 'cueNoted'].map((n) => typeof page.ctx[n]), Array(6).fill('function'));
+});
+
+test('one audio path: unlockAudio and toneW are no-ops and the shell never creates an AudioContext, through a session and the PT list', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  page.ctx.unlockAudio(); page.ctx.toneW(523, 0, 0.1, 0.3, 'sine');
+  page.ctx.cueGo(); page.ctx.cueSessionDone();
+  // a session start and a logged set run the app's own cue calls
+  page.ctx.startSession('RP');
+  if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
+  page.ctx.advanceForm(); page.ctx.advanceForm();
+  if (typeof page.ctx.logRepSet === 'function' && page.ctx.__AS() && page.ctx.__AS().phase !== 'rest') { try { page.ctx.logRepSet(); } catch (e) { /* a station that is not a rep set */ } }
+  await sleep(20);
+  assert.equal(page.audioContexts.length, 0, 'no AudioContext constructed');
+  assert.ok(w.store.count('cue') >= 2, 'the native cue path was used instead');
+  page.ctx.discardCurrentSession();
+});
+
+test('the sound key rides in the control sidecar: the store’s value hydrates an evicted WebView; a local value with none in the store seeds the store; setSoundEnabled writes both', async () => {
+  const w = seededWorld();
+  w.store.control.soundOff = true;                   // he turned sound off on an earlier install of this phone
+  const page = await w.boot();
+  assert.equal(w.storage.get('train_sound_off'), '1', 'hydrated from the store');
+  assert.equal(page.ctx.soundEnabled(), false);
+  page.ctx.setSoundEnabled(true);
+  assert.ok(await until(() => w.store.control.soundOff === false));
+  assert.equal(w.storage.get('train_sound_off'), '0');
+  w.evict();
+  const again = await w.boot();
+  assert.equal(w.storage.get('train_sound_off'), '0', 'survives eviction through the store');
+  assert.equal(again.ctx.soundEnabled(), true);
+  // a store with no value yet takes the page's
+  const w2 = seededWorld();
+  w2.storage.set('train_sound_off', '1');
+  await w2.boot();
+  assert.ok(await until(() => w2.store.control.soundOff === true), 'seeded from the local key');
+  // not in an export
+  const p2 = await w2.boot();
+  await p2.ctx.exportData();
+  assert.equal('train_sound_off' in JSON.parse(w2.fsWrites[0].data), false);
+  assert.equal('soundOff' in JSON.parse(w2.fsWrites[0].data), false);
+});
+
+test('navigator.wakeLock polyfill: request returns a sentinel with release() and a release event; hidden releases it natively; the PT list re-acquires on visible; a native release the page did not see re-acquires too', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  // the contract
+  const s = await page.ctx.navigator.wakeLock.request('screen');
+  assert.equal(s.type, 'screen'); assert.equal(s.released, false);
+  assert.equal(w.store.wake.held, true); assert.equal(w.store.wake.idleTimerDisabled, true); assert.equal(w.store.wake.acquires, 1);
+  let events = 0; s.addEventListener('release', () => { events += 1; });
+  await s.release();
+  assert.equal(events, 1); assert.equal(s.released, true);
+  assert.equal(w.store.wake.held, false); assert.equal(w.store.wake.releases, 1);
+  await assert.rejects(() => page.ctx.navigator.wakeLock.request('system'), /only screen/);
+  // a stale release never clears a newer lock
+  const a = await page.ctx.navigator.wakeLock.request('screen');
+  const b = await page.ctx.navigator.wakeLock.request('screen');
+  await a.release();
+  assert.equal(w.store.wake.held, true, 'b still holds the timer');
+  await b.release();
+  assert.equal(w.store.wake.held, false);
+  // the PT list: Start holds the screen; background releases it (hidden event); foreground re-acquires through ptWakeOn
+  const acquiresBefore = w.store.wake.acquires;
+  page.ctx.startPtSession();
+  if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
+  page.ctx.ptOpen(0);
+  page.ctx.ptStartItem();
+  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 1), 'ptWakeOn acquired');
+  assert.equal(page.wake.sentinels.length, 1);
+  assert.equal(w.store.wake.held, true);
+  await page.hide();
+  assert.equal(page.wake.sentinels.length, 0, 'the sentinel was released on hidden');
+  assert.equal(w.store.wake.held, false, 'native released');
+  assert.equal(w.store.wake.idleTimerDisabled, false);
+  await page.show();
+  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 2), 're-acquired on visible: ' + JSON.stringify(w.store.wake));
+  assert.equal(w.store.wake.held, true);
+  assert.equal(page.wake.sentinels.length, 1);
+  // native released while the page saw no hidden event: its event releases the sentinel and the app re-acquires
+  w.store.background();
+  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 3), 're-acquired after the native event: ' + JSON.stringify(w.store.wake));
+  assert.equal(page.wake.listener, 'plugin');
+  assert.ok(page.bridge.events.some((e) => e.nativeWakeReleased !== undefined && e.held === true));
+  // closing the list releases
+  page.ctx.closePtSession();
+  assert.ok(await until(() => w.store.wake.held === false));
+  assert.equal(page.wake.sentinels.length, 0);
+  // hydration releases whatever a previous page held
+  w.store.wake.held = true; w.store.wake.idleTimerDisabled = true;
+  await w.boot();
+  assert.equal(w.store.wake.held, false, 'released on hydration');
+  assert.equal(w.store.wake.lastRelease, 'all');
+});
+
+test('embeds: buildEmbedUrl points YouTube at the https wrapper on Pages (Vimeo unchanged); the reference modal uses it; the wrapper’s postMessage states are recorded; the uiTest button probes the wrapper', async () => {
+  const w = seededWorld();
+  w.store.launch = { fixture: null, smoke: false, reset: false, uiTest: true };
+  const page = await w.boot();
+  await page.settle();
+  assert.equal(page.ctx.buildEmbedUrl({ mediaType: 'youtube', videoId: 'abc-123', start: 5, end: 9 }), 'https://hyndesyte.github.io/train/embed.html?yt=abc-123&start=5&end=9');
+  assert.equal(page.ctx.buildEmbedUrl({ mediaType: 'youtube', videoId: 'abc' }), 'https://hyndesyte.github.io/train/embed.html?yt=abc');
+  assert.equal(page.ctx.buildEmbedUrl({ mediaType: 'vimeo', videoId: '123', start: 4 }), 'https://player.vimeo.com/video/123?playsinline=1&title=0&byline=0&portrait=0#t=4s');
+  assert.equal(page.ctx.buildEmbedUrl({ mediaType: 'youtube' }), null);
+  page.ctx.showRefFor('Clip', { status: 'video', mediaType: 'youtube', videoId: 'abc', fallbackUrl: 'https://www.youtube.com/watch?v=abc' }, 'cue');
+  assert.match(page.modalHtml(), /<iframe src="https:\/\/hyndesyte\.github\.io\/train\/embed\.html\?yt=abc"/);
+  assert.match(page.modalHtml(), /Open source/, 'the Safari link is there as the fallback');
+  page.postMessage({ type: 'train-embed', state: 'loaded', id: 'abc' });
+  page.postMessage({ type: 'train-embed', state: 'ready', id: 'abc' });
+  assert.equal(page.bridge.embed.state, 'ready');
+  assert.equal(page.bridge.embed.origin, 'https://hyndesyte.github.io');
+  page.postMessage({ type: 'other' });
+  assert.equal(page.bridge.embed.state, 'ready', 'unrelated messages are ignored');
+  assert.ok(await until(() => w.store.testNotes.embed && w.store.testNotes.embed.state === 'ready'), 'the test summary carries it');
+  // the uiTest button: Settings offers it, it opens the modal on the known video and probes the wrapper
+  assert.match(page.settings(), /Embed test/);
+  page.els['store-embed-test'].onclick();
+  assert.match(page.modalHtml(), /embed\.html\?yt=M7lc1UVf-VE/);
+  assert.ok(await until(() => w.store.testNotes.embed && w.store.testNotes.embed.wrapper === 200), JSON.stringify(w.store.testNotes));
+  page.postMessage({ type: 'train-embed', state: 'error', code: 153, id: 'M7lc1UVf-VE' });
+  assert.equal(page.bridge.embed.code, 153);
+  // a player that never reports is recorded as a timeout (short in the tests)
+  page.els['store-embed-test'].onclick();
+  assert.ok(await until(() => page.bridge.embed.state === 'timeout:opening', 1500), page.bridge.embed.state);
+  // a launch without the test flag has no button
+  const w2 = seededWorld();
+  const p2 = await w2.boot();
+  assert.doesNotMatch(p2.settings(), /Embed test/);
 });

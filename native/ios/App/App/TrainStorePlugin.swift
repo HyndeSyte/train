@@ -30,10 +30,20 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "summary", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setSyncArmed", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "launchOptions", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "appendLog", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "appendLog", returnType: CAPPluginReturnPromise),
+        // parity (build order 3): the idle timer behind navigator.wakeLock, the native cues, the sound key
+        CAPPluginMethod(name: "wakeAcquire", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "wakeRelease", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cue", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setSoundOff", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "testNote", returnType: CAPPluginReturnPromise)
     ]
     private(set) var lastReport: String?
     private let store = TrainStore()
+    private let wake = TrainWake()      // main thread only
+    private let audio = TrainAudio()    // main thread only
+    private var testNotes: [String: Any] = [:]   // bridge-side state the UI tests read through the summary (Debug + -trainUITest)
+    private var observing = false
     // The CI UI tests launch the app with -trainUITest (Debug builds only): the two report labels exist and
     // the store summary is published after every commit. A real launch has neither.
     static let uiTest: Bool = {
@@ -43,6 +53,31 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         return false
         #endif
     }()
+
+    override public func load() {
+        super.load()
+        store.parity = { [weak self] in self?.paritySnapshot() ?? [:] }
+        audio.onChange = { [weak self] in self?.publishSummaryFromMain() }
+        guard !observing else { return }
+        observing = true
+        NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
+    }
+
+    // The idle timer is released when the app backgrounds; the page hears about it (its sentinel gets the
+    // 'release' event, and the PT list re-acquires on the next visible).
+    @objc private func appDidEnterBackground() {
+        guard wake.held else { return }
+        wake.release(token: nil, reason: "background")
+        notifyListeners("wakeReleased", data: ["token": wake.token, "reason": "background"])
+        publishSummaryFromMain()
+    }
+
+    // Wake and audio live on main; the store queue asks for a snapshot when it builds status or summary.
+    private func paritySnapshot() -> [String: Any] {
+        let build: () -> [String: Any] = { ["wake": self.wake.status, "audio": self.audio.status(), "bridge": self.testNotes] }
+        if Thread.isMainThread { return build() }
+        return DispatchQueue.main.sync(execute: build)
+    }
 
     // MARK: gate 0 (kept until the smoke test replaces the label)
 
@@ -151,7 +186,7 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         smoke = args.contains("-trainSmoke")
         reset = args.contains("-trainResetStore")
         #endif
-        call.resolve(["fixture": fixture, "smoke": smoke, "reset": reset])
+        call.resolve(["fixture": fixture, "smoke": smoke, "reset": reset, "uiTest": TrainStorePlugin.uiTest])
     }
 
     // bridge.js writes its log ring here when a banner shows or a save is refused.
@@ -161,6 +196,70 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         store.queue.async {
             call.resolve(["ok": store.appendLog(text)])
         }
+    }
+
+    // MARK: parity
+
+    @objc func wakeAcquire(_ call: CAPPluginCall) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { call.resolve(["ok": false]); return }
+            let token = self.wake.acquire()
+            call.resolve(["ok": true, "token": token, "held": true])
+            self.publishSummaryFromMain()
+        }
+    }
+
+    @objc func wakeRelease(_ call: CAPPluginCall) {
+        let token = call.getInt("token")
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { call.resolve(["ok": false]); return }
+            let released = self.wake.release(token: token, reason: token == nil ? "all" : "sentinel")
+            call.resolve(["ok": true, "released": released, "held": self.wake.held, "token": self.wake.token])
+            self.publishSummaryFromMain()
+        }
+    }
+
+    @objc func cue(_ call: CAPPluginCall) {
+        let name = call.getString("name") ?? ""
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { call.resolve(["ok": false]); return }
+            call.resolve(self.audio.play(name))
+            self.publishSummaryFromMain()
+        }
+    }
+
+    @objc func setSoundOff(_ call: CAPPluginCall) {
+        let off = call.getBool("off") ?? false
+        let store = self.store
+        store.queue.async {
+            let ok = store.setSoundOff(off)
+            call.resolve(["ok": ok, "soundOff": store.control.soundOff ?? NSNull()])
+        }
+    }
+
+    // Debug + -trainUITest only: merges bridge-side state into the summary the UI tests read.
+    @objc func testNote(_ call: CAPPluginCall) {
+        #if DEBUG
+        if TrainStorePlugin.uiTest, let json = call.getString("json"), let data = json.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                for (k, v) in obj { self.testNotes[k] = v }
+                self.publishSummaryFromMain()
+            }
+            call.resolve(["ok": true])
+            return
+        }
+        #endif
+        call.resolve(["ok": false])
+    }
+
+    private func publishSummaryFromMain() {
+        #if DEBUG
+        guard TrainStorePlugin.uiTest else { return }
+        let store = self.store
+        store.queue.async { [weak self] in self?.publishSummary() }
+        #endif
     }
 
     private func publishSummary() {
@@ -180,11 +279,13 @@ struct TrainControl {
     var syncArmed: Bool = false
     var recoveredFrom: String? = nil
     var committedAt: String? = nil
+    var soundOff: Bool? = nil        // the app's train_sound_off key, mirrored here so it survives a WebView eviction
 
     var dictionary: [String: Any] {
         var d: [String: Any] = ["generation": generation, "rev": rev, "syncArmed": syncArmed]
         if let r = recoveredFrom { d["recoveredFrom"] = r }
         if let c = committedAt { d["committedAt"] = c }
+        if let s = soundOff { d["soundOff"] = s }
         return d
     }
 
@@ -195,6 +296,7 @@ struct TrainControl {
         c.syncArmed = (d["syncArmed"] as? NSNumber)?.boolValue ?? false
         c.recoveredFrom = d["recoveredFrom"] as? String
         c.committedAt = d["committedAt"] as? String
+        c.soundOff = (d["soundOff"] as? NSNumber)?.boolValue
         return c
     }
 }
@@ -212,6 +314,7 @@ final class TrainStore {
     private let snapshotsURL: URL
     private let logURL: URL
     private(set) var control = TrainControl()
+    var parity: (() -> [String: Any])?      // set by the plugin: wake, audio and test notes, read on main
 
     init() {
         let manager = FileManager.default
@@ -252,6 +355,7 @@ final class TrainStore {
     // MARK: helpers
 
     private func orNull(_ s: String?) -> Any { s.map { $0 as Any } ?? (NSNull() as Any) }
+    private var soundOffValue: Any { control.soundOff.map { $0 as Any } ?? (NSNull() as Any) }
 
     static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -326,13 +430,13 @@ final class TrainStore {
     func read() -> [String: Any] {
         guard let data = stateData() else {
             // a missing file is a completed read at rev 0 (first launch, or after Erase)
-            var out: [String: Any] = ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed]
+            var out: [String: Any] = ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue]
             if control.rev != 0 { var c = control; c.rev = 0; writeControl(c); out["healed"] = true }
             return out
         }
         if let parsed = parse(data) {
             let rev = parsed.rev ?? 0
-            var out: [String: Any] = ["generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(data), "bytes": String(decoding: data, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed]
+            var out: [String: Any] = ["generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(data), "bytes": String(decoding: data, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue]
             if rev != control.rev { var c = control; c.rev = rev; writeControl(c); out["healed"] = true }   // the bytes are the truth
             out["rev"] = control.rev
             return out
@@ -440,11 +544,19 @@ final class TrainStore {
         return writeControl(c)
     }
 
+    func setSoundOff(_ off: Bool) -> Bool {
+        var c = control
+        c.soundOff = off
+        return writeControl(c)
+    }
+
     // MARK: status and summary (parsed, never re-serialized)
 
     func status() -> [String: Any] {
-        ["rev": control.rev, "generation": control.generation, "committedAt": orNull(control.committedAt), "syncArmed": control.syncArmed,
-         "recoveredFrom": orNull(control.recoveredFrom), "hasFile": fm.fileExists(atPath: stateURL.path), "snapshots": snapshotNames().count]
+        var out: [String: Any] = ["rev": control.rev, "generation": control.generation, "committedAt": orNull(control.committedAt), "syncArmed": control.syncArmed,
+                                  "recoveredFrom": orNull(control.recoveredFrom), "hasFile": fm.fileExists(atPath: stateURL.path), "snapshots": snapshotNames().count, "soundOff": soundOffValue]
+        if let p = parity { for (k, v) in p() { out[k] = v } }
+        return out
     }
 
     func summary() -> [String: Any] {
@@ -462,6 +574,7 @@ final class TrainStore {
             out["lastStatus"] = orNull(last["sessionStatus"] as? String)
         }
         out["logTail"] = logTail(3)
+        if let p = parity { for (k, v) in p() { out[k] = v } }
         return out
     }
 
