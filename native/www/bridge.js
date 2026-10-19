@@ -92,7 +92,8 @@
     v.hidden = false;
     store.loading = { text: text, retry: !!retry };
   }
-  function hideLoading() { var v = w.document.getElementById('store-loading'); if (v) { v.hidden = true; v.innerHTML = ''; } store.loading = null; }
+  // the inline style sets display:flex, which beats the hidden attribute, so hide by display too
+  function hideLoading() { var v = w.document.getElementById('store-loading'); if (v) { v.hidden = true; v.style.display = 'none'; v.innerHTML = ''; } store.loading = null; }
   function showBanner(text, opts) {
     store.banner = { text: text, snapshot: !!(opts && opts.snapshot) };
     var b = el('store-banner');
@@ -106,7 +107,7 @@
     el('store-banner-close', 'button').onclick = function () { hideBanner(); };
     b.hidden = false;
   }
-  function hideBanner() { var b = w.document.getElementById('store-banner'); if (b) { b.hidden = true; b.innerHTML = ''; } store.banner = null; }
+  function hideBanner() { var b = w.document.getElementById('store-banner'); if (b) { b.hidden = true; b.style.display = 'none'; b.innerHTML = ''; } store.banner = null; }
 
   // --- seeding: rev, seedRev and generation move together, persisted before any save is sent ---
   function seed(rev, seedRev, generation) {
@@ -232,6 +233,12 @@
   // store on first launch. A real launch has no such argument.
   async function maybeImportFixture() {
     var o; try { o = await call('TrainStore', 'launchOptions'); } catch (e) { return; }
+    if (o && o.reset) {
+      // -trainResetStore (CI only): an empty phone for this launch, so the UI tests do not share state
+      try { w.localStorage.clear(); } catch (e) { /* ignore */ }
+      var er = await call('TrainStore', 'erase');
+      note({ reset: !!(er && er.accepted), generation: er && er.generation });
+    }
     if (!o || !o.fixture) return;
     if (localRaw() !== null) return;
     var st = await call('TrainStore', 'status');

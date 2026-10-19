@@ -28,7 +28,7 @@ final class SmokeUITests: XCTestCase {
 
     func testFixtureSessionSurvivesRelaunch() throws {
         let app = XCUIApplication()
-        app.launchArguments = args
+        app.launchArguments = args + ["-trainResetStore"]   // the first launch starts from an empty phone
         app.launch()
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 60), "web view present")

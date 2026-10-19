@@ -124,15 +124,16 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    // Test and smoke hooks from the process arguments: `-trainFixture <name>` imports a bundled
-    // synthetic fixture on an empty store; `-trainSmoke` marks a smoke run. Never set in a real
-    // launch, so a real launch gets { fixture: null, smoke: false }.
+    // Test and smoke hooks from the process arguments: `-trainResetStore` empties the WebView storage
+    // and the store for this launch (the UI tests share one simulator install), `-trainFixture <name>`
+    // imports a bundled synthetic fixture on an empty store, `-trainSmoke` marks a smoke run. Never set
+    // in a real launch, so a real launch gets { fixture: null, smoke: false, reset: false }.
     @objc func launchOptions(_ call: CAPPluginCall) {
         let args = ProcessInfo.processInfo.arguments
         var fixture: String? = nil
         if let i = args.firstIndex(of: "-trainFixture"), i + 1 < args.count { fixture = args[i + 1] }
         let fixtureValue: Any = fixture.map { $0 as Any } ?? (NSNull() as Any)
-        call.resolve(["fixture": fixtureValue, "smoke": args.contains("-trainSmoke")])
+        call.resolve(["fixture": fixtureValue, "smoke": args.contains("-trainSmoke"), "reset": args.contains("-trainResetStore")])
     }
 
     private func publishSummary() {

@@ -166,7 +166,7 @@ export class World {
       Share: { share: async (a) => { world.shares.push(a); if (world.shareError) throw world.shareError; return { activityType: 'test' }; } }
     };
     const ctx = {
-      localStorage: { getItem: (k) => storage.has(k) ? storage.get(k) : null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k) },
+      localStorage: { getItem: (k) => storage.has(k) ? storage.get(k) : null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k), clear: () => storage.clear() },
       document: documentStub, navigator: {}, console, setTimeout, clearTimeout, setInterval, clearInterval,
       Date, Math, JSON, Object, Array, Number, String, Boolean, Error, Promise, Uint8Array, Set, Map, RegExp, Symbol, Proxy, Reflect,
       crypto: webcrypto, TextEncoder, AbortController,
@@ -202,7 +202,8 @@ export class World {
       modalBody() { return els['modal-body'] ? els['modal-body'].textContent : ''; },
       pressModal(text) { const el = els['mb-' + text.replace(/\s/g, '')]; assert.ok(el && el.onclick, `modal button "${text}"`); return el.onclick(); },
       banner() { const b = els['store-banner']; return (b && !b.hidden) ? (els['store-banner-text'] ? els['store-banner-text'].textContent : b.innerHTML) : null; },
-      loading() { const v = els['store-loading']; return (v && !v.hidden) ? (els['store-loading-text'] ? els['store-loading-text'].textContent : 'loading') : null; },
+      loading() { const v = els['store-loading']; return (v && !v.hidden && v.style.display !== 'none') ? (els['store-loading-text'] ? els['store-loading-text'].textContent : 'loading') : null; },
+      loadingDisplay() { const v = els['store-loading']; return v ? v.style.display : undefined; },
       state() { return ctx.getState(); },
       bridge: ctx.__store,
       // wait until the save chain has drained (every queued save settled)

@@ -22,6 +22,7 @@ test('the patched handler awaits the hook: nothing touches storage before the re
   assert.equal(page.bridge.seeded, false);
   await page.ready;
   assert.equal(page.loading(), null, 'loading view gone after hydration');
+  assert.equal(page.loadingDisplay(), 'none', 'hidden by display too (the inline style sets display:flex, which beats the hidden attribute)');
   assert.equal(JSON.parse(w.raw()).log.length, 3);
   assert.equal(page.bridge.rev, 3);
   assert.equal(page.bridge.seedRev, 3);
@@ -526,4 +527,15 @@ test('a launch with -trainFixture imports the bundled synthetic fixture into an 
   assert.equal(w.store.count('importState'), 1, 'no second import once the store has a file');
   assert.equal(again.state().log.length, 2);
   assert.equal(again.banner(), null);
+});
+
+test('a launch with -trainResetStore empties the WebView storage and the store before the fixture import', async () => {
+  const w = seededWorld();
+  w.storage.set('train_seed_rev', '3'); w.storage.set('train_store_gen', '1'); w.storage.set('train_state', w.store.file);
+  w.store.launch = { fixture: 'smoke', smoke: true, reset: true };
+  const page = await w.boot();
+  assert.equal(page.banner(), null);
+  assert.equal(w.store.count('erase'), 1);
+  assert.equal(page.state().log.length, 2, 'the fixture, not the old state');
+  assert.equal(w.store.generation, 3, 'erase bumped once, the import once');
 });
