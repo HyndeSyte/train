@@ -23,30 +23,53 @@ export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---- the fake native store (same rules as TrainStore.swift) ----------------------------------
+// The file (`file`) and the control sidecar (`control`: generation, rev, syncArmed, ...) are separate,
+// written in the Swift order: a save writes the state then the control rev; Import and Erase write the
+// control first (syncArmed false, generation + 1, rev unchanged), then the state, then the control rev.
+// `killAt` models the app dying between those writes (the call never answers; see World.kill()).
 export class FakeStore {
   constructor() {
-    this.file = null; this.rev = 0; this.generation = 0; this.syncArmed = false; this.recoveredFrom = null; this.committedAt = null;
-    this.snapshots = []; this.calls = []; this.events = [];
+    this.file = null;
+    this.control = { generation: 0, rev: 0, syncArmed: false, recoveredFrom: null, committedAt: null };
+    this.snapshots = []; this.calls = []; this.events = []; this.log = '';
     this.delays = {};            // method -> ms
     this.hooks = {};             // method -> fn(args) returning a result to use instead, or throwing
     this.holdAcks = {};          // method -> array of resolvers; a held ack settles only on release()
     this.queue = Promise.resolve();
-    this.launch = { fixture: null, smoke: false };
-    this.failAfterDisarm = false;
+    this.launch = { fixture: null, smoke: false, reset: false };
+    this.failAfterDisarm = false; // the state write fails after the first control write: the plugin answers refuse('write')
+    this.killAt = null;           // 'afterFirstControl' | 'afterState': the app dies inside Import/Erase, nothing answers
   }
+  get rev() { return this.control.rev; } set rev(v) { this.control.rev = v; }
+  get generation() { return this.control.generation; } set generation(v) { this.control.generation = v; }
+  get syncArmed() { return this.control.syncArmed; } set syncArmed(v) { this.control.syncArmed = v; }
+  get recoveredFrom() { return this.control.recoveredFrom; } set recoveredFrom(v) { this.control.recoveredFrom = v; }
+  get committedAt() { return this.control.committedAt; } set committedAt(v) { this.control.committedAt = v; }
+  writeControl(patch) { this.control = { ...this.control, ...patch }; this.events.push({ control: { ...this.control } }); }
   parse(bytes) { try { const o = JSON.parse(bytes); return (o && typeof o === 'object') ? o : null; } catch { return null; } }
   revOf(bytes) { const o = this.parse(bytes); return o && typeof o._rev === 'number' ? o._rev : null; }
   hash() { return this.file == null ? null : sha256(this.file); }
-  snapshot(reason) { if (this.file != null) { this.snapshots.unshift({ rev: this.rev, reason, bytes: this.file }); this.snapshots = this.snapshots.slice(0, 5); } }
-  // serial queue like the Swift side; each call is logged; delays and hooks are per method
+  // the last 5 save snapshots and, untouched by saves, the last 3 import/erase snapshots
+  snapshot(reason) {
+    if (this.file == null) return;
+    this.snapshots.unshift({ rev: this.rev, reason, bytes: this.file });
+    const isTx = (s) => s.reason === 'import' || s.reason === 'erase';
+    const tx = this.snapshots.filter(isTx).slice(0, 3), saves = this.snapshots.filter((s) => !isTx(s)).slice(0, 5);
+    this.snapshots = this.snapshots.filter((s) => tx.includes(s) || saves.includes(s));
+  }
+  hang() { return new Promise(() => {}); }
+  // serial queue like the Swift side; each call is logged with its result; delays and hooks are per method
   run(method, args, fn) {
-    this.calls.push({ method, args });
+    const entry = { method, args, result: undefined };
+    this.calls.push(entry);
     // a hook stands in for a call that never reaches the plugin (or fails on the way): it does not
     // occupy the serial queue, so later calls still run
-    if (this.hooks[method]) return Promise.resolve().then(() => this.hooks[method](args));
+    if (this.hooks[method]) return Promise.resolve().then(() => this.hooks[method](args)).then((r) => { entry.result = r; return r; });
     const p = this.queue.then(async () => {
       if (this.delays[method]) await sleep(this.delays[method]);
-      return fn();
+      const r = await fn();
+      entry.result = r;
+      return r;
     });
     this.queue = p.catch(() => {});
     if (this.holdAcks[method]) {
@@ -62,10 +85,15 @@ export class FakeStore {
       report: (a) => self.run('report', a, async () => ({ stored: true })),
       launchOptions: (a) => self.run('launchOptions', a, async () => ({ ...self.launch })),
       read: (a) => self.run('read', a, async () => {
-        if (self.file == null) { self.rev = 0; return { rev: 0, generation: self.generation, hasFile: false, hash: null, recoveredFrom: self.recoveredFrom, syncArmed: self.syncArmed }; }
+        const base = () => ({ generation: self.generation, recoveredFrom: self.recoveredFrom, syncArmed: self.syncArmed });
+        if (self.file == null) {
+          const healed = self.rev !== 0; if (healed) self.writeControl({ rev: 0 });
+          return { rev: 0, hasFile: false, hash: null, ...base(), ...(healed ? { healed: true } : {}) };
+        }
         if (self.parse(self.file)) {
-          const r = self.revOf(self.file); if (r != null) self.rev = r;
-          return { rev: self.rev, generation: self.generation, hasFile: true, hash: self.hash(), bytes: self.file, recoveredFrom: self.recoveredFrom, syncArmed: self.syncArmed };
+          // the bytes are the truth: a control rev left behind by a kill between two writes is healed
+          const r = self.revOf(self.file); const healed = r != null && r !== self.rev; if (healed) self.writeControl({ rev: r });
+          return { rev: self.rev, hasFile: true, hash: self.hash(), bytes: self.file, ...base(), ...(healed ? { healed: true } : {}) };
         }
         // snapshot recovery: newest valid snapshot, generation bump, recoveredFrom
         self.events.push({ corruptFile: true });
@@ -82,7 +110,8 @@ export class FakeStore {
         if (newRev == null || !(newRev > a.base)) return refuse('invalid');
         if (a.base !== self.rev) return refuse('stale');
         self.snapshot('save');
-        self.file = a.bytes; self.rev = newRev; self.committedAt = new Date().toISOString();
+        self.file = a.bytes;                                             // 1. the state
+        self.writeControl({ rev: newRev, committedAt: new Date().toISOString() });   // 2. the control rev
         self.events.push({ saved: newRev });
         return { accepted: true, rev: self.rev, generation: self.generation, hash: self.hash() };
       }),
@@ -93,29 +122,42 @@ export class FakeStore {
         if (typeof a.base === 'number' && a.base !== self.rev) return refuse('stale');
         if (newRev !== self.rev + 1) return refuse('invalid');
         self.snapshot('import');
-        self.syncArmed = false; self.events.push({ disarmed: true, before: 'import' });
+        // 1. disarm and bump the generation in one control write, rev unchanged
+        self.writeControl({ syncArmed: false, generation: self.generation + 1 });
+        self.events.push({ disarmed: true, before: 'import' });
+        if (self.killAt === 'afterFirstControl') return self.hang();
         if (self.failAfterDisarm) return refuse('write');
-        self.file = a.bytes; self.generation += 1; self.rev = newRev; self.committedAt = new Date().toISOString();
+        self.file = a.bytes;                                             // 2. the state at rev + 1
+        if (self.killAt === 'afterState') return self.hang();
+        self.writeControl({ rev: newRev, committedAt: new Date().toISOString() });   // 3. the control rev
         self.events.push({ imported: newRev, generation: self.generation });
         return { accepted: true, rev: self.rev, generation: self.generation, hash: self.hash() };
       }),
       erase: (a) => self.run('erase', a, async () => {
         self.snapshot('erase');
-        self.syncArmed = false; self.events.push({ disarmed: true, before: 'erase' });
+        self.writeControl({ syncArmed: false, generation: self.generation + 1 });
+        self.events.push({ disarmed: true, before: 'erase' });
+        if (self.killAt === 'afterFirstControl') return self.hang();
         if (self.failAfterDisarm) return { accepted: false, reason: 'write', rev: self.rev, generation: self.generation };
-        self.file = null; self.generation += 1; self.rev = 0; self.committedAt = new Date().toISOString();
+        self.file = null;
+        if (self.killAt === 'afterState') return self.hang();
+        self.writeControl({ rev: 0, committedAt: new Date().toISOString() });
         self.events.push({ erased: true, generation: self.generation });
         return { accepted: true, rev: 0, generation: self.generation, hash: null };
       }),
       status: (a) => self.run('status', a, async () => ({ rev: self.rev, generation: self.generation, committedAt: self.committedAt, syncArmed: self.syncArmed, recoveredFrom: self.recoveredFrom, hasFile: self.file != null, snapshots: self.snapshots.length })),
-      summary: (a) => self.run('summary', a, async () => { const o = self.parse(self.file) || {}; const log = o.log || []; const last = log[log.length - 1]; return { rev: self.rev, generation: self.generation, hasFile: self.file != null, sessions: log.length, sessionIds: log.map((e) => e.sessionId), lastSessionId: last && last.sessionId }; }),
-      setSyncArmed: (a) => self.run('setSyncArmed', a, async () => { self.syncArmed = !!a.on; return { ok: true, syncArmed: self.syncArmed }; })
+      summary: (a) => self.run('summary', a, async () => { const o = self.parse(self.file) || {}; const log = o.log || []; const last = log[log.length - 1]; return { rev: self.rev, generation: self.generation, hasFile: self.file != null, sessions: log.length, sessionIds: log.map((e) => e.sessionId), lastSessionId: last && last.sessionId, logTail: self.logTail(3) }; }),
+      setSyncArmed: (a) => self.run('setSyncArmed', a, async () => { self.writeControl({ syncArmed: !!a.on }); return { ok: true, syncArmed: self.syncArmed }; }),
+      // Library/Logs/train.log in Swift: appended, rotated at 200 KB
+      appendLog: (a) => self.run('appendLog', a, async () => { if (self.log.length > 200 * 1024) { self.logRotated = self.log; self.log = ''; } self.log += (a.text.endsWith('\n') ? a.text : a.text + '\n'); return { ok: true }; })
     };
   }
+  logTail(n) { return this.log.split('\n').filter(Boolean).slice(-n).map((l) => l.slice(0, 200)); }
   // test-side mutations standing in for "another writer" or disk damage
   writeExternally(bytes) { this.snapshot('external'); this.file = bytes; this.rev = this.revOf(bytes) || 0; this.events.push({ external: this.rev }); }
   corrupt() { this.file = '{"schemaVersion":8,"log":[' ; }
   count(method) { return this.calls.filter((c) => c.method === method).length; }
+  results(method) { return this.calls.filter((c) => c.method === method).map((c) => c.result); }
 }
 
 // ---- the page ---------------------------------------------------------------------------------
@@ -144,6 +186,8 @@ export class World {
     this.now = opts.now || null;
   }
   evict() { this.storage.clear(); }
+  // the app dies: the page is gone and so is the plugin's queue (a call hung inside it never answers)
+  kill() { this.store.queue = Promise.resolve(); this.store.holdAcks = {}; this.store.killAt = null; }
   raw() { return this.storage.has('train_state') ? this.storage.get('train_state') : null; }
   // Launch the page. Resolves once the (patched) DOMContentLoaded handler has run, i.e. after hydration,
   // unless `noWait` (for tests that inspect the loading view while a read hangs).
@@ -167,7 +211,9 @@ export class World {
     };
     const ctx = {
       localStorage: { getItem: (k) => storage.has(k) ? storage.get(k) : null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k), clear: () => storage.clear() },
-      document: documentStub, navigator: {}, console, setTimeout, clearTimeout, setInterval, clearInterval,
+      document: documentStub, navigator: {}, setTimeout, clearTimeout, setInterval, clearInterval,
+      // a per-context console (bridge.js wraps it for its log ring); warnings and errors reach the test output, chatter does not
+      console: { log: () => {}, info: () => {}, debug: () => {}, warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) },
       Date, Math, JSON, Object, Array, Number, String, Boolean, Error, Promise, Uint8Array, Set, Map, RegExp, Symbol, Proxy, Reflect,
       crypto: webcrypto, TextEncoder, AbortController,
       alert(m) { world.alerts = world.alerts || []; world.alerts.push(m); }, prompt() { return null; },

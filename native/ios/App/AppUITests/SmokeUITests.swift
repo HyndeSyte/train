@@ -6,7 +6,7 @@ import XCTest
 // History, Settings shows "Store: rev N committed", and the authoritative file (read by native and
 // shown in the store-summary label) carries the new Session ID and payload fields.
 final class SmokeUITests: XCTestCase {
-    private let args = ["-trainFixture", "smoke", "-trainSmoke"]
+    private let args = ["-trainFixture", "smoke", "-trainSmoke", "-trainUITest"]
 
     // One snapshot of the hierarchy (allElementsBoundByIndex re-resolves each element, and the page
     // re-renders on its own timers, so an index can vanish between the count and the label read).
@@ -29,6 +29,18 @@ final class SmokeUITests: XCTestCase {
     }
     private func json(_ s: String) -> [String: Any] {
         (try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any]) ?? [:]
+    }
+    // Chained saves can still be committing when a wait returns; read until the summary is the same
+    // across two reads a second apart.
+    private func stableLabel(_ e: XCUIElement, tries: Int = 20) -> String {
+        var last = e.label
+        for _ in 0..<tries {
+            sleep(1)
+            let now = e.label
+            if now == last { return now }
+            last = now
+        }
+        return last
     }
 
     func testFixtureSessionSurvivesRelaunch() throws {
@@ -82,7 +94,8 @@ final class SmokeUITests: XCTestCase {
 
         // 2. the store committed the new session: parsed from the file by native
         XCTAssertTrue(waitLabel(store, contains: "\"sessions\":3"), "store has the new session: " + store.label)
-        let after = json(store.label)
+        let afterText = stableLabel(store)
+        let after = json(afterText)
         let lastId = try XCTUnwrap(after["lastSessionId"] as? String, "lastSessionId in the file: " + store.label)
         XCTAssertFalse(lastId.isEmpty)
         XCTAssertEqual(after["lastSessionType"] as? String, "RP", "the new entry is the RP session")
@@ -90,7 +103,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertNotNil(after["lastStatus"] as? String)
         let rev1 = (after["rev"] as? NSNumber)?.intValue ?? -1
         XCTAssertGreaterThan(rev1, 1, "rev advanced past the fixture import")
-        print("SMOKE_RESULT_1 " + store.label)
+        print("SMOKE_RESULT_1 " + afterText)
 
         // 3. relaunch: no banner, same file, the session in History, Settings shows the store line
         app.terminate()
@@ -99,10 +112,12 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(web.waitForExistence(timeout: 60))
         XCTAssertTrue(web.buttons["Start Today's Session"].waitForExistence(timeout: 60), "Home writable after relaunch; " + labelsOf(app))
         XCTAssertTrue(waitLabel(store, contains: lastId), "the file still carries the session after relaunch: " + store.label)
-        let again = json(store.label)
+        let againText = stableLabel(store)
+        let again = json(againText)
         XCTAssertEqual((again["sessions"] as? NSNumber)?.intValue, 3)
         XCTAssertEqual(again["lastSessionId"] as? String, lastId)
-        XCTAssertEqual((again["rev"] as? NSNumber)?.intValue, rev1, "no write on an equal-hash relaunch")
+        XCTAssertEqual((again["rev"] as? NSNumber)?.intValue, rev1, "no write on an equal-hash relaunch: before " + afterText + " after " + againText)
+        XCTAssertEqual(again["hash"] as? String, after["hash"] as? String, "same bytes after the relaunch")
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind' OR label CONTAINS 'did not reach'")).firstMatch.exists, "no banner after relaunch")
 
         web.buttons.matching(NSPredicate(format: "label CONTAINS 'History'")).firstMatch.tap()

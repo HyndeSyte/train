@@ -7,6 +7,7 @@ import XCTest
 final class Gate0UITests: XCTestCase {
     func testGate0BridgeAnswers() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-trainUITest"]      // the report labels exist only under this argument (Debug builds)
         app.launch()
 
         let label = app.staticTexts["gate0-result"]

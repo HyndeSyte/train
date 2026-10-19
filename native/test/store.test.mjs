@@ -136,27 +136,71 @@ test('two saves, the first commits and the second does not, then a kill: write-t
   assert.equal(page.state().rotationIndex, 0);
 });
 
-test('a refused write is never acknowledged: banner, nothing further sent, and the next launch keeps both copies', async () => {
+test('a refused write is never acknowledged: banner, nothing further sent, and the next launch keeps both copies (a stale page never overwrites newer data)', async () => {
   const w = seededWorld();
   const page = await w.boot();
-  // another writer moved the file under this page (same generation)
+  // another writer moved the file under this page (same generation): rev 4 with sid-0009
   const other = JSON.parse(w.store.file); other.log.push(entry(9)); other._base = 3; other._rev = 4;
   w.store.writeExternally(JSON.stringify(other));
   const r1 = await page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 1 }));
   assert.equal(r1.refused, true);
   assert.equal(r1.reason, 'stale');
-  assert.match(page.banner(), /fell behind/);
+  assert.match(page.banner(), /fell behind the app’s saved data\. This copy stops saving until the app relaunches/);
   assert.equal(JSON.parse(w.store.file).log.length, 4, 'the file was not overwritten');
+  assert.equal(w.storage.get('train_store_refused'), '1', 'the refusal is persisted for the next launch');
   const sends = w.store.count('save');
+  // the page keeps stamping: two more local saves take the local copy to rev 6, still refused, nothing sent
   const r2 = await page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 2 }));
   assert.equal(r2.refused, true);
+  await page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 2 }));
+  assert.equal(JSON.parse(w.raw())._rev, 6);
   assert.equal(w.store.count('save'), sends, 'nothing further sent after a refusal');
-  // relaunch: local rev 5 > file rev 4 but seedRev (3) <= 4 ... the local lineage does NOT include rev 4's content,
-  // yet by rev alone it looks like a write-through candidate; validation passes, so the CAS decides: base 4 == file rev 4
-  // would accept. That is the one case the plan accepts as "a stale decision" only if revs lie; here the other writer
-  // used the same generation, which the shell never does for a different app. Assert what the rules give.
+  // relaunch: local rev 6 > file rev 4 and seedRev 3 <= 4 would pass rule 4 by revs alone; the marker keeps both
   const again = await w.boot();
-  assert.ok(again.bridge.seeded);
+  assert.match(again.banner(), /kept as a snapshot/);
+  assert.equal(JSON.parse(w.store.file).log.length, 4, 'the file still holds the other writer’s data');
+  assert.ok(JSON.parse(w.store.file).log.some((e) => e.sessionId === 'sid-0009'), 'sid-0009 survived the relaunch');
+  assert.equal(again.state().log.length, 4, 'the file was loaded');
+  assert.equal(again.state().rotationIndex, 0);
+  assert.equal(JSON.parse(again.bridge.snapshot.bytes).rotationIndex, 2, 'the stale page’s copy is the kept snapshot');
+  same(again.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'moved', fileRev: 4, localRev: 6 });
+  assert.ok(again.bridge.events.some((e) => e.refusedMarker), 'the marker was the reason');
+  assert.equal(w.storage.get('train_store_refused'), undefined, 'the marker is cleared by the new seeding');
+  assert.equal(w.store.count('save'), sends, 'no write-through happened');
+  // the relaunched page saves normally from the file's rev
+  const r3 = await again.ctx.saveState(Object.assign(again.state(), { rotationIndex: 1 }));
+  same(r3, { accepted: true, rev: 5 });
+});
+
+test('a generation refusal the page did not cause (the store was replaced) is a refusal: banner names it, marker set, relaunch keeps both', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  w.store.generation = 2;                              // replaced by something this page never saw
+  const r = await page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 1 }));
+  same(r, { refused: true, reason: 'generation' });
+  assert.match(page.banner(), /store was replaced/);
+  assert.equal(w.storage.get('train_store_refused'), '1');
+  const again = await w.boot();
+  assert.match(again.banner(), /kept as a snapshot/);
+  same(again.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'generation', fileRev: 3, localRev: 4 });
+  assert.equal(again.bridge.generation, 2);
+});
+
+test('a present train_state with no seed key never enters write-through: keep both (a missing generation key likewise)', async () => {
+  const w = seededWorld();
+  const local = JSON.parse(w.store.file); local.rotationIndex = 7; local._rev = 5; local._base = 4;
+  w.storage.set('train_state', JSON.stringify(local)); w.storage.set('train_store_gen', '1');   // no train_seed_rev
+  const page = await w.boot();
+  assert.match(page.banner(), /kept as a snapshot/);
+  same(page.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'moved', fileRev: 3, localRev: 5 });
+  assert.equal(page.state().rotationIndex, 0, 'the file was loaded');
+  assert.equal(w.store.count('save'), 0);
+  const w2 = seededWorld();
+  w2.storage.set('train_state', JSON.stringify(local)); w2.storage.set('train_seed_rev', '3');  // no train_store_gen
+  const p2 = await w2.boot();
+  same(p2.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'generation', fileRev: 3, localRev: 5 });
+  assert.equal(w2.store.count('save'), 0);
 });
 
 test('equal revs with different content: keep both copies, load the file, banner names the snapshot', async () => {
@@ -233,10 +277,9 @@ test('a failed read shows the loading view with Retry; a later successful read h
   assert.equal(page.state().log.length, 3);
   // slow read: the Retry appears after readRetryMs while the first read is still pending
   const w2 = seededWorld();
-  w2.store.delays.read = 900;
+  w2.store.delays.read = 2500;                              // well past readRetryMs (400 in the tests)
   const p2 = await w2.boot({ noWait: true });
-  await sleep(500);
-  assert.match(p2.loading(), /Still loading/);
+  assert.ok(await until(() => /Still loading/.test(p2.loading() || ''), 2000), 'the slow-read text appeared: ' + p2.loading());
   assert.ok(p2.els['store-loading-retry'].onclick);
   await p2.ready;
   assert.equal(p2.state().log.length, 3);
@@ -309,8 +352,7 @@ test('Import: confirm names the sessions that would disappear; the transaction s
   assert.match(page.modalBody(), /2 sessions from the backup/);
   assert.match(page.modalBody(), /2 sessions now on this phone are not in it and would disappear: 2026-10-11 PT, 2026-10-13 PT/);
   await page.pressModal('Import');
-  await sleep(80);
-  assert.equal(w.reloads, 1, 'reloaded inside the transaction’s resolution');
+  assert.ok(await until(() => w.reloads === 1), 'reloaded inside the transaction’s resolution');
   assert.equal(w.store.generation, 2);
   assert.equal(w.store.rev, 4, 'committed at file rev + 1');
   assert.equal(w.store.syncArmed, false, 'disarmed');
@@ -340,8 +382,7 @@ test('Import with queued writes: the held saves settle as superseded; a late ack
   const pC = page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 3 }));
   await sleep(10);
   const importDone = importViaUi(page, seedState({ log: [entry(5)] }));
-  await sleep(120);
-  assert.equal(w.reloads, 1, 'the import went through while the first ack was still held');
+  assert.ok(await until(() => w.reloads === 1), 'the import went through while the first ack was still held');
   assert.equal(w.store.generation, 2);
   assert.equal(JSON.parse(w.store.file).log[0].sessionId, 'sid-0005');
   w.store.release('save');                                   // the late ack arrives now
@@ -354,20 +395,82 @@ test('Import with queued writes: the held saves settle as superseded; a late ack
   await importDone;
 });
 
-test('Import when a save landed first: the stale base is read again and the import still commits at file rev + 1', async () => {
+test('Import when a save landed first: the stale base is refused, read again, and the import commits at file rev + 1', async () => {
   const w = seededWorld();
   const page = await w.boot();
   await page.settle();
-  w.store.delays.save = 60;                                   // the plugin is slow to commit
+  w.store.delays.save = 60;                                   // the plugin is slow to commit the save already sent
   page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 1 }));
+  // the first status answers before that save commits (rev 3); the importState queued behind the save then finds rev 4
+  w.store.hooks.status = async () => { delete w.store.hooks.status; return { rev: 3, generation: 1, committedAt: null, syncArmed: false, recoveredFrom: null, hasFile: true, snapshots: 0 }; };
   importViaUi(page, seedState({ log: [entry(6)] }));
-  await sleep(300);
-  assert.equal(w.reloads, 1);
+  assert.ok(await until(() => w.reloads === 1), 'the import went through');
+  const attempts = w.store.results('importState');
+  assert.equal(attempts.length, 2, 'two attempts');
+  same(attempts[0], { accepted: false, reason: 'stale', rev: 4, generation: 1 }, 'the first was refused as stale by the committed save');
+  assert.equal(attempts[1].accepted, true);
   assert.equal(w.store.rev, 5, 'save made rev 4, the import committed at 5');
-  assert.ok(w.store.calls.filter((c) => c.method === 'importState').length >= 1);
+  assert.equal(w.store.generation, 2);
+  assert.equal(JSON.parse(w.store.file).log[0].sessionId, 'sid-0006');
 });
 
-test('a kill between the two writes leaves a disarmed app with the old state; the page says nothing changed', async () => {
+test('a kill after the first control write (disarm + generation bump): the relaunch reads syncArmed false from the sidecar, the old state is loaded and the local copy kept with a banner', async () => {
+  const w = seededWorld();
+  w.store.syncArmed = true;
+  const page = await w.boot();
+  await page.settle();
+  page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 2 }));
+  await page.settle();                                           // local and file at rev 4
+  w.store.killAt = 'afterFirstControl';
+  importViaUi(page, seedState({ log: [entry(8)] }));
+  await sleep(30);
+  assert.equal(w.store.count('importState'), 1);
+  w.kill();                                                      // the app dies; the import never answers
+  same({ generation: w.store.control.generation, rev: w.store.control.rev, syncArmed: w.store.control.syncArmed }, { generation: 2, rev: 4, syncArmed: false }, 'the sidecar as the kill left it');
+  const again = await w.boot();
+  assert.equal(w.store.syncArmed, false, 'read back disarmed');
+  assert.match(again.banner(), /kept as a snapshot/, 'the generation rule keeps both copies');
+  same(again.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'generation', fileRev: 4, localRev: 4 });
+  assert.equal(again.state().log.length, 3, 'the old state, not the import');
+  assert.equal(again.bridge.generation, 2);
+  assert.equal(w.store.count('save'), 1, 'nothing written through');
+});
+
+test('a kill after the state write and before the control rev: the next read heals the rev from the bytes; the aborted import is not committed silently, both copies are kept with a banner', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  w.store.killAt = 'afterState';
+  importViaUi(page, seedState({ log: [entry(8)] }));
+  await sleep(30);
+  w.kill();
+  same({ generation: w.store.control.generation, rev: w.store.control.rev }, { generation: 2, rev: 3 }, 'state at rev 4 on disk, control rev still 3');
+  assert.equal(JSON.parse(w.store.file)._rev, 4);
+  const again = await w.boot();
+  assert.ok(again.bridge.events.some((e) => e.healed === 4), 'hydrate noted the heal: ' + JSON.stringify(again.bridge.events));
+  assert.equal(w.store.control.rev, 4, 'control.rev healed from the bytes');
+  assert.match(again.banner(), /kept as a snapshot/);
+  same(again.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'generation', fileRev: 4, localRev: 3 });
+  assert.equal(again.state().log[0].sessionId, 'sid-0008', 'the file (the imported data) is what loaded');
+  assert.equal(JSON.parse(again.bridge.snapshot.bytes).log.length, 3, 'the previous copy is the kept snapshot');
+});
+
+test('an interrupted Erase (killed after the first control write) cannot come back through write-through: keep both', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  w.store.killAt = 'afterFirstControl';
+  page.ctx.confirmErase(); page.pressModal('Erase everything');
+  await sleep(30);
+  w.kill();
+  const again = await w.boot();
+  assert.match(again.banner(), /kept as a snapshot/);
+  same(again.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'generation', fileRev: 3, localRev: 3 });
+  assert.equal(w.store.count('save'), 0, 'no write-through');
+  assert.equal(JSON.parse(w.store.file).log.length, 3, 'the file is as it was');
+});
+
+test('the state write fails after the generation bump: the plugin refuses with the new generation; the page adopts it, says nothing changed, re-sends its copy and keeps saving', async () => {
   const w = seededWorld();
   w.store.syncArmed = true;
   w.store.failAfterDisarm = true;
@@ -378,15 +481,21 @@ test('a kill between the two writes leaves a disarmed app with the old state; th
   assert.equal(w.reloads, 0);
   assert.equal(w.store.syncArmed, false, 'disarmed');
   assert.equal(JSON.parse(w.store.file).log.length, 3, 'old state kept');
-  assert.equal(w.store.generation, 1);
-  assert.equal(page.modalTitle(), 'Import did not happen');
+  assert.equal(w.store.generation, 2, 'the bump landed before the failure');
   assert.match(page.modalBody(), /Nothing changed/);
   assert.equal(page.ctx.__sync.quiescing, false, 'guard dropped');
   assert.equal(page.state().log.length, 3, 'local untouched');
-  // the page still saves normally afterwards (the hold was released)
+  assert.ok(page.bridge.events.some((e) => e.adoptedGeneration === 2));
+  assert.equal(page.bridge.generation, 2);
+  assert.equal(w.storage.get('train_store_gen'), '2');
   w.store.failAfterDisarm = false;
+  await page.settle();
+  assert.equal(w.store.rev, 4, 'this screen’s copy was re-sent in the new generation');
+  assert.equal(page.bridge.lastCommitted.rev, 4);
   const r = await page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 2 }));
-  assert.equal(r.accepted, true);
+  same(r, { accepted: true, rev: 5 });
+  const again = await w.boot();
+  assert.equal(again.banner(), null, 'the relaunch is an equal-hash boot in the adopted generation');
 });
 
 test('Erase: snapshot, disarm, generation bump, file removed, local key removed, re-seeded at 0, reload lands in the missing-state rule with no banner', async () => {
@@ -397,8 +506,7 @@ test('Erase: snapshot, disarm, generation bump, file removed, local key removed,
   page.ctx.confirmErase();
   assert.equal(page.modalTitle(), 'Erase all data?');
   await page.pressModal('Erase everything');
-  await sleep(60);
-  assert.equal(w.reloads, 1);
+  assert.ok(await until(() => w.reloads === 1));
   assert.equal(w.store.file, null);
   assert.equal(w.store.rev, 0);
   assert.equal(w.store.generation, 2);
@@ -431,6 +539,18 @@ test('Import and Erase abort after the quiescing wait when a sync request is sti
   page.ctx.confirmErase(); await page.pressModal('Erase everything');
   await sleep(10);
   assert.notEqual(page.modalTitle(), 'Still syncing', 'the erase is waiting its window');
+  // during the drain the guard is up: a sync attempt is refused and a second transaction does not start
+  assert.equal(page.ctx.__sync.quiescing, true);
+  same(await page.ctx.pushUnsynced(), { refused: 'quiescing' });
+  same(await page.ctx.syncEntry('sid-0001'), { refused: 'quiescing' });
+  await assert.rejects(() => page.ctx.postSync({ op: 'delete', sessionId: 'x' }), /quiescing/);
+  assert.equal(w.syncRequests.length, 0);
+  assert.ok(page.bridge.events.some((e) => e.syncRefused === 'quiescing'));
+  page.ctx.importData({ target: { files: [{ text: JSON.stringify(seedState({ log: [entry(9)] })) }] } });
+  await sleep(5); await page.pressModal('Import');
+  await sleep(5);
+  assert.ok(page.bridge.events.some((e) => e.quiesceBusy), 're-entry refused');
+  assert.equal(w.store.count('importState'), 0);
   assert.ok(await until(() => page.modalTitle() === 'Still syncing'));
   assert.equal(w.store.count('erase'), 0);
   // the default wait is 10 seconds
@@ -456,10 +576,57 @@ test('Export without waiting after a save: waits for the acknowledgement and exp
   same(exported, stripped(w.store.file), 'a plain backup of the committed bytes');
   same(w.shares[0], { title: 'Train backup', files: ['file:///cache/' + w.fsWrites[0].path] });
   assert.equal(page.banner(), null);
-  // round trip: the export imports losslessly (the same log, ids and fields) through the app's migrate
-  const back = page.ctx.migrate(JSON.parse(w.fsWrites[0].data));
-  same(back.log.map((e) => e.sessionId), ['sid-0001', 'sid-0002', 'sid-0003']);
-  same(back.log, exported.log);
+  // round trip: the export goes back in through Import and survives a relaunch (the same log, ids and fields)
+  const before = page.state();
+  await importViaUi(page, JSON.parse(w.fsWrites[0].data));
+  assert.ok(await until(() => w.reloads === 1), 'the import reloaded');
+  assert.equal(w.store.rev, 5, 'committed at file rev + 1');
+  assert.equal(w.store.generation, 2);
+  const again = await w.boot();
+  assert.equal(again.banner(), null);
+  same(again.state().log.map((e) => e.sessionId), ['sid-0001', 'sid-0002', 'sid-0003']);
+  same(again.state().log, before.log);
+  assert.equal(again.state().rotationIndex, 2);
+  same(stripped(w.store.file), exported, 'the file holds the exported content byte for byte apart from the stamps');
+});
+
+test('snapshots: the pre-import snapshot survives a day of saves (only save snapshots are pruned to 5)', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  await importViaUi(page, seedState({ log: [entry(2)] }));
+  assert.ok(await until(() => w.reloads === 1));
+  const again = await w.boot();
+  for (let i = 0; i < 12; i++) { await again.ctx.saveState(Object.assign(again.state(), { rotationIndex: i % 5 })); }
+  const reasons = w.store.snapshots.map((s) => s.reason);
+  assert.equal(reasons.filter((r) => r === 'save').length, 5);
+  assert.equal(reasons.filter((r) => r === 'import').length, 1, 'the pre-import snapshot is still there: ' + reasons.join(','));
+  const kept = w.store.snapshots.find((s) => s.reason === 'import');
+  assert.equal(kept.rev, 3); assert.equal(JSON.parse(kept.bytes).log.length, 3);
+});
+
+test('log capture: the last 200 console lines ride in a ring; a refusal writes them through appendLog with the events; the summary carries the tail', async () => {
+  const w = seededWorld();
+  const page = await w.boot();
+  await page.settle();
+  page.ctx.console.error('boom', { code: 7 });
+  for (let i = 0; i < 250; i++) page.ctx.console.log('line ' + i);
+  assert.equal(page.bridge.logRing.length, 200, 'ring capped');
+  assert.ok(page.bridge.logRing.every((l) => /^\d{4}-\d{2}-\d{2}T/.test(l)));
+  assert.equal(w.store.count('appendLog'), 0, 'nothing written while all is well');
+  const other = JSON.parse(w.store.file); other.rotationIndex = 4; other._base = 3; other._rev = 4;
+  w.store.writeExternally(JSON.stringify(other));
+  await page.ctx.saveState(Object.assign(page.state(), { rotationIndex: 1 }));
+  assert.ok(await until(() => w.store.results('appendLog').length === 1 && w.store.results('appendLog')[0]), 'the refusal banner flushed the log');
+  const text = w.store.calls.find((c) => c.method === 'appendLog').args.text;
+  assert.match(text, /banner: This copy fell behind/);
+  assert.match(text, /log line 249/);
+  assert.match(text, /"refused":"stale"/);
+  assert.doesNotMatch(text, /boom/, 'the ring kept only the last 200 lines');
+  assert.ok(w.store.log.endsWith('\n'));
+  const s = await page.ctx.Capacitor.Plugins.TrainStore.summary({});
+  assert.equal(s.logTail.length, 3);
+  assert.match(s.logTail[2], /^events \[/);
 });
 
 test('Export with a hung save: after the wait, both the committed file and the candidate are exported, labelled, with the banner', async () => {

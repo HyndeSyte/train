@@ -21,6 +21,7 @@
   var SEED_KEY = 'train_seed_rev';
   var GEN_KEY = 'train_store_gen';
   var SNAP_KEY = 'train_state_snapshot';
+  var REFUSED_KEY = 'train_store_refused';       // set when the store refused this page's save; cleared by the next seeding
   var cfg = w.__storeConfig || {};               // tests shorten the waits; the app uses the defaults
   var READ_RETRY_MS = cfg.readRetryMs || 5000;
   var QUIESCE_MS = cfg.quiesceMs || 10000;
@@ -31,18 +32,44 @@
 
   // --- sync off before cutover; the guard the real wrappers will honour ---
   var sync = w.__sync = { inflight: 0, quiescing: false };
-  w.pushUnsynced = async function () { return; };
-  w.syncEntry = async function () { return; };
-  w.postSync = async function () { throw new Error('sync is off in the shell before cutover'); };
+  function syncRefused() { note({ syncRefused: 'quiescing' }); return { refused: 'quiescing' }; }
+  w.pushUnsynced = async function () { if (sync.quiescing) return syncRefused(); return; };
+  w.syncEntry = async function () { if (sync.quiescing) return syncRefused(); return; };
+  w.postSync = async function () { if (sync.quiescing) { syncRefused(); throw new Error('sync is quiescing'); } throw new Error('sync is off in the shell before cutover'); };
 
   var store = w.__store = {
     seeded: false, base: 0, rev: 0, seedRev: 0, generation: null,
     refused: false, pendingSaves: 0, inflightSaves: 0, lastSaveFailed: false, lastCommitted: null,
-    chain: Promise.resolve(), txHold: null, snapshot: null, banner: null, hydrated: false, readyPromise: null, events: [],
+    chain: Promise.resolve(), txHold: null, snapshot: null, banner: null, hydrated: false, readyPromise: null, events: [], logRing: [],
     config: { readRetryMs: READ_RETRY_MS, quiesceMs: QUIESCE_MS, exportWaitMs: EXPORT_WAIT_MS }
   };
   function note(ev) { store.events.push(ev); if (store.events.length > 200) store.events.shift(); }
   function msg(e) { return String(e && e.message || e); }
+
+  // --- log capture: the last 200 console and error lines, written to the app's log (Library/Logs/train.log,
+  // rotated by the plugin) when a banner shows or a save is refused. No UI; the test summary carries the tail.
+  function logLine(level, args) {
+    var parts = Array.prototype.map.call(args || [], function (a) { try { return typeof a === 'string' ? a : (a && a.stack) || JSON.stringify(a); } catch (e) { return String(a); } });
+    store.logRing.push((new Date().toISOString() + ' ' + level + ' ' + parts.join(' ')).slice(0, 500));
+    if (store.logRing.length > 200) store.logRing.shift();
+  }
+  (function captureConsole() {
+    var c = w.console; if (!c) return;
+    ['log', 'warn', 'error'].forEach(function (level) {
+      var orig = c[level];
+      c[level] = function () { logLine(level, arguments); if (typeof orig === 'function') orig.apply(c, arguments); };
+    });
+    if (typeof w.addEventListener === 'function') {
+      w.addEventListener('error', function (ev) { logLine('uncaught', [ev && (ev.message || ev.error)]); });
+      w.addEventListener('unhandledrejection', function (ev) { logLine('unhandledrejection', [ev && ev.reason]); });
+    }
+  })();
+  function flushLog(reason) {
+    var text = '--- ' + new Date().toISOString() + ' ' + reason + ' | rev ' + store.rev + ' base ' + store.base + ' generation ' + store.generation + '\n'
+      + store.logRing.join('\n') + (store.logRing.length ? '\n' : '')
+      + 'events ' + JSON.stringify(store.events.slice(-12)) + '\n';
+    return call('TrainStore', 'appendLog', { text: text }).catch(function (e) { note({ logWriteFailed: msg(e) }); });
+  }
 
   // --- plugins ---
   function pl(name) { var p = w.Capacitor && w.Capacitor.Plugins; return p && p[name]; }
@@ -106,6 +133,7 @@
     if (store.banner.snapshot) el('store-banner-export', 'button').onclick = function () { exportSnapshot(); };
     el('store-banner-close', 'button').onclick = function () { hideBanner(); };
     b.hidden = false;
+    flushLog('banner: ' + text.slice(0, 120));
   }
   function hideBanner() { var b = w.document.getElementById('store-banner'); if (b) { b.hidden = true; b.style.display = 'none'; b.innerHTML = ''; } store.banner = null; }
 
@@ -113,6 +141,7 @@
   function seed(rev, seedRev, generation) {
     store.base = rev; store.rev = rev; store.seedRev = seedRev; store.generation = generation; store.seeded = true;
     lsSet(SEED_KEY, String(seedRev)); lsSet(GEN_KEY, String(generation));
+    lsDel(REFUSED_KEY);
   }
 
   // --- hydration (the awaited ready-hook) ---
@@ -169,6 +198,7 @@
     var file = { rev: Number(res && res.rev) || 0, generation: Number(res && res.generation) || 0, bytes: (res && res.hasFile && typeof res.bytes === 'string') ? res.bytes : null, hash: (res && typeof res.hash === 'string') ? res.hash : null };
     var raw = localRaw();
     if (res && res.recovered) note({ recoveredFrom: res.recoveredFrom });
+    if (res && res.healed) note({ healed: file.rev });        // native filled control.rev from the bytes (a kill between two writes)
     // 1. train_state missing: hydrate from the file; no candidate, no comparison
     if (raw === null) {
       if (file.bytes != null) lsSet(STATE_KEY, file.bytes);
@@ -180,8 +210,10 @@
     }
     var localObj = safeParse(raw);
     var localRev = (localObj && typeof localObj._rev === 'number') ? localObj._rev : 0;
-    var localGen = Number(lsGet(GEN_KEY));
-    var localSeed = Number(lsGet(SEED_KEY));
+    // a present train_state with no bookkeeping key never enters write-through: a missing key is NaN, not 0
+    var localGen = lsGet(GEN_KEY) === null ? NaN : Number(lsGet(GEN_KEY));
+    var localSeed = lsGet(SEED_KEY) === null ? NaN : Number(lsGet(SEED_KEY));
+    var refusedBefore = lsGet(REFUSED_KEY) === '1';
     // unreadable local copy: treat as a candidate to keep, load the file
     if (!localObj) return keepBoth('unreadable', raw, file);
     // 2. generation differs: an Import, Erase or snapshot recovery this page did not see
@@ -194,9 +226,11 @@
       note({ rule: 'fileAhead', fileRev: file.rev, localRev: localRev });
       return;
     }
-    // 4. this page is ahead within its own acknowledged lineage: write through the raw string
+    // 4. this page is ahead within its own acknowledged lineage: write through the raw string. A page the
+    //    store refused keeps stamping, so its marker counts like a seedRev above the file: keep both.
     if (localRev > file.rev) {
-      if (Number.isFinite(localSeed) && localSeed <= file.rev) {
+      if (refusedBefore) note({ refusedMarker: true, localRev: localRev, fileRev: file.rev });
+      if (!refusedBefore && Number.isFinite(localSeed) && localSeed <= file.rev) {
         if (validRaw(raw)) {
           var r = await call('TrainStore', 'save', { base: file.rev, bytes: raw, generation: file.generation }).catch(function (e) { return { accepted: false, reason: 'error:' + msg(e) }; });
           if (r && r.accepted) {
@@ -254,6 +288,7 @@
 
   w.__trainReady = function () {
     if (!store.readyPromise) {
+      showLoading('Loading your saved data…');          // cover the nav from the first IPC
       store.readyPromise = (async function () {
         try { await maybeImportFixture(); } catch (e) { note({ fixtureFailed: msg(e), stack: String(e && e.stack || '').slice(0, 300) }); }
         await hydrate();
@@ -270,7 +305,7 @@
   // UI tests to read.
   function reportGate0() {
     var p = w.Capacitor && w.Capacitor.Plugins;
-    var result = { bridge: { hasCapacitor: !!w.Capacitor, hasPlugins: !!p, pluginNames: p ? Object.keys(p).sort() : [] }, trainStore: null, capPlugin: null, isSecureContext: w.isSecureContext === true, origin: w.location.origin, errors: [], events: store.events.slice(-12), rev: store.rev, generation: store.generation };
+    var result = { bridge: { hasCapacitor: !!w.Capacitor, hasPlugins: !!p, pluginNames: p ? Object.keys(p).sort() : [] }, trainStore: null, capPlugin: null, isSecureContext: w.isSecureContext === true, origin: w.location.origin, errors: [], events: store.events.slice(-12), rev: store.rev, generation: store.generation, logLines: store.logRing.length };
     w.__gate0 = result;
     return call('TrainStore', 'ping', { echo: 'gate0' })
       .then(function (r) { result.trainStore = { via: 'proxy', value: r }; }, function (e) { result.errors.push('TrainStore.ping: ' + msg(e)); })
@@ -294,6 +329,12 @@
     if (store.refused) return Promise.resolve({ refused: true });
     return enqueueSave(base, json, gen);
   };
+  function refusalText(reason) {
+    var tail = ' This copy stops saving until the app relaunches. Export this screen’s copy from Settings if you need it.';
+    if (reason === 'stale') return 'This copy fell behind the app’s saved data.' + tail;
+    if (reason === 'generation') return 'The app’s store was replaced (an import, erase or recovery this screen did not see).' + tail;
+    return 'The app’s store refused the last save (' + reason + ').' + tail;
+  }
   function enqueueSave(base, json, gen) {
     store.pendingSaves++;
     var p = store.chain.then(function () {
@@ -310,11 +351,14 @@
           store.rev = r.rev; store.lastCommitted = { rev: r.rev, bytes: json }; store.lastSaveFailed = false;
           return { accepted: true, rev: r.rev };
         }
-        if (r && r.reason === 'generation') return { superseded: true };
+        // a generation refusal with this page's generation unchanged is not one of our transactions: the
+        // store was replaced by something this page did not see
+        var reason = (r && r.reason) || 'refused';
         store.refused = true; store.lastSaveFailed = true;
-        note({ refused: r && r.reason, base: base, fileRev: r && r.rev });
-        showBanner('This copy fell behind the app’s saved data (' + ((r && r.reason) || 'refused') + ') and stops saving until the app relaunches. Export this screen’s copy from Settings if you need it.');
-        return { refused: true, reason: r && r.reason };
+        lsSet(REFUSED_KEY, '1');
+        note({ refused: reason, base: base, fileRev: r && r.rev, fileGeneration: r && r.generation });
+        showBanner(refusalText(reason));
+        return { refused: true, reason: reason };
       }, function (e) {
         store.inflightSaves--;
         store.lastSaveFailed = true;
@@ -337,6 +381,7 @@
   function beginTx() { store.txHold = new Promise(function (resolve) { txRelease = resolve; }); }
   function endTx() { var r = txRelease; txRelease = null; store.txHold = null; if (r) r(); }
   async function quiesce() {
+    if (sync.quiescing) { note({ quiesceBusy: true }); return false; }   // one transaction at a time
     sync.quiescing = true;
     var idle = await waitFor(function () { return sync.inflight === 0; }, QUIESCE_MS);
     if (!idle) {
@@ -360,6 +405,20 @@
   function refusedModal(title, text) {
     w.showModal(title, text, [{ text: 'OK', cls: 'btn-primary', action: function () { w.hideModal(); } }]);
   }
+  // Native bumps the generation in its first control write, before the state write; a refusal after that
+  // point reports the new generation with the old rev and data. Adopt it (queued saves are superseded)
+  // and re-send this screen's copy from the file's rev, so nothing on screen stays uncommitted.
+  function adoptGeneration(r) {
+    if (!(r && typeof r.generation === 'number' && r.generation !== store.generation)) return false;
+    seed(Number(r.rev) || 0, store.seedRev, r.generation);
+    store.refused = false;
+    note({ adoptedGeneration: r.generation, rev: store.rev });
+    return true;
+  }
+  function resendLocal() {
+    var cur = safeParse(localRaw());
+    if (cur) { try { w.saveState(cur); } catch (e) { note({ resendFailed: msg(e) }); } }
+  }
   w.importData = function (ev) {
     var f = ev && ev.target && ev.target.files && ev.target.files[0]; if (!f) return;
     var r = new w.FileReader();
@@ -376,7 +435,7 @@
     var gone = ((cur && cur.log) || []).filter(function (e) { return e && e.sessionId && !incoming[e.sessionId]; });
     var text = 'Replace the data on this phone with ' + data.log.length + ' session' + (data.log.length === 1 ? '' : 's') + ' from the backup?';
     if (gone.length) text += ' ' + gone.length + ' session' + (gone.length === 1 ? '' : 's') + ' now on this phone ' + (gone.length === 1 ? 'is' : 'are') + ' not in it and would disappear: ' + gone.slice(0, 5).map(function (e) { return (e.date || '?') + ' ' + (e.sessionType || ''); }).join(', ') + (gone.length > 5 ? ' and more' : '') + '.';
-    text += ' The current data is kept as a snapshot in the app.';
+    text += ' The current data is kept as a snapshot in the app’s store.';
     w.showModal('Import data?', text, [
       { text: 'Cancel', cls: 'btn-secondary', action: function () { w.hideModal(); } },
       { text: 'Import', cls: 'btn-primary', action: function () { w.hideModal(); runImport(data); } }
@@ -394,7 +453,14 @@
         if (r && r.accepted) break;
         if (!(r && r.reason === 'stale')) break;      // a save already sent landed first: read the rev again
       }
-      if (!(r && r.accepted)) { abortTx(); note({ importRefused: r && r.reason }); refusedModal('Import did not happen', 'The app refused it (' + ((r && r.reason) || 'unknown') + '). Nothing changed; try again.'); return; }
+      if (!(r && r.accepted)) {
+        var adopted = adoptGeneration(r);
+        abortTx();
+        if (adopted) resendLocal();
+        note({ importRefused: r && r.reason });
+        refusedModal('Import did not happen', 'The app refused it (' + ((r && r.reason) || 'unknown') + '). Nothing changed; try again.');
+        return;
+      }
       store.generation = r.generation;          // queued saves from before this are superseded
       lsSet(STATE_KEY, bytes);
       lsDel(SNAP_KEY); store.snapshot = null;
@@ -419,7 +485,14 @@
     if (!(await quiesce())) return;
     try {
       var r = await call('TrainStore', 'erase');
-      if (!(r && r.accepted)) { abortTx(); refusedModal('Erase did not happen', 'The app refused it (' + ((r && r.reason) || 'unknown') + '). Nothing changed.'); return; }
+      if (!(r && r.accepted)) {
+        var adopted = adoptGeneration(r);
+        abortTx();
+        if (adopted) resendLocal();
+        note({ eraseRefused: r && r.reason });
+        refusedModal('Erase did not happen', 'The app refused it (' + ((r && r.reason) || 'unknown') + '). Nothing changed.');
+        return;
+      }
       store.generation = r.generation;
       lsDel(STATE_KEY); lsDel(SNAP_KEY); store.snapshot = null;
       seed(0, 0, r.generation);
