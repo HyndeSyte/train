@@ -131,7 +131,8 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         let args = ProcessInfo.processInfo.arguments
         var fixture: String? = nil
         if let i = args.firstIndex(of: "-trainFixture"), i + 1 < args.count { fixture = args[i + 1] }
-        call.resolve(["fixture": fixture.map { $0 as Any } ?? NSNull(), "smoke": args.contains("-trainSmoke")])
+        let fixtureValue: Any = fixture.map { $0 as Any } ?? (NSNull() as Any)
+        call.resolve(["fixture": fixtureValue, "smoke": args.contains("-trainSmoke")])
     }
 
     private func publishSummary() {
@@ -179,14 +180,16 @@ final class TrainStore {
     private(set) var control = TrainControl()
 
     init() {
-        let base = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
-            ?? fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        dir = base.appendingPathComponent("Train", isDirectory: true)
-        stateURL = dir.appendingPathComponent("state.json")
-        controlURL = dir.appendingPathComponent("control.json")
-        snapshotsURL = dir.appendingPathComponent("snapshots", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? fm.createDirectory(at: snapshotsURL, withIntermediateDirectories: true)
+        let manager = FileManager.default
+        let base = (try? manager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
+            ?? manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let d = base.appendingPathComponent("Train", isDirectory: true)
+        dir = d
+        stateURL = d.appendingPathComponent("state.json")
+        controlURL = d.appendingPathComponent("control.json")
+        snapshotsURL = d.appendingPathComponent("snapshots", isDirectory: true)
+        try? manager.createDirectory(at: d, withIntermediateDirectories: true)
+        try? manager.createDirectory(at: d.appendingPathComponent("snapshots", isDirectory: true), withIntermediateDirectories: true)
         control = loadControl()
     }
 
@@ -211,7 +214,7 @@ final class TrainStore {
 
     // MARK: helpers
 
-    private func orNull(_ s: String?) -> Any { s.map { $0 as Any } ?? NSNull() }
+    private func orNull(_ s: String?) -> Any { s.map { $0 as Any } ?? (NSNull() as Any) }
 
     static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -258,11 +261,15 @@ final class TrainStore {
     // Writes the state bytes atomically inside a background task, so a save started just before the
     // app is backgrounded still finishes.
     private func writeState(_ data: Data) -> Bool {
+        // UIApplication is main-actor bound; the task bracket is taken and released on main, the write
+        // itself stays on the store queue.
         var task = UIBackgroundTaskIdentifier.invalid
-        task = UIApplication.shared.beginBackgroundTask(withName: "train.store.write") {
-            UIApplication.shared.endBackgroundTask(task); task = .invalid
+        DispatchQueue.main.sync {
+            task = UIApplication.shared.beginBackgroundTask(withName: "train.store.write") {
+                UIApplication.shared.endBackgroundTask(task); task = .invalid
+            }
         }
-        defer { if task != .invalid { UIApplication.shared.endBackgroundTask(task) } }
+        defer { DispatchQueue.main.sync { if task != .invalid { UIApplication.shared.endBackgroundTask(task); task = .invalid } } }
         do { try data.write(to: stateURL, options: .atomic); return true } catch { return false }
     }
 
@@ -307,7 +314,7 @@ final class TrainStore {
 
     func save(base: Int, bytes: String, generation: Int) -> [String: Any] {
         let current = stateData()
-        let currentHash = current.map { TrainStore.sha256Hex($0) } ?? NSNull()
+        let currentHash: Any = current.map { TrainStore.sha256Hex($0) as Any } ?? (NSNull() as Any)
         func refuse(_ reason: String) -> [String: Any] { ["accepted": false, "reason": reason, "rev": control.rev, "generation": control.generation, "hash": currentHash] }
         if generation != control.generation { return refuse("generation") }
         let data = Data(bytes.utf8)
@@ -383,10 +390,10 @@ final class TrainStore {
         out["sessions"] = log.count
         out["sessionIds"] = log.compactMap { $0["sessionId"] as? String }
         if let last = log.last {
-            out["lastSessionId"] = last["sessionId"] as? String ?? NSNull()
-            out["lastSessionType"] = last["sessionType"] as? String ?? NSNull()
-            out["lastDate"] = last["date"] as? String ?? NSNull()
-            out["lastStatus"] = last["sessionStatus"] as? String ?? NSNull()
+            out["lastSessionId"] = orNull(last["sessionId"] as? String)
+            out["lastSessionType"] = orNull(last["sessionType"] as? String)
+            out["lastDate"] = orNull(last["date"] as? String)
+            out["lastStatus"] = orNull(last["sessionStatus"] as? String)
         }
         return out
     }
