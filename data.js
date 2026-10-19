@@ -5,7 +5,7 @@
 // recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '7.4.1';
+window.TRAIN_DATA_VERSION = '7.4.2';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -41,17 +41,19 @@ window.EXERCISE_LIBRARY = {
   // ---- v7.3 RECOVERY SWAPS (2026-10-15) ----
   // Every swap has its own entry, so a legacy ladder position (some of them loaded, e.g.
   // DB Bulgarian Split Squat) can never leak into a recovery session. ladder[0] is the
-  // name shown; the rest reads as the progression: reps first, then angle. No dumbbells,
-  // no hanging, no flat palms, nothing overhead. openReps = no fixed rep target.
+  // name shown; the rest reads as the progression: reps first, then angle. No hanging, no
+  // flat palms, nothing overhead, and no dumbbells on upper-body work. openReps = no fixed
+  // rep target. Lane C (merged only once PT confirms the 25 lb lift): the two leg gates carry
+  // one dumbbell held at the chest with both hands; the pair of dumbbells waits for clearance.
   'rec-ring-row': { name:'Ring Row (upright)', grip:'low', ladder:['Ring Row (steep, upright)','Ring Row (a little less steep)','Ring Row (moderate lean)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Stand steep, close to upright. Ring in the fingers, wrist straight, pressure off the pinky side. Reps first, then lean back a little.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-pulldown': { name:'Straight-Arm Ring Pulldown', grip:'low', ladder:['Straight-Arm Ring Pulldown (light lean)','Straight-Arm Ring Pulldown (more lean)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Rings set high. Lean in a little with straight arms, rings at chest height, then sweep them down to your hips and back. Ring in the fingers, shoulder blades moving freely. The lean sets the load: keep it light.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-incline-pushup': { name:'Incline Push-Up (edge grip)', grip:'low', ladder:['Incline Push-Up (counter height)','Incline Push-Up (table height)','Incline Push-Up (bench height)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Hands grip the edge of a counter or bench, wrists straight, no flat palms. Start at counter height. Reps first, then a lower surface.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-wall-plus': { name:'Wall Push-Up Plus (forearms)', grip:'none', ladder:['Wall Push-Up Plus (forearms)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Forearms on the wall, elbows at shoulder height or below. Push the wall away so the shoulder blades spread, then let them come back. Light, small range.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-hollow-hold': { name:'Hollow Hold (arms down)', grip:'none', ladder:['Hollow Hold (arms toward feet)'], repRange:[15,30], sets:3, unit:'sec', reference:{ status:'text', cue:'Lower back pressed to the floor, arms long by your sides, reaching toward your feet. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-glute-bridge': { name:'Glute Bridge', grip:'none', ladder:['Glute Bridge'], repRange:[10,15], sets:2, unit:'reps', reference:{ status:'text', cue:'Feet flat, arms resting by your sides. Drive through the heels, squeeze at the top, lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  'rec-split-squat': { name:'Rear-Foot-Elevated Split Squat', grip:'none', openReps:true, ladder:['Rear-Foot-Elevated Split Squat (bodyweight)'], repRange:[6,15], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Back foot on the bench, hands free, no dumbbells. Upright torso. Open reps: log what you do.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-split-squat': { name:'Rear-Foot-Elevated Split Squat', grip:'low', openReps:true, ladder:['Rear-Foot-Elevated Split Squat (bodyweight)','Rear-Foot-Elevated Split Squat (one dumbbell at the chest)'], repRange:[6,15], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Back foot on the bench, upright torso. PT\u2019s 25 lb lift confirmed: one dumbbell held at the chest with both hands, the bell head resting in the heels of the hands, fingers loose, elbows in. Bodyweight on a day the arm check says worse. Open reps: log what you do.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-sl-rdl': { name:'Single-Leg RDL (bodyweight)', grip:'none', ladder:['Single-Leg RDL (bodyweight)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Bodyweight, hands free. Hinge at the hip, not the back. A fingertip on the wall for balance if needed, no weight through the hand.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  'rec-cossack': { name:'Cossack Squat (bodyweight)', grip:'none', ladder:['Cossack Squat (bodyweight, hands free)'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Bodyweight, hands free. Heel stays planted. Go only as deep as you can control.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-cossack': { name:'Cossack Squat', grip:'low', ladder:['Cossack Squat (bodyweight, hands free)','Cossack Squat (one dumbbell at the chest)'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Heel stays planted. Go only as deep as you can control. PT\u2019s 25 lb lift confirmed: one dumbbell held at the chest with both hands as a counterweight, the bell head in the heels of the hands, fingers loose. Bodyweight on a day the arm check says worse.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-dead-bug': { name:'Dead Bug', grip:'none', ladder:['Dead Bug (arms toward the ceiling)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'On your back, lower back pressed down, arms reaching toward the ceiling. Lower the opposite leg slowly while the arms stay put. Arms go further only as PT\u2019s rule allows.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-reverse-crunch': { name:'Reverse Crunch (floor)', grip:'none', ladder:['Reverse Crunch (floor)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'On your back, arms resting by your sides. Curl the knees toward the chest and lift the hips a little, then lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } }
 };
