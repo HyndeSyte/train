@@ -8,41 +8,6 @@ import XCTest
 final class SmokeUITests: XCTestCase {
     private let args = ["-trainFixture", "smoke", "-trainSmoke", "-trainUITest"]
 
-    // One snapshot of the hierarchy (allElementsBoundByIndex re-resolves each element, and the page
-    // re-renders on its own timers, so an index can vanish between the count and the label read).
-    private func labelsOf(_ app: XCUIApplication) -> String {
-        let lines = app.debugDescription.split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { $0.hasPrefix("Button,") || $0.hasPrefix("StaticText,") }
-            .prefix(40)
-        return String(lines.joined(separator: " | ").prefix(1800))
-    }
-    @discardableResult
-    private func tapIfExists(_ e: XCUIElement) -> Bool {
-        if e.exists && e.isHittable { e.tap(); return true }
-        return false
-    }
-    private func waitLabel(_ e: XCUIElement, contains needle: String, timeout: TimeInterval = 60) -> Bool {
-        let p = NSPredicate(format: "label CONTAINS %@", needle)
-        let exp = expectation(for: p, evaluatedWith: e, handler: nil)
-        return XCTWaiter().wait(for: [exp], timeout: timeout) == .completed
-    }
-    private func json(_ s: String) -> [String: Any] {
-        (try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any]) ?? [:]
-    }
-    // Chained saves can still be committing when a wait returns; read until the summary is the same
-    // across two reads a second apart.
-    private func stableLabel(_ e: XCUIElement, tries: Int = 20) -> String {
-        var last = e.label
-        for _ in 0..<tries {
-            sleep(1)
-            let now = e.label
-            if now == last { return now }
-            last = now
-        }
-        return last
-    }
-
     func testFixtureSessionSurvivesRelaunch() throws {
         let app = XCUIApplication()
         app.launchArguments = args + ["-trainResetStore"]   // the first launch starts from an empty phone
@@ -50,45 +15,18 @@ final class SmokeUITests: XCTestCase {
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 60), "web view present")
         let store = app.staticTexts["store-summary"]
-        let gate = app.staticTexts["gate0-result"]
         XCTAssertTrue(store.waitForExistence(timeout: 60), "store-summary label present")
-        _ = waitLabel(gate, contains: "{", timeout: 90)
-        print("SMOKE_DEBUG_BOOT store=" + store.label + " gate0=" + gate.label)
-        XCTAssertTrue(waitLabel(store, contains: "\"sessions\":2"), "the fixture was imported into the store: " + store.label + " | bridge notes: " + gate.label)
-        let start = web.buttons["Start Today's Session"]
-        XCTAssertTrue(start.waitForExistence(timeout: 60), "Home is writable after hydration; " + labelsOf(app))
+        print("SMOKE_DEBUG_BOOT store=" + store.label)
+        XCTAssertTrue(waitLabel(store, contains: "\"sessions\":2"), "the fixture was imported into the store: " + store.label)
+        XCTAssertTrue(web.buttons["Start Today's Session"].waitForExistence(timeout: 60), "Home is writable after hydration; " + labelsOf(app))
+        // the fixture import recorded verification like a real Import; at the record's rev the state is verified
+        XCTAssertTrue(waitSummary(store, timeout: 20) { (($0["bridge"] as? [String: Any])?["verified"] as? [String: Any])?["ok"] as? Bool == true }, "verified after the import: " + store.label)
+        XCTAssertEqual(bridgeNote(store, "verified")["changedSince"] as? Bool, false, store.label)
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind'")).firstMatch.exists, "no banner on first launch")
 
         // 1. one recovery ring session through the real UI
-        start.tap()
-        let same = web.buttons["Same"]                 // the day's arm check
-        if same.waitForExistence(timeout: 5) { same.tap() }
-        sleep(1)
-        print("SMOKE_DEBUG_AFTER_START " + labelsOf(app))
-        var completed = false
-        var trail: [String] = []
-        for _ in 0..<120 {
-            if tapIfExists(web.buttons["Complete Session"]) { trail.append("Complete Session"); completed = true; break }
-            if tapIfExists(web.buttons["Finish"]) { trail.append("Finish"); continue }
-            if tapIfExists(web.buttons["Start Next Set"]) { trail.append("Start Next Set"); continue }
-            let skipRest = web.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Skip rest'")).firstMatch
-            if tapIfExists(skipRest) { trail.append("Skip rest"); continue }
-            if tapIfExists(web.buttons["Log set"]) { trail.append("Log set"); continue }
-            if tapIfExists(web.buttons["End set early"]) { trail.append("End set early"); continue }
-            if tapIfExists(web.buttons["Start hold"]) { trail.append("Start hold"); continue }
-            if tapIfExists(web.buttons["Begin Training"]) { trail.append("Begin Training"); continue }
-            if tapIfExists(web.buttons["Continue"]) { trail.append("Continue"); continue }
-            if tapIfExists(web.buttons["Close"]) { trail.append("Close"); continue }
-            if tapIfExists(web.buttons["Skip Form"]) { trail.append("Skip Form"); continue }
-            if tapIfExists(web.buttons["Skip this step"]) { trail.append("Skip this step"); continue }
-            // anything else that advances: the first button that is not a stop, a skip or a tab (one query,
-            // resolved at tap time, instead of enumerating elements that may re-render under us)
-            let avoid = ["Stop", "Discard", "Skip", "Today", "History", "Settings", "Exercises", "Pick", "Reset", "Cancel", "preview", "Preview", "rules", "Rules", "Note", "Redo", "Pause", "Reference", "Demo", "Dismiss", "Export"]
-            let format = "label != '' AND NOT (" + avoid.map { _ in "label CONTAINS %@" }.joined(separator: " OR ") + ")"
-            let other = web.buttons.matching(NSPredicate(format: format, argumentArray: avoid)).firstMatch
-            if other.exists && other.isHittable { let l = other.label; trail.append("tap:" + l); other.tap(); continue }
-            sleep(1)
-        }
+        let run = runSessionToComplete(app, web)
+        let completed = run.completed, trail = run.trail
         print("SMOKE_TRAIL " + trail.joined(separator: " > "))
         XCTAssertTrue(completed, "reached Complete Session; trail: " + trail.joined(separator: " > ") + "; " + labelsOf(app))
 
@@ -133,6 +71,12 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(again["lastSessionId"] as? String, lastId)
         XCTAssertEqual((again["rev"] as? NSNumber)?.intValue, rev1, "no write on an equal-hash relaunch: before " + afterText + " after " + againText)
         XCTAssertEqual(again["hash"] as? String, after["hash"] as? String, "same bytes after the relaunch")
+        // the Import's verdict is read back from the sidecar after the kill and reopen; the state moved on since
+        XCTAssertTrue(waitSummary(store, timeout: 20) { (($0["bridge"] as? [String: Any])?["verified"] as? [String: Any])?["changedSince"] as? Bool == true }, "verified record after relaunch: " + store.label)
+        let verified = bridgeNote(store, "verified")
+        XCTAssertEqual(verified["ok"] as? Bool, true, "the verdict made at the import's rev stands: " + String(describing: verified))
+        XCTAssertEqual(int(verified["rev"]), 1, "the record's rev is the fixture import's")
+        XCTAssertEqual(int(verified["sessionsNow"]), 3)
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind' OR label CONTAINS 'did not reach'")).firstMatch.exists, "no banner after relaunch")
 
         web.buttons.matching(NSPredicate(format: "label CONTAINS 'History'")).firstMatch.tap()

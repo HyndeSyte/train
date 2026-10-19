@@ -36,7 +36,9 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "wakeRelease", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cue", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setSoundOff", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "testNote", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "testNote", returnType: CAPPluginReturnPromise),
+        // cutover build (plan section 5): the Import's verification record
+        CAPPluginMethod(name: "setVerified", returnType: CAPPluginReturnPromise)
     ]
     private(set) var lastReport: String?
     private let store = TrainStore()
@@ -44,6 +46,15 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
     private let audio = TrainAudio()    // main thread only
     private var testNotes: [String: Any] = [:]   // bridge-side state the UI tests read through the summary (Debug + -trainUITest)
     private var observing = false
+    // The forced-failure drill (Debug + -trainUITest only): -trainFailSaveOnSessions <n> refuses, once, the
+    // first save whose log holds n entries (the finalize of the nth session) with reason "write".
+    private var failSaveOnSessions: Int? = {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if TrainStorePlugin.uiTest, let i = args.firstIndex(of: "-trainFailSaveOnSessions"), i + 1 < args.count { return Int(args[i + 1]) }
+        #endif
+        return nil
+    }()
     // The CI UI tests launch the app with -trainUITest (Debug builds only): the two report labels exist and
     // the store summary is published after every commit. A real launch has neither.
     static let uiTest: Bool = {
@@ -89,12 +100,19 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    // bridge.js's gate 0 report lands in the test summary (bridge.gate0); the separate label is gone.
     @objc func report(_ call: CAPPluginCall) {
         let json = call.getString("json") ?? ""
         lastReport = json
-        DispatchQueue.main.async { [weak self] in
-            (self?.bridge?.viewController as? TrainBridgeViewController)?.showGate0(json)
+        #if DEBUG
+        if TrainStorePlugin.uiTest, let data = json.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.testNotes["gate0"] = obj
+                self.publishSummaryFromMain()
+            }
         }
+        #endif
         call.resolve(["stored": true, "length": json.count])
     }
 
@@ -119,10 +137,34 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
                 call.resolve(["accepted": false, "reason": "invalid", "rev": store.control.rev, "generation": store.control.generation])
                 return
             }
+            if let refusal = self?.drillRefusal(bytes: bytes, base: base, generation: generation) {
+                call.resolve(refusal)
+                return
+            }
             let r = store.save(base: base, bytes: bytes, generation: generation)
             self?.publishSummary()
             call.resolve(r)
         }
+    }
+
+    // On the store queue. The drill's one refusal, recorded in the test notes. It simulates a failed write,
+    // so it answers only where the compare-and-swap would have passed: a stale base or another generation
+    // gets the store's real answer (and its lineage marker on the page).
+    private func drillRefusal(bytes: String, base: Int, generation: Int) -> [String: Any]? {
+        guard let n = failSaveOnSessions else { return nil }
+        guard base == store.control.rev, generation == store.control.generation else { return nil }
+        guard let obj = try? JSONSerialization.jsonObject(with: Data(bytes.utf8)) as? [String: Any], let log = obj["log"] as? [[String: Any]], log.count == n else { return nil }
+        failSaveOnSessions = nil
+        let rev = store.control.rev
+        let generation = store.control.generation
+        let lastId: Any = (log.last?["sessionId"] as? String).map { $0 as Any } ?? (NSNull() as Any)
+        let record: [String: Any] = ["sessions": n, "rev": rev, "lastSessionId": lastId]
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.testNotes["failedSave"] = record
+            self.publishSummaryFromMain()
+        }
+        return ["accepted": false, "reason": "write", "rev": rev, "generation": generation, "drill": true]
     }
 
     @objc func importState(_ call: CAPPluginCall) {
@@ -180,13 +222,17 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         var fixture: Any = NSNull()
         var smoke = false
         var reset = false
+        var probe = false
+        var probeClient = "pwa"
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-trainFixture"), i + 1 < args.count { fixture = args[i + 1] }
         smoke = args.contains("-trainSmoke")
         reset = args.contains("-trainResetStore")
+        probe = TrainStorePlugin.uiTest && args.contains("-trainProbeTombstone")   // the one live call a CI run may make
+        if let i = args.firstIndex(of: "-trainProbeClient"), i + 1 < args.count { probeClient = args[i + 1] }   // the X-Train-Client the probe sends
         #endif
-        call.resolve(["fixture": fixture, "smoke": smoke, "reset": reset, "uiTest": TrainStorePlugin.uiTest])
+        call.resolve(["fixture": fixture, "smoke": smoke, "reset": reset, "uiTest": TrainStorePlugin.uiTest, "probeTombstone": probe, "probeClient": probeClient])
     }
 
     // bridge.js writes its log ring here when a banner shows or a save is refused.
@@ -237,6 +283,20 @@ public class TrainStorePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    // The Import's verification record (fingerprint, synced ids, count, digest, time), kept in the sidecar
+    // so "verified" survives a kill and is recomputed on every boot.
+    @objc func setVerified(_ call: CAPPluginCall) {
+        let json = call.getString("json")
+        let store = self.store
+        store.queue.async {
+            guard let json = json, let data = json.data(using: .utf8), let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                call.resolve(["ok": false])
+                return
+            }
+            call.resolve(["ok": store.setVerified(obj)])
+        }
+    }
+
     // Debug + -trainUITest only: merges bridge-side state into the summary the UI tests read.
     @objc func testNote(_ call: CAPPluginCall) {
         #if DEBUG
@@ -280,12 +340,14 @@ struct TrainControl {
     var recoveredFrom: String? = nil
     var committedAt: String? = nil
     var soundOff: Bool? = nil        // the app's train_sound_off key, mirrored here so it survives a WebView eviction
+    var verified: [String: Any]? = nil   // the last Import's verification record (bridge.js computes and checks it)
 
     var dictionary: [String: Any] {
         var d: [String: Any] = ["generation": generation, "rev": rev, "syncArmed": syncArmed]
         if let r = recoveredFrom { d["recoveredFrom"] = r }
         if let c = committedAt { d["committedAt"] = c }
         if let s = soundOff { d["soundOff"] = s }
+        if let v = verified { d["verified"] = v }
         return d
     }
 
@@ -297,6 +359,7 @@ struct TrainControl {
         c.recoveredFrom = d["recoveredFrom"] as? String
         c.committedAt = d["committedAt"] as? String
         c.soundOff = (d["soundOff"] as? NSNumber)?.boolValue
+        c.verified = d["verified"] as? [String: Any]
         return c
     }
 }
@@ -356,6 +419,7 @@ final class TrainStore {
 
     private func orNull(_ s: String?) -> Any { s.map { $0 as Any } ?? (NSNull() as Any) }
     private var soundOffValue: Any { control.soundOff.map { $0 as Any } ?? (NSNull() as Any) }
+    private var verifiedValue: Any { control.verified.map { $0 as Any } ?? (NSNull() as Any) }
 
     static func sha256Hex(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -430,13 +494,13 @@ final class TrainStore {
     func read() -> [String: Any] {
         guard let data = stateData() else {
             // a missing file is a completed read at rev 0 (first launch, or after Erase)
-            var out: [String: Any] = ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue]
+            var out: [String: Any] = ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "verified": verifiedValue]
             if control.rev != 0 { var c = control; c.rev = 0; writeControl(c); out["healed"] = true }
             return out
         }
         if let parsed = parse(data) {
             let rev = parsed.rev ?? 0
-            var out: [String: Any] = ["generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(data), "bytes": String(decoding: data, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue]
+            var out: [String: Any] = ["generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(data), "bytes": String(decoding: data, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "verified": verifiedValue]
             if rev != control.rev { var c = control; c.rev = rev; writeControl(c); out["healed"] = true }   // the bytes are the truth
             out["rev"] = control.rev
             return out
@@ -462,9 +526,9 @@ final class TrainStore {
             _ = writeControl(c)
         }
         if let d = recoveredData {
-            return ["rev": control.rev, "generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(d), "bytes": String(decoding: d, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "recovered": true]
+            return ["rev": control.rev, "generation": control.generation, "hasFile": true, "hash": TrainStore.sha256Hex(d), "bytes": String(decoding: d, as: UTF8.self), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "verified": verifiedValue, "recovered": true]
         }
-        return ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "recovered": true]
+        return ["rev": 0, "generation": control.generation, "hasFile": false, "hash": NSNull(), "recoveredFrom": orNull(control.recoveredFrom), "syncArmed": control.syncArmed, "soundOff": soundOffValue, "verified": verifiedValue, "recovered": true]
     }
 
     // MARK: compare-and-swap save
@@ -509,6 +573,7 @@ final class TrainStore {
             var first = control
             first.syncArmed = false
             first.generation += 1
+            first.verified = nil              // the previous Import's record never outlives its state
             guard writeControl(first) else { return refuse("disarm") }
             guard writeState(data) else { return refuse("write") }
             var c = control
@@ -526,6 +591,7 @@ final class TrainStore {
             var first = control
             first.syncArmed = false
             first.generation += 1
+            first.verified = nil
             guard writeControl(first) else { return refuse("disarm") }
             if fm.fileExists(atPath: stateURL.path) {
                 do { try fm.removeItem(at: stateURL) } catch { return refuse("write") }
@@ -550,17 +616,24 @@ final class TrainStore {
         return writeControl(c)
     }
 
+    func setVerified(_ record: [String: Any]) -> Bool {
+        guard JSONSerialization.isValidJSONObject(record) else { return false }
+        var c = control
+        c.verified = record
+        return writeControl(c)
+    }
+
     // MARK: status and summary (parsed, never re-serialized)
 
     func status() -> [String: Any] {
         var out: [String: Any] = ["rev": control.rev, "generation": control.generation, "committedAt": orNull(control.committedAt), "syncArmed": control.syncArmed,
-                                  "recoveredFrom": orNull(control.recoveredFrom), "hasFile": fm.fileExists(atPath: stateURL.path), "snapshots": snapshotNames().count, "soundOff": soundOffValue]
+                                  "recoveredFrom": orNull(control.recoveredFrom), "hasFile": fm.fileExists(atPath: stateURL.path), "snapshots": snapshotNames().count, "soundOff": soundOffValue, "verified": verifiedValue]
         if let p = parity { for (k, v) in p() { out[k] = v } }
         return out
     }
 
     func summary() -> [String: Any] {
-        var out: [String: Any] = ["rev": control.rev, "generation": control.generation, "hasFile": false, "sessions": 0]
+        var out: [String: Any] = ["rev": control.rev, "generation": control.generation, "hasFile": false, "sessions": 0, "syncArmed": control.syncArmed]
         guard let data = stateData(), let parsed = parse(data) else { return out }
         out["hasFile"] = true
         out["hash"] = TrainStore.sha256Hex(data)

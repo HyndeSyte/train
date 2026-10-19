@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 8,
+  "progressionEngineVersion": 3,
+  "rotationIndex": 0,
+  "nextSessionOverride": null,
+  "nextSessionSequence": 1,
+  "pendingDeletes": ["train-probe-unused-00000000"],
+  "activeSession": null,
+  "legacy": { "promotions": {}, "exerciseVariations": {}, "promotionLog": [] },
+  "anchorProgress": {},
+  "recovery": { "on": true, "cardioClear": false, "since": "2026-10-15T12:00:00.000Z", "offAt": null },
+  "armCheck": null,
+  "log": []
+}

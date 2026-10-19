@@ -10,25 +10,7 @@ import XCTest
 final class ParityUITests: XCTestCase {
     private let args = ["-trainFixture", "smoke", "-trainSmoke", "-trainUITest"]
 
-    private func waitLabel(_ e: XCUIElement, contains needle: String, timeout: TimeInterval = 60) -> Bool {
-        let p = NSPredicate(format: "label CONTAINS %@", needle)
-        let exp = expectation(for: p, evaluatedWith: e, handler: nil)
-        return XCTWaiter().wait(for: [exp], timeout: timeout) == .completed
-    }
-    private func json(_ s: String) -> [String: Any] {
-        (try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any]) ?? [:]
-    }
     private func wake(_ store: XCUIElement) -> [String: Any] { json(store.label)["wake"] as? [String: Any] ?? [:] }
-    // polls the parsed summary until the condition holds (the label can jump past a value between reads)
-    private func waitSummary(_ store: XCUIElement, timeout: TimeInterval = 30, _ cond: ([String: Any]) -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if cond(json(store.label)) { return true }
-            usleep(400_000)
-        }
-        return cond(json(store.label))
-    }
-    private func int(_ v: Any?) -> Int { (v as? NSNumber)?.intValue ?? -1 }
     private func embed(_ store: XCUIElement) -> [String: Any] { (json(store.label)["bridge"] as? [String: Any])?["embed"] as? [String: Any] ?? [:] }
 
     func testWakeReacquireAcrossBackgroundAndEmbed() throws {
@@ -80,8 +62,21 @@ final class ParityUITests: XCTestCase {
         XCTAssertEqual(wake(store)["idleTimerDisabled"] as? Bool, false)
         print("PARITY_WAKE_3 " + String(describing: wake(store)))
 
-        // 3. embeds through the wrapper
+        // 3. the native switch: "Start syncing from this app" opens its confirm; Cancel leaves it off
         web.buttons.matching(NSPredicate(format: "label CONTAINS 'Settings'")).firstMatch.tap()
+        let switchButton = web.buttons["Start syncing from this app"]
+        XCTAssertTrue(switchButton.waitForExistence(timeout: 15), "Settings offers the switch; " + labelsOf(app))
+        switchButton.tap()
+        let confirm = web.staticTexts["Start syncing from this app?"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 10), "the confirm modal is visible; " + labelsOf(app))
+        let cancel = web.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertFalse(confirm.waitForExistence(timeout: 2), "the confirm closed")
+        XCTAssertTrue(waitSummary(store, timeout: 10) { ($0["syncArmed"] as? Bool) == false }, "the switch stays off: " + store.label)
+        print("PARITY_SWITCH confirm shown and cancelled; syncArmed false")
+
+        // 4. embeds through the wrapper
         let embedButton = web.buttons["Embed test"]
         XCTAssertTrue(embedButton.waitForExistence(timeout: 15), "Settings offers the uiTest embed button")
         embedButton.tap()

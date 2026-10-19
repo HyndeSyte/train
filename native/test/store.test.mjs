@@ -683,7 +683,8 @@ test('Settings shows the store line and the loaded count and digest', async () =
   page.settings();
   await sleep(20);
   assert.match(page.els['store-status'].textContent, /^Store: rev 3 (committed \S+|\(nothing committed yet\)) · generation 1$/);
-  assert.match(page.els['store-loaded'].textContent, /^3 sessions loaded · digest [0-9a-f]{8}$/);
+  assert.match(page.els['store-loaded'].textContent, /^3 sessions · digest [0-9a-f]{8} loaded$/);
+  assert.match(page.els['settings-content'].innerHTML, /Full log as JSON, via the share sheet · 3 sessions · digest [0-9a-f]{8}/, 'the count and digest beside Export');
 });
 
 // ---- the smoke fixture path ------------------------------------------------------------------------

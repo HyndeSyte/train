@@ -2,27 +2,26 @@ import XCTest
 
 // Gate 0: the shell launches, bridge.js reaches one in-app plugin (TrainStore.ping) and one Capacitor
 // plugin (Filesystem.getUri) through the injected bridge, in a secure context at capacitor://localhost.
-// bridge.js hands its JSON report to TrainStore.report, which the view controller shows in a label with
-// the accessibility identifier gate0-result; this test reads that label.
+// bridge.js hands its JSON report to TrainStore.report, which lands in the test summary (store-summary,
+// bridge.gate0); this test reads it there.
 final class Gate0UITests: XCTestCase {
     func testGate0BridgeAnswers() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-trainUITest"]      // the report labels exist only under this argument (Debug builds)
         app.launch()
 
-        let label = app.staticTexts["gate0-result"]
-        XCTAssertTrue(label.waitForExistence(timeout: 90), "gate0 label is in the view")
-        let reported = expectation(for: NSPredicate(format: "label BEGINSWITH '{'"), evaluatedWith: label, handler: nil)
-        wait(for: [reported], timeout: 90)
-
-        let json = label.label
+        let store = app.staticTexts["store-summary"]
+        XCTAssertTrue(store.waitForExistence(timeout: 90), "store-summary label is in the view")
+        XCTAssertTrue(waitSummary(store, timeout: 90) { ($0["bridge"] as? [String: Any])?["gate0"] != nil }, "the gate 0 report reached the summary: " + store.label)
+        let json = store.label
         print("GATE0_RESULT " + json)
         let attachment = XCTAttachment(string: json)
         attachment.name = "gate0.json"
         attachment.lifetime = .keepAlways
         add(attachment)
 
-        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any], "report is JSON: " + json)
+        let obj = bridgeNote(store, "gate0")
+        XCTAssertFalse(obj.isEmpty, "report in the summary: " + json)
         let errors = obj["errors"] as? [Any] ?? ["missing"]
         XCTAssertEqual(errors.count, 0, "no bridge errors: " + json)
         XCTAssertEqual(obj["isSecureContext"] as? Bool, true, "secure context")
