@@ -8,9 +8,14 @@ import XCTest
 final class SmokeUITests: XCTestCase {
     private let args = ["-trainFixture", "smoke", "-trainSmoke"]
 
-    private func labelsOf(_ web: XCUIElement) -> String {
-        let buttons = web.buttons.allElementsBoundByIndex.prefix(30).map { $0.label }
-        return "buttons: " + buttons.joined(separator: " | ")
+    // One snapshot of the hierarchy (allElementsBoundByIndex re-resolves each element, and the page
+    // re-renders on its own timers, so an index can vanish between the count and the label read).
+    private func labelsOf(_ app: XCUIApplication) -> String {
+        let lines = app.debugDescription.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasPrefix("Button,") || $0.hasPrefix("StaticText,") }
+            .prefix(40)
+        return String(lines.joined(separator: " | ").prefix(1800))
     }
     @discardableResult
     private func tapIfExists(_ e: XCUIElement) -> Bool {
@@ -39,7 +44,7 @@ final class SmokeUITests: XCTestCase {
         print("SMOKE_DEBUG_BOOT store=" + store.label + " gate0=" + gate.label)
         XCTAssertTrue(waitLabel(store, contains: "\"sessions\":2"), "the fixture was imported into the store: " + store.label + " | bridge notes: " + gate.label)
         let start = web.buttons["Start Today's Session"]
-        XCTAssertTrue(start.waitForExistence(timeout: 60), "Home is writable after hydration; " + labelsOf(web))
+        XCTAssertTrue(start.waitForExistence(timeout: 60), "Home is writable after hydration; " + labelsOf(app))
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind'")).firstMatch.exists, "no banner on first launch")
 
         // 1. one recovery ring session through the real UI
@@ -47,7 +52,7 @@ final class SmokeUITests: XCTestCase {
         let same = web.buttons["Same"]                 // the day's arm check
         if same.waitForExistence(timeout: 5) { same.tap() }
         sleep(1)
-        print("SMOKE_DEBUG_AFTER_START " + labelsOf(web) + " | texts: " + web.staticTexts.allElementsBoundByIndex.prefix(12).map { $0.label }.joined(separator: " | "))
+        print("SMOKE_DEBUG_AFTER_START " + labelsOf(app))
         var completed = false
         var trail: [String] = []
         for _ in 0..<120 {
@@ -60,19 +65,20 @@ final class SmokeUITests: XCTestCase {
             if tapIfExists(web.buttons["End set early"]) { trail.append("End set early"); continue }
             if tapIfExists(web.buttons["Start hold"]) { trail.append("Start hold"); continue }
             if tapIfExists(web.buttons["Begin Training"]) { trail.append("Begin Training"); continue }
+            if tapIfExists(web.buttons["Continue"]) { trail.append("Continue"); continue }
+            if tapIfExists(web.buttons["Close"]) { trail.append("Close"); continue }
             if tapIfExists(web.buttons["Skip Form"]) { trail.append("Skip Form"); continue }
             if tapIfExists(web.buttons["Skip this step"]) { trail.append("Skip this step"); continue }
-            // activation and other advance-only screens: the first primary-looking button that is not a stop
-            let avoid = ["Stop", "Discard", "Skip", "Today", "History", "Settings", "Exercises", "Pick", "Reset", "Cancel", "preview", "Preview", "rules", "Rules"]
-            let candidates = web.buttons.allElementsBoundByIndex.filter { b in
-                let l = b.label
-                return b.isHittable && !l.isEmpty && !avoid.contains(where: { l.contains($0) })
-            }
-            if let b = candidates.first { trail.append("tap:" + b.label); b.tap(); continue }
+            // anything else that advances: the first button that is not a stop, a skip or a tab (one query,
+            // resolved at tap time, instead of enumerating elements that may re-render under us)
+            let avoid = ["Stop", "Discard", "Skip", "Today", "History", "Settings", "Exercises", "Pick", "Reset", "Cancel", "preview", "Preview", "rules", "Rules", "Note", "Redo", "Pause", "Reference", "Demo", "Dismiss", "Export"]
+            let format = "label != '' AND NOT (" + avoid.map { _ in "label CONTAINS %@" }.joined(separator: " OR ") + ")"
+            let other = web.buttons.matching(NSPredicate(format: format, argumentArray: avoid)).firstMatch
+            if other.exists && other.isHittable { let l = other.label; trail.append("tap:" + l); other.tap(); continue }
             sleep(1)
         }
         print("SMOKE_TRAIL " + trail.joined(separator: " > "))
-        XCTAssertTrue(completed, "reached Complete Session; trail: " + trail.joined(separator: " > ") + "; " + labelsOf(web))
+        XCTAssertTrue(completed, "reached Complete Session; trail: " + trail.joined(separator: " > ") + "; " + labelsOf(app))
 
         // 2. the store committed the new session: parsed from the file by native
         XCTAssertTrue(waitLabel(store, contains: "\"sessions\":3"), "store has the new session: " + store.label)
@@ -91,7 +97,7 @@ final class SmokeUITests: XCTestCase {
         app.launchArguments = args
         app.launch()
         XCTAssertTrue(web.waitForExistence(timeout: 60))
-        XCTAssertTrue(web.buttons["Start Today's Session"].waitForExistence(timeout: 60), "Home writable after relaunch; " + labelsOf(web))
+        XCTAssertTrue(web.buttons["Start Today's Session"].waitForExistence(timeout: 60), "Home writable after relaunch; " + labelsOf(app))
         XCTAssertTrue(waitLabel(store, contains: lastId), "the file still carries the session after relaunch: " + store.label)
         let again = json(store.label)
         XCTAssertEqual((again["sessions"] as? NSNumber)?.intValue, 3)
