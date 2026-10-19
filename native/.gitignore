@@ -1,0 +1,11 @@
+node_modules/
+www/index.html
+www/data.js
+www/style.css
+ios/App/App/public/
+ios/App/App.xcodeproj/
+ios/App/CapApp-SPM/.build/
+ios/App/CapApp-SPM/Package.resolved
+ios/App/build/
+ios/App/DerivedData/
+ios/capacitor-cordova-ios-plugins/

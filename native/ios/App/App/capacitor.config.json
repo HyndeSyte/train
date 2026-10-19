@@ -1,0 +1,14 @@
+{
+	"appId": "com.hyndesyte.train",
+	"appName": "Train",
+	"webDir": "www",
+	"ios": {
+		"contentInset": "automatic"
+	},
+	"packageClassList": [
+		"FilesystemPlugin",
+		"HapticsPlugin",
+		"LocalNotificationsPlugin",
+		"SharePlugin"
+	]
+}
