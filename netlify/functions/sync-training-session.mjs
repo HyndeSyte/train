@@ -50,11 +50,65 @@ export function corsHeaders(event, env = process.env) {
   return cors;
 }
 
+// ---- WRITER CHECK: the mirror's own guard for "one writer, always" ----------------------
+// writer.json on GitHub Pages names the app that may write to the mirror ('pwa' until the
+// native cutover, 'native' after it; rollback flips it back). Each request names its client
+// with X-Train-Client ('pwa' or 'native'; a missing header counts as 'pwa', so a PWA that
+// predates the header keeps syncing). The flag is read per invocation and cached 60 seconds
+// per instance; the cache expires on time whether or not a refresh succeeds. With no
+// unexpired value and no readable flag (404, invalid body, unreachable after three tries of
+// 500 ms) the function fails closed: 503 'writer unknown', no Notion call, the client retries
+// later. The other app gets 403 'not the writer', also before any Notion call. writer.json is
+// committed as 'pwa' before this code deploys, so the first real request already finds it.
+export const WRITER_FLAG_URL = 'https://hyndesyte.github.io/train/writer.json';
+export const WRITER_CACHE_MS = 60_000;
+export const WRITER_FETCH_TIMEOUT_MS = 500;
+export const WRITER_FETCH_TRIES = 3;
+const WRITERS = new Set(['pwa', 'native']);
+let writerCache = { value: null, expiresAt: 0 };
+export function resetWriterCache() { writerCache = { value: null, expiresAt: 0 }; }
+
+export function clientOf(event) {
+  const h = event.headers || {};
+  const raw = h['x-train-client'] ?? h['X-Train-Client'];
+  if (raw === undefined || raw === null || String(raw).trim() === '') return 'pwa';
+  return String(raw).trim().toLowerCase();
+}
+
+// Returns 'pwa' | 'native' | null (unknown). fetchImpl and now are injectable for tests.
+export async function currentWriter({ fetchImpl, now } = {}) {
+  const f = fetchImpl || globalThis.fetch;
+  const clock = now || Date.now;
+  if (writerCache.value && clock() < writerCache.expiresAt) return writerCache.value;
+  for (let attempt = 0; attempt < WRITER_FETCH_TRIES; attempt++) {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    let timer = null;
+    // The timer both aborts the request and settles the race, so a fetch that ignores the
+    // signal still cannot hold the invocation past the deadline.
+    const deadline = new Promise((_, reject) => { timer = setTimeout(() => { try { if (ctl) ctl.abort(); } catch { /* ignore */ } reject(new Error('writer flag timeout')); }, WRITER_FETCH_TIMEOUT_MS); });
+    const read = (async () => {
+      const res = await f(`${WRITER_FLAG_URL}?t=${clock()}`, { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+      if (!res || !res.ok) return null;
+      const body = await res.json();
+      const value = body && typeof body.writer === 'string' ? body.writer.toLowerCase() : null;
+      return WRITERS.has(value) ? value : null;
+    })();
+    try {
+      const value = await Promise.race([read, deadline]);
+      if (value) {
+        writerCache = { value, expiresAt: clock() + WRITER_CACHE_MS };
+        return value;
+      }
+    } catch { /* retry */ } finally { clearTimeout(timer); read.catch(() => {}); }
+  }
+  return null;
+}
+
 export const handler = async (event) => {
   const cors = corsHeaders(event);
-  const json = (statusCode, obj) => ({
+  const json = (statusCode, obj, extraHeaders) => ({
     statusCode,
-    headers: { ...cors, 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json', ...(extraHeaders || {}) },
     body: JSON.stringify(obj),
   });
 
@@ -84,6 +138,12 @@ export const handler = async (event) => {
 
   const v = validatePayload(body);
   if (!v.ok) return json(400, { ok: false, error: v.error });
+
+  // One writer: decided before any Notion call. Unknown fails closed; the other app is refused.
+  const client = clientOf(event);
+  const writer = await currentWriter();
+  if (!writer) return json(503, { ok: false, error: 'writer unknown' }, { 'Retry-After': '60' });
+  if (client !== writer) return json(403, { ok: false, error: 'not the writer', writer });
 
   const nowISO = new Date().toISOString();
   const notion = notionClient(token);

@@ -2,17 +2,29 @@
 // idempotent re-post, and the delete tombstone. Notion is a fake fetch; nothing leaves the process.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handler, corsHeaders, allowedOrigins } from '../netlify/functions/sync-training-session.mjs';
+import { handler, corsHeaders, allowedOrigins, currentWriter, clientOf, resetWriterCache, WRITER_FLAG_URL, WRITER_CACHE_MS, WRITER_FETCH_TRIES } from '../netlify/functions/sync-training-session.mjs';
 
 const PAGES = 'https://hyndesyte.github.io';
 const SHELL = 'capacitor://localhost';
 
-function fakeNotion(seedRows = {}) {
+// writer: 'pwa' | 'native' | '404' | 'malformed' | 'down' | a function (url) => response (per call)
+function fakeNotion(seedRows = {}, writer = 'pwa') {
   // rows: sessionId -> { id, properties }
   const rows = new Map(Object.entries(seedRows));
   const calls = [];
+  const flagReads = [];
   let n = 0;
+  resetWriterCache();
   globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith(WRITER_FLAG_URL)) {
+      flagReads.push(String(url));
+      const w = typeof writer === 'function' ? writer(url, flagReads.length) : writer;
+      if (w === 'down') throw new Error('ECONNREFUSED');
+      if (w === '404') return { ok: false, status: 404, json: async () => ({}) };
+      if (w === 'malformed') return { ok: true, status: 200, json: async () => ({ writer: 'both' }) };
+      if (w === 'badjson') return { ok: true, status: 200, json: async () => { throw new Error('bad json'); } };
+      return { ok: true, status: 200, json: async () => ({ writer: w }) };
+    }
     const body = init && init.body ? JSON.parse(init.body) : null;
     calls.push({ url, method: init.method, body });
     if (url.endsWith('/query')) {
@@ -33,7 +45,7 @@ function fakeNotion(seedRows = {}) {
     }
     throw new Error('unexpected fetch ' + init.method + ' ' + url);
   };
-  return { rows, calls };
+  return { rows, calls, flagReads };
 }
 
 function env(extra = {}) {
@@ -159,4 +171,103 @@ test('shared-secret gate still applies before any Notion call', async () => {
   assert.equal(n.calls.length, 0);
   r = await handler(req('POST', payload(), PAGES, { 'x-train-sync-key': 'k' }));
   assert.equal(r.statusCode, 200);
+});
+
+// ---- writer check -------------------------------------------------------------------------
+
+const notionCalls = (n) => n.calls.length;   // Notion calls only (flag reads are counted apart)
+
+test('writer check: the named writer is accepted, the other app refused before any Notion call; a missing header is the PWA', async () => {
+  env(); let n = fakeNotion({}, 'pwa');
+  let r = await handler(req('POST', payload(), PAGES, { 'x-train-client': 'pwa' }));
+  assert.equal(r.statusCode, 200);
+  r = await handler(req('POST', payload({ sessionId: 'sid-0002' }), PAGES));   // no header: counts as pwa
+  assert.equal(r.statusCode, 200);
+  const before = notionCalls(n);
+  r = await handler(req('POST', payload({ sessionId: 'sid-0003' }), SHELL, { 'X-Train-Client': 'native' }));
+  assert.equal(r.statusCode, 403);
+  assert.deepEqual(JSON.parse(r.body), { ok: false, error: 'not the writer', writer: 'pwa' });
+  assert.equal(r.headers.Vary, 'Origin, X-Train-Client');
+  assert.equal(r.headers['Access-Control-Allow-Origin'], SHELL);
+  assert.equal(notionCalls(n), before, '403 made no Notion call');
+  assert.equal(n.flagReads.length, 1, 'the flag was read once and cached across the three requests');
+
+  // after cutover the roles swap
+  n = fakeNotion({}, 'native');
+  r = await handler(req('POST', payload(), SHELL, { 'x-train-client': 'native' }));
+  assert.equal(r.statusCode, 200);
+  r = await handler(req('POST', payload({ sessionId: 'sid-0009' }), PAGES));
+  assert.equal(r.statusCode, 403, 'the PWA (header or not) is refused once native is the writer');
+  assert.equal(notionCalls(n), 2, 'only the accepted post touched Notion (query + create)');
+  r = await handler(req('POST', { op: 'delete', sessionId: 'sid-0001' }, PAGES, { 'x-train-client': 'pwa' }));
+  assert.equal(r.statusCode, 403, 'deletes are gated too');
+  r = await handler(req('POST', payload({ sessionId: 'sid-0010' }), PAGES, { 'x-train-client': 'someone-else' }));
+  assert.equal(r.statusCode, 403, 'an unrecognised client is not the writer');
+});
+
+test('writer check: a missing, malformed or unreachable flag fails closed with 503 and no Notion call', async () => {
+  for (const w of ['404', 'malformed', 'badjson', 'down']) {
+    env(); const n = fakeNotion({}, w);
+    const r = await handler(req('POST', payload(), PAGES));
+    assert.equal(r.statusCode, 503, w);
+    assert.deepEqual(JSON.parse(r.body), { ok: false, error: 'writer unknown' });
+    assert.equal(r.headers['Retry-After'], '60');
+    assert.equal(r.headers.Vary, 'Origin, X-Train-Client');
+    assert.equal(notionCalls(n), 0, w + ': no Notion call');
+    assert.equal(n.flagReads.length, WRITER_FETCH_TRIES, w + ': three tries');
+  }
+});
+
+test('writer check: a transient failure is recovered by the retry; a cold instance with Pages down stays closed', async () => {
+  env(); let n = fakeNotion({}, (url, i) => (i === 1 ? 'down' : 'pwa'));
+  let r = await handler(req('POST', payload(), PAGES));
+  assert.equal(r.statusCode, 200);
+  assert.equal(n.flagReads.length, 2, 'failed once, succeeded on the retry');
+  // cold instance after cutover, Pages unreachable: never substitutes pwa
+  n = fakeNotion({}, 'down');
+  r = await handler(req('POST', payload(), PAGES));
+  assert.equal(r.statusCode, 503);
+  r = await handler(req('POST', payload(), SHELL, { 'x-train-client': 'native' }));
+  assert.equal(r.statusCode, 503);
+  assert.equal(notionCalls(n), 0);
+});
+
+test('writer check: the cache lives 60 seconds whether or not the refresh then succeeds', async () => {
+  let t = 1_000_000;
+  const now = () => t;
+  resetWriterCache();
+  let answers = ['pwa'];
+  const f = async () => { const a = answers.shift(); if (a === 'down') throw new Error('down'); return { ok: true, json: async () => ({ writer: a }) }; };
+  assert.equal(await currentWriter({ fetchImpl: f, now }), 'pwa');
+  t += WRITER_CACHE_MS - 1;
+  answers = ['native'];
+  assert.equal(await currentWriter({ fetchImpl: f, now }), 'pwa', 'cached value within 60 s');
+  t += 2;   // expired
+  assert.equal(await currentWriter({ fetchImpl: f, now }), 'native', 'refreshed after expiry');
+  t += WRITER_CACHE_MS + 1;
+  answers = ['down', 'down', 'down'];
+  assert.equal(await currentWriter({ fetchImpl: f, now }), null, 'an expired cache is not reused when the refresh fails');
+  t += 1;
+  answers = ['down', 'pwa'];
+  assert.equal(await currentWriter({ fetchImpl: f, now }), 'pwa', 'a transient failure is retried');
+});
+
+test('writer check: reads are cache-busted and the client header is read case-insensitively', async () => {
+  env(); const n = fakeNotion({}, 'pwa');
+  await handler(req('POST', payload(), PAGES));
+  assert.match(n.flagReads[0], /writer\.json\?t=\d+$/);
+  assert.equal(clientOf({ headers: { 'X-Train-Client': ' Native ' } }), 'native');
+  assert.equal(clientOf({ headers: {} }), 'pwa');
+  assert.equal(clientOf({ headers: { 'x-train-client': '' } }), 'pwa');
+});
+
+test('writer check: a flag that never answers times out (500 ms a try, three tries) into 503', async () => {
+  env(); const n = fakeNotion();
+  globalThis.fetch = (url) => (String(url).startsWith(WRITER_FLAG_URL) ? new Promise(() => {}) : Promise.reject(new Error('unexpected')));
+  const t0 = Date.now();
+  const r = await handler(req('POST', payload(), PAGES));
+  const elapsed = Date.now() - t0;
+  assert.equal(r.statusCode, 503);
+  assert.ok(elapsed >= 1400 && elapsed < 4000, 'bounded by the three timeouts: ' + elapsed + ' ms');
+  assert.equal(n.calls.length, 0);
 });
