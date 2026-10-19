@@ -16,7 +16,13 @@
 //   - parity (build order 3 and 4): navigator.wakeLock is polyfilled over the native idle timer; the six
 //     cues play natively (audio plus haptic) behind soundEnabled(), with unlockAudio and toneW as no-ops
 //     so the shell never creates an AudioContext; the train_sound_off key rides in the store's control
-//     sidecar; buildEmbedUrl points YouTube embeds at the https wrapper page on Pages.
+//     sidecar; buildEmbedUrl points YouTube embeds at the https wrapper page on Pages;
+//   - the cutover build (plan section 5): sync is off until the native "Start syncing from this app"
+//     switch is on (syncArmed in the control sidecar); armed, the three sync functions are serializing
+//     wrappers over the shell's own fetch with X-Train-Client: native, a 403 ends the drain; Settings
+//     shows the loaded state's count and digest and, after an Import, "verified" (fingerprint plus
+//     synced flags, persisted in the sidecar and recomputed on boot); the tombstone probe and the
+//     forced-failure hooks exist only in Debug builds launched with -trainUITest.
 // localStorage stays the synchronous working copy; the file is the durability backstop.
 (function (w) {
   'use strict';
@@ -38,12 +44,24 @@
   // --- hand-off: never in the shell ---
   w.handoffSupported = function () { return false; };
 
-  // --- sync off before cutover; the guard the real wrappers will honour ---
-  var sync = w.__sync = { inflight: 0, quiescing: false };
+  // --- sync: off (no-ops) until the native switch arms it; the guard holds in both states ---
+  // The originals are kept for reference; the shell's own fetch is the window's original fetch, bound
+  // before anything could patch it, so a post carries Origin: capacitor://localhost and a real preflight.
+  var origFetch = typeof w.fetch === 'function' ? w.fetch.bind(w) : null;
+  var origSync = { pushUnsynced: w.pushUnsynced, syncEntry: w.syncEntry, postSync: w.postSync };
+  var SYNC_URL = (typeof SYNC_ENDPOINT === 'string') ? SYNC_ENDPOINT : 'https://hyndesyte-train-sync.netlify.app/.netlify/functions/sync-training-session';
+  var SYNC_REFUSED_TEXT = 'sync refused: this app is not the writer; use Sync now once the hand-off is done';
+  var sync = w.__sync = { inflight: 0, quiescing: false, armed: false, chain: Promise.resolve(), refused: null, posts: 0, drains: 0, lastStatus: null };
   function syncRefused() { note({ syncRefused: 'quiescing' }); return { refused: 'quiescing' }; }
-  w.pushUnsynced = async function () { if (sync.quiescing) return syncRefused(); return; };
-  w.syncEntry = async function () { if (sync.quiescing) return syncRefused(); return; };
-  w.postSync = async function () { if (sync.quiescing) { syncRefused(); throw new Error('sync is quiescing'); } throw new Error('sync is off in the shell before cutover'); };
+  function offPushUnsynced() { if (sync.quiescing) return Promise.resolve(syncRefused()); note({ syncSkipped: 'off' }); return Promise.resolve({ off: true }); }
+  function offSyncEntry() { if (sync.quiescing) return Promise.resolve(syncRefused()); return Promise.resolve({ off: true }); }
+  function offPostSync() { if (sync.quiescing) { syncRefused(); return Promise.reject(new Error('sync is quiescing')); } return Promise.reject(new Error('sync is off in the shell before cutover')); }
+  function installSync(armed) {
+    sync.armed = !!armed;
+    if (!sync.armed) { w.pushUnsynced = offPushUnsynced; w.syncEntry = offSyncEntry; w.postSync = offPostSync; return; }
+    w.pushUnsynced = shellPushUnsynced; w.syncEntry = shellSyncEntry; w.postSync = shellPostSync;
+  }
+  installSync(false);
 
   var store = w.__store = {
     seeded: false, base: 0, rev: 0, seedRev: 0, generation: null,
@@ -192,6 +210,7 @@
     store.lastCommitted = file.bytes != null ? { rev: file.rev, bytes: file.bytes } : null;
     seed(file.rev, file.rev, file.generation);
     note({ keepBoth: reason, fileRev: file.rev, localRev: snap.rev });
+    noteSnapshot(snap);
     return describeSnapshot(snap).then(function (d) {
       showBanner('Loaded the app’s saved copy (rev ' + file.rev + '). This screen’s previous copy (' + d + ') is kept as a snapshot: Settings → Export the saved snapshot.', { snapshot: true });
     });
@@ -209,6 +228,8 @@
     if (res && res.recovered) note({ recoveredFrom: res.recoveredFrom });
     if (res && res.healed) note({ healed: file.rev });        // native filled control.rev from the bytes (a kill between two writes)
     hydrateSoundKey(res);
+    installSync(!!(res && res.syncArmed === true));          // the switch's persisted value decides whether this run posts
+    store.verifiedRecord = (res && res.verified && typeof res.verified === 'object') ? res.verified : null;
     // 1. train_state missing: hydrate from the file; no candidate, no comparison
     if (raw === null) {
       if (file.bytes != null) lsSet(STATE_KEY, file.bytes);
@@ -306,7 +327,9 @@
         await hydrate();
         store.hydrated = true;
         hideLoading();
+        checkVerified().catch(function (e) { note({ verifiedCheckFailed: msg(e) }); });
         reportGate0();
+        if (store.launch && store.launch.probeTombstone) runTombstoneProbe();
       })();
     }
     return store.readyPromise;
@@ -361,14 +384,19 @@
         if (gen !== store.generation) return { superseded: true };          // a late ack from an older generation
         if (r && r.accepted) {
           store.rev = r.rev; store.lastCommitted = { rev: r.rev, bytes: json }; store.lastSaveFailed = false;
+          noteLocal();
           return { accepted: true, rev: r.rev };
         }
         // a generation refusal with this page's generation unchanged is not one of our transactions: the
         // store was replaced by something this page did not see
         var reason = (r && r.reason) || 'refused';
         store.refused = true; store.lastSaveFailed = true;
-        lsSet(REFUSED_KEY, '1');
+        // the marker says "this page's lineage is not the file's": a stale base, a replaced store or
+        // bytes the store could not read. A failed write (disk) leaves the lineage intact, so the next
+        // launch writes the local copy through, and a disk that still fails lands in keep-both there.
+        if (reason === 'stale' || reason === 'generation' || reason === 'invalid') lsSet(REFUSED_KEY, '1');
         note({ refused: reason, base: base, fileRev: r && r.rev, fileGeneration: r && r.generation });
+        noteLocal();
         showBanner(refusalText(reason));
         return { refused: true, reason: reason };
       }, function (e) {
@@ -473,6 +501,13 @@
         refusedModal('Import did not happen', 'The app refused it (' + ((r && r.reason) || 'unknown') + '). Nothing changed; try again.');
         return;
       }
+      // the verification record: what the committed state must still match after the reload and later kills
+      try {
+        var imported = safeParse(bytes);
+        var record = { fingerprint: await fingerprintOf(imported), syncedIds: syncedIdsOf(imported), sessions: sessionIds(imported).length, digest: await digestOf(imported), at: new Date().toISOString(), rev: r.rev };
+        var vr = await call('TrainStore', 'setVerified', { json: JSON.stringify(record) });
+        note({ verifiedRecorded: !!(vr && vr.ok), fingerprint: record.fingerprint.slice(0, 8) });
+      } catch (e) { note({ verifiedRecordFailed: msg(e) }); }
       store.generation = r.generation;          // queued saves from before this are superseded
       lsSet(STATE_KEY, bytes);
       lsDel(SNAP_KEY); store.snapshot = null;
@@ -583,20 +618,237 @@
     card.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">App store</div>'
       + '<div id="store-status" style="font-size:12px;color:var(--text2);">Store: reading…</div>'
       + '<div id="store-loaded" style="font-size:12px;color:var(--text3);margin-top:4px;"></div>'
+      + '<div id="store-verified" style="font-size:12px;color:var(--text3);margin-top:4px;"></div>'
       + (store.snapshot ? '<div class="setting-row" style="margin-top:8px;"><div><div style="font-weight:600;">Saved snapshot</div><div id="store-snapshot-line" style="font-size:12px;color:var(--text2);">…</div></div><button id="store-snapshot-export" class="btn btn-small btn-secondary">Export the saved snapshot</button></div>' : '')
+      + '<div class="setting-row" style="margin-top:8px;"><div><div style="font-weight:600;">Start syncing from this app</div><div id="store-sync-line" style="font-size:12px;color:var(--text2);">Off until the hand-off is done.</div></div><button id="store-sync-switch" class="btn btn-small btn-secondary">…</button></div>'
+      + '<div class="setting-row"><div><div style="font-weight:600;">Sync now</div><div style="font-size:12px;color:var(--text2);">Drains pending sessions and deletes with the current switch.</div></div><button id="store-sync-now" class="btn btn-small btn-secondary">Sync now</button></div>'
       + ((store.launch && store.launch.uiTest) ? '<div class="setting-row" style="margin-top:8px;"><div style="font-weight:600;">Embed test</div><button id="store-embed-test" class="btn btn-small btn-secondary">Embed test</button></div>' : '');
     c.appendChild(card);
     if (store.launch && store.launch.uiTest) el('store-embed-test', 'button').onclick = function () { startEmbedTest(); };
+    el('store-sync-switch', 'button').onclick = function () { toggleSyncArmed(); };
+    el('store-sync-now', 'button').onclick = function () { syncNow(); };
+    renderSyncSwitch(sync.armed);
     call('TrainStore', 'status').then(function (st) {
       el('store-status').textContent = 'Store: rev ' + (st.rev || 0) + (st.committedAt ? ' committed ' + hhmm(st.committedAt) : ' (nothing committed yet)') + ' · generation ' + (st.generation || 0) + (store.refused ? ' · this copy is behind' : '');
+      renderSyncSwitch(st.syncArmed === true);
     }, function (e) { el('store-status').textContent = 'Store: unavailable (' + msg(e) + ')'; });
     var loaded = safeParse(localRaw());
-    if (loaded) digestOf(loaded).then(function (d) { var n = sessionIds(loaded).length; el('store-loaded').textContent = n + ' session' + (n === 1 ? '' : 's') + ' loaded · digest ' + d; }).catch(function () {});
+    if (loaded) digestOf(loaded).then(function (d) {
+      var n = sessionIds(loaded).length; var line = n + ' session' + (n === 1 ? '' : 's') + ' · digest ' + d;
+      el('store-loaded').textContent = line + ' loaded';
+      // the same count and digest beside Export, where he reads it at cutover and rollback
+      var exportLine = 'Full log as JSON, via the share sheet';
+      if (c.innerHTML.indexOf(exportLine) !== -1) c.innerHTML = c.innerHTML.split(exportLine).join(exportLine + ' · ' + line);
+    }).catch(function () {});
+    renderVerified();
     if (store.snapshot) {
       describeSnapshot(store.snapshot).then(function (d) { el('store-snapshot-line').textContent = d + ' · kept ' + hhmm(store.snapshot.at); });
       el('store-snapshot-export', 'button').onclick = function () { exportSnapshot(); };
     }
   }
+
+  // ====================================================================================================
+  // Cutover build (plan section 5): sync arming, verified, the drill hooks, the tombstone probe
+  // ====================================================================================================
+
+  // --- armed sync: one chain, one request in flight, the quiescing guard honoured ---
+  function enqueueSync(fn) {
+    var p = sync.chain.then(fn);
+    sync.chain = p.catch(function () {});
+    return p;
+  }
+  function shellPostSync(body) {
+    if (sync.quiescing) { syncRefused(); return Promise.reject(new Error('sync is quiescing')); }
+    if (!origFetch) return Promise.reject(new Error('no fetch in this web view'));
+    sync.inflight++; sync.posts++;
+    var done = function () { sync.inflight--; };
+    return origFetch(SYNC_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Train-Client': 'native' }, body: JSON.stringify(body) }).then(function (res) {
+      sync.lastStatus = res.status;
+      if (res.status === 403) {
+        // not the writer: terminal for this drain; the entry stays pending and nothing re-posts until Sync now
+        return res.text().then(function (text) {
+          sync.refused = { at: new Date().toISOString(), status: 403, body: String(text || '').slice(0, 300) };
+          note({ syncRefused403: sync.refused.body });
+          showBanner(SYNC_REFUSED_TEXT);
+          var e = new Error(SYNC_REFUSED_TEXT); e.terminal = true; e.status = 403; throw e;
+        });
+      }
+      if (res.status === 503) { var e5 = new Error('sync 503'); e5.status = 503; e5.retry = true; throw e5; }   // a plain retry later
+      if (!res.ok) { var eo = new Error('sync ' + res.status); eo.status = res.status; throw eo; }               // the app's own handling
+      return res.json();
+    }).then(function (r) { done(); return r; }, function (e) { done(); throw e; });
+  }
+  // one entry, the app's syncEntry with one difference: a terminal refusal leaves the entry pending
+  async function syncOne(sessionId) {
+    var s = w.getState();
+    var entry = (s.log || []).find(function (x) { return x.sessionId === sessionId; });
+    if (!entry) return { missing: true };
+    w.markSync(sessionId, { status: 'pending', lastAttemptAt: new Date().toISOString(), error: null });
+    w.refreshSyncIndicator();
+    try {
+      var data = await w.postSync(w.buildSyncPayload(entry));
+      w.markSync(sessionId, { status: 'synced', syncedAt: new Date().toISOString(), notionPageId: (data && data.notionPageId) || null, error: null });
+      w.refreshSyncIndicator();
+      return { synced: true };
+    } catch (e) {
+      w.markSync(sessionId, { status: e && e.terminal ? 'pending' : 'failed', error: msg(e) });
+      w.refreshSyncIndicator();
+      return { failed: true, terminal: !!(e && e.terminal), status: e && e.status };
+    }
+  }
+  async function drain() {
+    sync.refused = null; sync.drains++;
+    var posted = 0, stopped = null;
+    var s = w.getState();
+    var deletes = Array.isArray(s.pendingDeletes) ? s.pendingDeletes.slice() : [];
+    for (var i = 0; i < deletes.length; i++) {
+      if (sync.quiescing) { stopped = 'quiescing'; break; }
+      if (sync.refused) { stopped = 'refused'; break; }
+      try {
+        await w.postSync({ op: 'delete', sessionId: deletes[i] });
+        var cur = w.getState(); cur.pendingDeletes = (cur.pendingDeletes || []).filter(function (x) { return x !== deletes[i]; }); w.saveState(cur);
+        posted++;
+      } catch (e) { if (e && e.terminal) { stopped = 'refused'; break; } }
+    }
+    if (!stopped) {
+      s = w.getState();
+      var pending = (s.log || []).filter(function (e) { return e.sessionId && (!e.notionSync || e.notionSync.status !== 'synced'); })
+        .sort(function (a, b) { return (a.sessionSequence || 0) - (b.sessionSequence || 0); });
+      for (var j = 0; j < pending.length; j++) {
+        if (sync.quiescing) { stopped = 'quiescing'; break; }
+        if (sync.refused) { stopped = 'refused'; break; }
+        var r = await syncOne(pending[j].sessionId);
+        if (r && r.synced) posted++;
+        if (r && r.terminal) { stopped = 'refused'; break; }
+      }
+    }
+    w.refreshSyncIndicator();
+    note({ drained: posted, stopped: stopped });
+    return { posted: posted, stopped: stopped };
+  }
+  function shellPushUnsynced() {
+    if (sync.quiescing) return Promise.resolve(syncRefused());
+    return enqueueSync(drain);
+  }
+  function shellSyncEntry(sessionId) {
+    if (sync.quiescing) return Promise.resolve(syncRefused());
+    return enqueueSync(function () {
+      if (sync.quiescing) return syncRefused();
+      if (sync.refused) { note({ syncSkipped: 'refused', sessionId: sessionId }); return { skipped: 'refused' }; }   // nothing re-posts until Sync now
+      return syncOne(sessionId);
+    });
+  }
+
+  // --- the switch ---
+  function renderSyncSwitch(armed) {
+    var b = w.document.getElementById('store-sync-switch'); if (!b) return;
+    b.textContent = armed ? 'On' : 'Off';
+    b.className = 'btn btn-small ' + (armed ? 'btn-primary' : 'btn-secondary');
+    var line = w.document.getElementById('store-sync-line');
+    if (line) line.textContent = armed ? 'This app posts its sessions to the mirror.' : 'Off until the hand-off is done.';
+  }
+  function setSyncArmed(on) {
+    return call('TrainStore', 'setSyncArmed', { on: !!on }).then(function (r) {
+      var armed = !!(r && r.ok && r.syncArmed === true);
+      installSync(armed);
+      note({ syncArmed: armed });
+      if (on && !armed) refusedModal('Could not turn syncing on', 'The app did not keep the setting. Nothing changed.');
+      if (typeof w.renderSettings === 'function') w.renderSettings();
+      return armed;
+    }, function (e) { refusedModal('Could not change syncing', msg(e)); return sync.armed; });
+  }
+  function toggleSyncArmed() {
+    if (sync.armed) { setSyncArmed(false); return; }   // turning off needs no confirm
+    w.showModal('Start syncing from this app?', 'Only after the hand-off: the PWA is switched off and the mirror names this app as the writer. Until then the mirror refuses this app’s posts. Turn it on now?', [
+      { text: 'Cancel', cls: 'btn-secondary', action: function () { w.hideModal(); } },
+      { text: 'Turn on', cls: 'btn-primary', action: function () { w.hideModal(); setSyncArmed(true); } }
+    ]);
+  }
+  function syncNow() {
+    if (!sync.armed) { refusedModal('Syncing is off', 'Turn on “Start syncing from this app” first; nothing was sent.'); return Promise.resolve({ off: true }); }
+    return w.pushUnsynced();
+  }
+  w.__setSyncArmed = setSyncArmed;
+  w.__syncNow = syncNow;
+
+  // --- the fingerprint and "verified" ---
+  // SHA-256 of canonical JSON (keys sorted, compact) of the state after migrate(): every log entry minus
+  // notionSync, plus the listed top-level keys; _rev, _base, seedRev and every notionSync are outside it.
+  var FP_KEYS = ['pendingDeletes', 'rotationIndex', 'nextSessionOverride', 'nextSessionSequence', 'anchorProgress', 'legacy', 'activeSession', 'recovery', 'armCheck', 'ptLevels', 'schemaVersion', 'progressionEngineVersion'];
+  function canonical(v) {
+    if (v === undefined || v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v === undefined ? null : v);
+    if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';
+    if (typeof v === 'object') return '{' + Object.keys(v).filter(function (k) { return v[k] !== undefined; }).sort().map(function (k) { return JSON.stringify(k) + ':' + canonical(v[k]); }).join(',') + '}';
+    return JSON.stringify(null);
+  }
+  function fingerprintObject(state) {
+    var o = {};
+    FP_KEYS.forEach(function (k) { o[k] = state[k] === undefined ? null : state[k]; });
+    o.log = (state.log || []).map(function (e) { if (!e || typeof e !== 'object') return e; var c = Object.assign({}, e); delete c.notionSync; return c; });
+    return o;
+  }
+  function migratedCopy(state) {
+    var copy = JSON.parse(JSON.stringify(state));
+    try { return (typeof w.migrate === 'function') ? (w.migrate(copy) || copy) : copy; } catch (e) { return copy; }
+  }
+  function fingerprintOf(state) { return sha256Hex(canonical(fingerprintObject(migratedCopy(state)))); }
+  function syncedIdsOf(state) { return (state.log || []).filter(function (e) { return e && e.notionSync && e.notionSync.status === 'synced' && typeof e.sessionId === 'string'; }).map(function (e) { return e.sessionId; }).sort(); }
+  w.__fingerprintOf = fingerprintOf; w.__canonical = canonical; w.__syncedIdsOf = syncedIdsOf;
+  // On boot (and after an Import's reload): the committed state against the import's record
+  async function checkVerified() {
+    store.verified = null;
+    var rec = store.verifiedRecord; if (!rec || !rec.fingerprint) return null;
+    var cur = safeParse(localRaw()); if (!cur) return null;
+    var fp = await fingerprintOf(cur);
+    var syncedNow = {}; syncedIdsOf(cur).forEach(function (id) { syncedNow[id] = true; });
+    var missing = (rec.syncedIds || []).filter(function (id) { return !syncedNow[id]; });
+    store.verified = { ok: fp === rec.fingerprint && missing.length === 0, fingerprintMatch: fp === rec.fingerprint, syncedOk: missing.length === 0, unsynced: missing.slice(0, 5), at: rec.at, sessions: rec.sessions, digest: rec.digest };
+    note({ verified: store.verified.ok, fingerprintMatch: store.verified.fingerprintMatch, syncedOk: store.verified.syncedOk });
+    testNote({ verified: store.verified });
+    renderVerified();
+    return store.verified;
+  }
+  function renderVerified() {
+    var el2 = w.document.getElementById('store-verified'); if (!el2) return;
+    var v = store.verified;
+    if (!v) { el2.textContent = ''; return; }
+    var when = v.at ? ' · imported ' + String(v.at).slice(0, 10) + ' ' + hhmm(v.at) : '';
+    el2.textContent = v.ok ? 'Import verified' + when + ' · ' + v.sessions + ' session' + (v.sessions === 1 ? '' : 's') + ' · digest ' + v.digest
+      : 'Imported' + when + ' · not verified (' + (!v.fingerprintMatch ? 'state differs' : 'synced flags changed') + ')';
+  }
+  w.__checkVerified = checkVerified;
+
+  // --- test surfaces (uiTest launches only): the local copy's head, the kept snapshot, the tombstone probe ---
+  function noteLocal() {
+    if (!(store.launch && store.launch.uiTest)) return;
+    var cur = safeParse(localRaw()); var log = (cur && cur.log) || []; var last = log[log.length - 1];
+    testNote({ local: { rev: cur && cur._rev, sessions: log.length, lastSessionId: last && last.sessionId, lastSessionType: last && last.sessionType, lastStatus: last && last.sessionStatus, refused: store.refused } });
+  }
+  function noteSnapshot(snap) {
+    if (!(store.launch && store.launch.uiTest) || !snap) return;
+    var parsed = safeParse(snap.bytes);
+    testNote({ snapshot: { reason: snap.reason, rev: snap.rev, sessionIds: sessionIds(parsed), sessions: sessionIds(parsed).length } });
+  }
+  // One live call, CI only (-trainProbeTombstone): a delete tombstone for the fixture's unused id, over
+  // the original window.fetch (Origin capacitor://localhost, a real preflight). X-Train-Client is sent as
+  // "pwa" here because the live writer flag says pwa until cutover: a test-only header value, stated as
+  // such. The function answers noop-absent and writes nothing; no key is sent.
+  async function runTombstoneProbe() {
+    var s = safeParse(localRaw());
+    var id = s && Array.isArray(s.pendingDeletes) ? s.pendingDeletes[0] : null;
+    var result = { id: id, url: SYNC_URL, at: new Date().toISOString(), client: 'pwa' };
+    if (!id || String(id).length < 8) { result.error = 'the fixture has no pendingDeletes id of 8+ characters'; note({ probe: result }); return testNote({ probe: result }); }
+    if (!origFetch) { result.error = 'no fetch'; return testNote({ probe: result }); }
+    try {
+      var res = await origFetch(SYNC_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Train-Client': 'pwa' }, body: JSON.stringify({ op: 'delete', sessionId: id }) });
+      result.status = res.status;
+      result.body = String(await res.text()).slice(0, 300);
+      try { var parsedBody = JSON.parse(result.body); result.action = parsedBody.action; result.ok = parsedBody.ok; } catch (e) { /* not JSON */ }
+    } catch (e) { result.error = msg(e); }
+    note({ probe: result });
+    return testNote({ probe: result });
+  }
+  w.__runTombstoneProbe = runTombstoneProbe;
 
   // ====================================================================================================
   // Parity (build order 3 and 4)

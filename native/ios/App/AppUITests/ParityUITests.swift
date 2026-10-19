@@ -10,25 +10,7 @@ import XCTest
 final class ParityUITests: XCTestCase {
     private let args = ["-trainFixture", "smoke", "-trainSmoke", "-trainUITest"]
 
-    private func waitLabel(_ e: XCUIElement, contains needle: String, timeout: TimeInterval = 60) -> Bool {
-        let p = NSPredicate(format: "label CONTAINS %@", needle)
-        let exp = expectation(for: p, evaluatedWith: e, handler: nil)
-        return XCTWaiter().wait(for: [exp], timeout: timeout) == .completed
-    }
-    private func json(_ s: String) -> [String: Any] {
-        (try? JSONSerialization.jsonObject(with: Data(s.utf8)) as? [String: Any]) ?? [:]
-    }
     private func wake(_ store: XCUIElement) -> [String: Any] { json(store.label)["wake"] as? [String: Any] ?? [:] }
-    // polls the parsed summary until the condition holds (the label can jump past a value between reads)
-    private func waitSummary(_ store: XCUIElement, timeout: TimeInterval = 30, _ cond: ([String: Any]) -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if cond(json(store.label)) { return true }
-            usleep(400_000)
-        }
-        return cond(json(store.label))
-    }
-    private func int(_ v: Any?) -> Int { (v as? NSNumber)?.intValue ?? -1 }
     private func embed(_ store: XCUIElement) -> [String: Any] { (json(store.label)["bridge"] as? [String: Any])?["embed"] as? [String: Any] ?? [:] }
 
     func testWakeReacquireAcrossBackgroundAndEmbed() throws {

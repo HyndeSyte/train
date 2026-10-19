@@ -69,12 +69,17 @@ jobs:
           echo "::notice title=deps::$deps"
       - name: Copy step (patches the shell's own copy of index.html)
         run: node scripts/copy-www.mjs
-      - name: Shell Node tests (copy step, durable store against the fake plugin)
+      - name: Shell Node tests (copy step, durable store against the fake plugin, parity, cutover)
         run: |
           node --check www/bridge.js
           node --test 2>&1 | tee "$RUNNER_TEMP/node-tests.log" | tail -12
           grep -q '^# fail 0' "$RUNNER_TEMP/node-tests.log"
           echo "::notice title=node-tests::$(grep -E '^# (tests|pass|fail)' "$RUNNER_TEMP/node-tests.log" | tr '\n' ' ')"
+      - name: Export round trip (a native Export imports losslessly into the PWA harness; a check for every build)
+        run: |
+          node --test test/export-roundtrip.test.mjs 2>&1 | tee "$RUNNER_TEMP/roundtrip.log" | tail -8
+          grep -q '^# fail 0' "$RUNNER_TEMP/roundtrip.log"
+          echo "::notice title=export-roundtrip::$(grep -E '^# (tests|pass|fail)' "$RUNNER_TEMP/roundtrip.log" | tr '\n' ' ')"
       - name: Generate the Xcode project (bootstrap; cap sync reads the project)
         working-directory: native/ios/App
         run: xcodegen generate
@@ -124,7 +129,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/gate0.xcresult" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= CODE_SIGNING_REQUIRED=NO \
-            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "GATE0_RESULT|SMOKE_|PARITY_|error:|warning: .*Train|Test Case|Test Suite|\*\* TEST|BUILD" || true
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "GATE0_RESULT|SMOKE_|PARITY_|DRILL_|PROBE_|error:|warning: .*Train|Test Case|Test Suite|\*\* TEST|BUILD" || true
           grep -q "\*\* TEST SUCCEEDED \*\*" "$RUNNER_TEMP/xcodebuild.log"
       - name: Gate 0 result
         if: always()
@@ -133,7 +138,7 @@ jobs:
           grep -h 'GATE0_RESULT' "$RUNNER_TEMP/xcodebuild.log" | head -1 || true
           result=$(grep -h 'GATE0_RESULT' "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed 's/.*GATE0_RESULT //' || true)
           echo "::notice title=gate0::simulator ${{ steps.sim.outputs.name }} (${{ steps.sim.outputs.runtime }}) | ${result:-no GATE0_RESULT line in the xcodebuild log}"
-          grep -E "Test Case .*(passed|failed)|\*\* TEST" "$RUNNER_TEMP/xcodebuild.log" | head -10 | while IFS= read -r line; do echo "::notice title=xctest::$line"; done
+          grep -E "Test Case .*(passed|failed)|\*\* TEST" "$RUNNER_TEMP/xcodebuild.log" | head -6 | while IFS= read -r line; do echo "::notice title=xctest::$line"; done
           # GitHub keeps at most 10 notice annotations per step: the smoke's lines here, the parity lines in the next step
           for key in SMOKE_TRAIL SMOKE_RESULT_1 SMOKE_RESULT_2; do line=$(grep -h "$key " "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
           # on a failure, surface what went wrong where the container can read it (annotations): compiler
@@ -142,11 +147,12 @@ jobs:
             grep -E "error:|: error |failed: |XCTAssert|Assertion Failure" "$RUNNER_TEMP/xcodebuild.log" | grep -v "^\s*$" | awk '!seen[$0]++' | head -12 | while IFS= read -r line; do echo "::error title=xcodebuild::${line:0:900}"; done
             tail -c 2500 "$RUNNER_TEMP/xcodebuild.log" | tr '\n' ' ' | sed 's/::/: :/g' | cut -c1-2400 | while IFS= read -r line; do echo "::notice title=log-tail::$line"; done
           fi
-      - name: Parity result (wake, audio, embed lines from the UI tests)
+      - name: Parity and cutover result (wake, audio, embed, drill and probe lines from the UI tests)
         if: always()
         run: |
-          { echo '### Parity'; echo; echo '```'; grep -hE "PARITY_|SMOKE_AUDIO|SMOKE_DEBUG_BOOT" "$RUNNER_TEMP/xcodebuild.log" | sed -E 's/^.*(PARITY_|SMOKE_)/\1/' | cut -c1-1200 || echo 'no parity lines'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-          for key in SMOKE_DEBUG_BOOT SMOKE_DEBUG_AFTER_START SMOKE_AUDIO PARITY_WAKE_1 PARITY_WAKE_2 PARITY_WAKE_3 PARITY_EMBED_PROBE PARITY_EMBED; do line=$(grep -h "$key " "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
+          { echo '### Parity and cutover'; echo; echo '```'; grep -hE "PARITY_|SMOKE_AUDIO|SMOKE_DEBUG_BOOT|DRILL_|PROBE_" "$RUNNER_TEMP/xcodebuild.log" | sed -E 's/^.*(PARITY_|SMOKE_|DRILL_|PROBE_)/\1/' | cut -c1-1200 || echo 'no parity lines'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          # at most ten notices per step
+          for key in SMOKE_DEBUG_BOOT SMOKE_AUDIO PARITY_WAKE_1 PARITY_WAKE_2 PARITY_WAKE_3 PARITY_EMBED_PROBE PARITY_EMBED DRILL_BEFORE DRILL_RESULT PROBE_RESULT; do line=$(grep -h "$key " "$RUNNER_TEMP/xcodebuild.log" | head -1 | sed "s/.*$key //" || true); [ -n "$line" ] && echo "::notice title=$key::${line:0:900}"; done; true
       - name: Regenerate the project and assert no diff
         working-directory: native/ios/App
         run: |
