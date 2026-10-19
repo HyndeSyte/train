@@ -6,7 +6,7 @@
 // The live index.html, data.js and style.css are never written. writer.json is never copied: the
 // shell is never handed off and never reads the flag. Exits non-zero unless both patches applied
 // exactly once.
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,7 +40,8 @@ export function assertPatched(html) {
   return true;
 }
 
-export function copyWww({ root, dest }) {
+// Synthetic fixtures for the CI smoke test ride along under www/fixtures (bundled, never real data).
+export function copyWww({ root, dest, fixturesDir }) {
   mkdirSync(dest, { recursive: true });
   const written = [];
   for (const name of COPIED) {
@@ -49,6 +50,15 @@ export function copyWww({ root, dest }) {
     if (name === 'index.html') writeFileSync(out, patchIndex(readFileSync(src, 'utf8')));
     else copyFileSync(src, out);
     written.push(out);
+  }
+  const fx = fixturesDir || join(root, 'native', 'test', 'fixtures');
+  if (existsSync(fx)) {
+    mkdirSync(join(dest, 'fixtures'), { recursive: true });
+    for (const f of readdirSync(fx).filter((n) => n.endsWith('.json')).sort()) {
+      const out = join(dest, 'fixtures', f);
+      copyFileSync(join(fx, f), out);
+      written.push(out);
+    }
   }
   return written;
 }
