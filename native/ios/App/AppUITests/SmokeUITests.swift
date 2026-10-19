@@ -33,8 +33,11 @@ final class SmokeUITests: XCTestCase {
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 60), "web view present")
         let store = app.staticTexts["store-summary"]
+        let gate = app.staticTexts["gate0-result"]
         XCTAssertTrue(store.waitForExistence(timeout: 60), "store-summary label present")
-        XCTAssertTrue(waitLabel(store, contains: "\"sessions\":2"), "the fixture was imported into the store: " + store.label)
+        _ = waitLabel(gate, contains: "{", timeout: 90)
+        print("SMOKE_DEBUG_BOOT store=" + store.label + " gate0=" + gate.label)
+        XCTAssertTrue(waitLabel(store, contains: "\"sessions\":2"), "the fixture was imported into the store: " + store.label + " | bridge notes: " + gate.label)
         let start = web.buttons["Start Today's Session"]
         XCTAssertTrue(start.waitForExistence(timeout: 60), "Home is writable after hydration; " + labelsOf(web))
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind'")).firstMatch.exists, "no banner on first launch")
@@ -43,6 +46,8 @@ final class SmokeUITests: XCTestCase {
         start.tap()
         let same = web.buttons["Same"]                 // the day's arm check
         if same.waitForExistence(timeout: 5) { same.tap() }
+        sleep(1)
+        print("SMOKE_DEBUG_AFTER_START " + labelsOf(web) + " | texts: " + web.staticTexts.allElementsBoundByIndex.prefix(12).map { $0.label }.joined(separator: " | "))
         var completed = false
         var trail: [String] = []
         for _ in 0..<120 {
@@ -58,7 +63,7 @@ final class SmokeUITests: XCTestCase {
             if tapIfExists(web.buttons["Skip Form"]) { trail.append("Skip Form"); continue }
             if tapIfExists(web.buttons["Skip this step"]) { trail.append("Skip this step"); continue }
             // activation and other advance-only screens: the first primary-looking button that is not a stop
-            let avoid = ["Stop", "Discard", "Skip", "Today", "History", "Settings", "Exercises", "Pick", "Reset", "Cancel"]
+            let avoid = ["Stop", "Discard", "Skip", "Today", "History", "Settings", "Exercises", "Pick", "Reset", "Cancel", "preview", "Preview", "rules", "Rules"]
             let candidates = web.buttons.allElementsBoundByIndex.filter { b in
                 let l = b.label
                 return b.isHittable && !l.isEmpty && !avoid.contains(where: { l.contains($0) })

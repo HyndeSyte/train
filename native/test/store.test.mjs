@@ -508,3 +508,22 @@ test('Settings shows the store line and the loaded count and digest', async () =
   assert.match(page.els['store-status'].textContent, /^Store: rev 3 (committed \S+|\(nothing committed yet\)) · generation 1$/);
   assert.match(page.els['store-loaded'].textContent, /^3 sessions loaded · digest [0-9a-f]{8}$/);
 });
+
+// ---- the smoke fixture path ------------------------------------------------------------------------
+
+test('a launch with -trainFixture imports the bundled synthetic fixture into an empty store, then hydrates from it; a relaunch skips the import', async () => {
+  const w = new World();
+  w.store.launch = { fixture: 'smoke', smoke: true };
+  const page = await w.boot();
+  assert.equal(page.banner(), null);
+  same(page.bridge.events.filter((e) => e.fixture).map((e) => [e.fixture, e.imported, e.rev, e.generation]), [['smoke', true, 1, 1]]);
+  assert.equal(w.store.rev, 1);
+  assert.equal(w.store.generation, 1);
+  assert.equal(page.state().log.length, 2, 'the two invented sessions are loaded');
+  assert.equal(page.state().recovery.on, true);
+  assert.match(page.home, /Start Today/);
+  const again = await w.boot();
+  assert.equal(w.store.count('importState'), 1, 'no second import once the store has a file');
+  assert.equal(again.state().log.length, 2);
+  assert.equal(again.banner(), null);
+});

@@ -237,23 +237,43 @@
     var st = await call('TrainStore', 'status');
     if (!st || st.hasFile || (st.rev || 0) !== 0) return;
     var resp = await w.fetch('fixtures/' + o.fixture + '.json', { cache: 'no-store' });
+    note({ fixtureFetch: resp && resp.status, ok: resp && resp.ok, url: resp && resp.url });
+    if (!resp || !resp.ok) throw new Error('fixture fetch ' + (resp && resp.status));
     var data = await resp.json();
     var bytes = prepareImportBytes(data, 0);
     var r = await call('TrainStore', 'importState', { bytes: bytes, base: 0 });
-    note({ fixture: o.fixture, imported: !!(r && r.accepted), rev: r && r.rev });
+    note({ fixture: o.fixture, imported: !!(r && r.accepted), reason: r && r.reason, rev: r && r.rev, generation: r && r.generation });
   }
 
   w.__trainReady = function () {
     if (!store.readyPromise) {
       store.readyPromise = (async function () {
-        try { await maybeImportFixture(); } catch (e) { note({ fixtureFailed: msg(e) }); }
+        try { await maybeImportFixture(); } catch (e) { note({ fixtureFailed: msg(e), stack: String(e && e.stack || '').slice(0, 300) }); }
         await hydrate();
         store.hydrated = true;
         hideLoading();
+        reportGate0();
       })();
     }
     return store.readyPromise;
   };
+
+  // Gate 0's report, kept until the smoke test replaces it: one in-app plugin call, one Capacitor
+  // plugin call, secure context and origin, plus the bridge's event notes, handed to native for the
+  // UI tests to read.
+  function reportGate0() {
+    var p = w.Capacitor && w.Capacitor.Plugins;
+    var result = { bridge: { hasCapacitor: !!w.Capacitor, hasPlugins: !!p, pluginNames: p ? Object.keys(p).sort() : [] }, trainStore: null, capPlugin: null, isSecureContext: w.isSecureContext === true, origin: w.location.origin, errors: [], events: store.events.slice(-12), rev: store.rev, generation: store.generation };
+    w.__gate0 = result;
+    return call('TrainStore', 'ping', { echo: 'gate0' })
+      .then(function (r) { result.trainStore = { via: 'proxy', value: r }; }, function (e) { result.errors.push('TrainStore.ping: ' + msg(e)); })
+      .then(function () { return call('Filesystem', 'getUri', { path: 'gate0.txt', directory: 'LIBRARY' }); })
+      .then(function (r) { result.capPlugin = { via: 'proxy', value: r }; }, function (e) { result.errors.push('Filesystem.getUri: ' + msg(e)); })
+      .then(function () {
+        result.ok = !!(result.trainStore && result.trainStore.value && result.trainStore.value.pong === 'gate0' && result.capPlugin && result.capPlugin.value && typeof result.capPlugin.value.uri === 'string' && result.isSecureContext && result.origin === 'capacitor://localhost' && result.errors.length === 0);
+        return call('TrainStore', 'report', { json: JSON.stringify(result) }).catch(function (e) { note({ reportFailed: msg(e) }); });
+      });
+  }
 
   // --- the compare-and-swap save chain ---
   w.saveState = function (s) {
