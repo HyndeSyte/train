@@ -1,0 +1,8 @@
+{
+  "appId": "com.hyndesyte.train",
+  "appName": "Train",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "automatic"
+  }
+}
