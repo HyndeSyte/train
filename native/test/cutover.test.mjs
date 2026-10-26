@@ -240,8 +240,8 @@ test('fingerprint: canonical JSON of the covered fields; any covered field chang
     'log entry id': (s) => { s.log[0].sessionId = 'sid-9999'; },
     'log order': (s) => { s.log.reverse(); },
     pendingDeletes: (s) => { s.pendingDeletes = ['sid-0001']; },
-    rotationIndex: (s) => { s.rotationIndex = 3; },
-    nextSessionOverride: (s) => { s.nextSessionOverride = 'LP'; },
+    rotationIndex: (s) => { s.rotationIndex = 2; },
+    nextSessionOverride: (s) => { s.nextSessionOverride = 'MVS'; },
     nextSessionSequence: (s) => { s.nextSessionSequence = 40; },
     anchorProgress: (s) => { s.anchorProgress = { x: 1 }; },
     legacy: (s) => { s.legacy.promotions = { a: 1 }; },
@@ -249,7 +249,7 @@ test('fingerprint: canonical JSON of the covered fields; any covered field chang
     recovery: (s) => { s.recovery.on = false; },
     armCheck: (s) => { s.armCheck = { date: '2026-10-19', value: 'same' }; },
     ptLevels: (s) => { s.ptLevels = { 'pt-1': 1 }; },
-    schemaVersion: (s) => { s.schemaVersion = 9; },
+    schemaVersion: (s) => { s.schemaVersion = 10; },
     progressionEngineVersion: (s) => { s.progressionEngineVersion = 4; }
   };
   for (const [name, change] of Object.entries(changes)) {

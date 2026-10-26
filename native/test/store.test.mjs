@@ -207,12 +207,12 @@ test('equal revs with different content: keep both copies, load the file, banner
   const w = seededWorld();
   const page = await w.boot();
   await page.settle();
-  const other = JSON.parse(w.store.file); other.rotationIndex = 4;      // same rev 3, different bytes
+  const other = JSON.parse(w.store.file); other.rotationIndex = 2;      // same rev 3, different bytes
   w.store.writeExternally(JSON.stringify(other));
   const again = await w.boot();
   assert.match(again.banner(), /kept as a snapshot/);
   assert.match(again.banner(), /3 sessions/);
-  assert.equal(again.state().rotationIndex, 4, 'the file was loaded');
+  assert.equal(again.state().rotationIndex, 2, 'the file was loaded');
   assert.ok(again.bridge.snapshot && again.bridge.snapshot.bytes, 'the previous copy is kept');
   assert.equal(JSON.parse(again.bridge.snapshot.bytes).rotationIndex, 0);
   assert.match(again.settings(), /Export the saved snapshot/);
@@ -223,11 +223,11 @@ test('the file moved under this page (seedRev above the file rev): keep both, lo
   const w = seededWorld(seedState(), 5);
   const page = await w.boot();                       // seeded at 5
   assert.equal(page.bridge.seedRev, 5);
-  const older = JSON.parse(w.store.file); older.rotationIndex = 3; older._rev = 4; older._base = 3;
+  const older = JSON.parse(w.store.file); older.rotationIndex = 1; older._rev = 4; older._base = 3;
   w.store.writeExternally(JSON.stringify(older));   // the file went backwards (rev 4 < seedRev 5)
   const again = await w.boot();
   assert.match(again.banner(), /kept as a snapshot/);
-  assert.equal(again.state().rotationIndex, 3);
+  assert.equal(again.state().rotationIndex, 1);
   assert.equal(again.bridge.rev, 4);
   same(again.bridge.events.filter((e) => e.keepBoth).pop(), { keepBoth: 'moved', fileRev: 4, localRev: 5 });
 });
