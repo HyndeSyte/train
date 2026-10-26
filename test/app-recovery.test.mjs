@@ -82,8 +82,8 @@ function logSet(ctx, reps){
 function logWholeExercise(ctx, reps){
   const flow = ctx.currentFlow();
   const st = flow[AS_(ctx).cursor];
-  const ex = ctx.EXERCISE_LIBRARY[st.exId];
-  for(let i=0;i<ex.sets;i++){
+  const n = ctx.setsFor(st);
+  for(let i=0;i<n;i++){
     if(!AS_(ctx) || AS_(ctx).phase === 'coreFork') return;
     if(ctx.isDurationUnit(ctx.EXERCISE_LIBRARY[flow[AS_(ctx).cursor].exId].unit)){
       ctx.startDurationSet(); ctx.finishDurationEarly();
@@ -117,46 +117,41 @@ test('migration: a pre-v7.3 install starts in recovery mode; a fresh install sta
   assert.equal(again.recovery.cardioClear, true);
 });
 
-test('Gate 3: every recovery block checked against the parked list; exact swaps; jump rope waits for cardiology', () => {
+test('Gate 3 (v8): recovery A/B/C use only the arm-safe swaps; leg load is his call; power waits for cardiology', () => {
   const { ctx } = recoveryBoot();
-  // Parked in recovery mode (hanging, full bodyweight on the arms, overhead, dumbbells, flat
-  // palms) plus every normal entry a swap replaced with its own recovery entry.
-  const PARKED = ['ring-pullup','ring-pushup','ring-support','pike-pushup','para-pushup','db-press','hanging-knee-raise',
-    'ab-wheel','pushup','ring-face-pull','ring-row','ring-curl','jefferson-curl','split-squat','single-leg-rdl',
-    'cossack-squat','glute-bridge','hollow-body','reverse-lunge'];
+  // Parked on arms in recovery mode: hanging, full bodyweight on the arms, overhead or added
+  // weight on arm work, flat palms, loaded carries; plus every normal entry a swap replaced.
+  const PARKED = ['ring-pullup','ring-pushup','ring-chinup','ring-support','pike-pushup','para-pushup','db-press','hk-db-press',
+    'hanging-knee-raise','ab-wheel','pushup','ring-face-pull','ring-row','ring-curl','jefferson-curl','split-squat','single-leg-rdl',
+    'hinge-rdl','cossack-squat','glute-bridge','hollow-body','reverse-lunge','suitcase-carry','farmer-carry','side-plank','floor-getup'];
   const LOADED = /\bDB\b|dumbbell|weighted|\bband\b|hang/i;
   const gates = {};
-  for(const type of ['RP','LP','RPush','LS','RPr']){
+  for(const type of ['A','B','C']){
     const flow = ctx.buildFlow(type, 'recovery');
     const ex = flow.filter(st=> st.kind === 'exercise');
-    assert.ok(ex.length >= 3, `${type}: a full block list`);
+    assert.ok(ex.length >= 4, `${type}: a full block list`);
+    assert.equal(flow[0].uid, 'opener', `${type}: opens with the opener`);
+    assert.ok(flow.some(st=> st.kind === 'activation'), `${type}: empty-handed shoulder prep`);
     ex.forEach(st=>{
       assert.ok(!PARKED.includes(st.exId), `${type}: ${st.exId} is parked in recovery mode`);
       assert.notEqual(st.progressionType, 'heavyAnchor', `${type}: recovery work never scores`);
-      assert.ok(!LOADED.test(ctx.getVariationName(st.exId)), `${type}: "${ctx.getVariationName(st.exId)}" reads as loaded`);
+      if(st.arms) assert.ok(!LOADED.test(ctx.getVariationName(st.exId)), `${type}: arm work "${ctx.getVariationName(st.exId)}" reads as loaded`);
     });
-    assert.ok(!ex.some(st=> st.exId === 'jump-rope'), `${type}: jump rope waits for Gate 4`);
+    assert.ok(!ex.some(st=> ['squat-jump','broad-jump','jump-rope','hill-repeats'].includes(st.exId)), `${type}: power waits for cardiology`);
     const uids = flow.map(st=> st.uid);
     assert.equal(new Set(uids).size, uids.length, `${type}: uids collision-free`);
-    gates[type] = ex.filter(st=> st.gate).map(st=> st.exId);
+    gates[type] = ex.filter(st=> st.gate).map(st=> st.exId + (st.arms ? '*' : ''));
   }
-  assert.deepEqual(plain(gates), { RP:['rec-ring-row'], LP:['rec-split-squat'], RPush:['rec-incline-pushup'], LS:['rec-cossack'], RPr:['rec-incline-pushup'] });
-  const ids = (t) => ctx.buildFlow(t, 'recovery').filter(st=> st.kind === 'exercise').map(st=> st.exId);
-  assert.deepEqual(plain(ids('RP')), ['rec-ring-row','rec-pulldown','rec-hollow-hold'], 'pulldown in place of both RP builders');
-  assert.deepEqual(plain(ids('RPush')), ['rec-incline-pushup','rec-wall-plus','rec-hollow-hold']);
-  assert.deepEqual(plain(ids('LP')), ['rec-glute-bridge','rec-split-squat','rec-sl-rdl','rec-dead-bug']);
-  assert.deepEqual(plain(ids('LS')), ['rec-glute-bridge','rec-cossack','step-lunge','calf-raise']);
-  assert.deepEqual(plain(ids('RPr')), ['rec-incline-pushup','rec-pulldown','rec-reverse-crunch'], 'rows never run two sessions in a row');
-  // ring days open with the empty-handed activation, arms at shoulder height or below
-  const act = ctx.templateFor('RP', 'recovery').activation;
+  assert.deepEqual(plain(gates), { A:['rec-split-squat','rec-ring-row*','rec-incline-pushup*'], B:['rec-sl-rdl','rec-wall-plus*','rec-pulldown*'], C:['rec-cossack','rec-incline-pushup*','rec-ring-row*'] });
+  ['rec-split-squat','rec-sl-rdl','rec-cossack'].forEach(id=> assert.match(ctx.EXERCISE_LIBRARY[id].reference.cue, /at your side.*elbows? straight.*bodyweight/i, `${id}: load is his call, at the sides`));
+  const act = ctx.templateFor('A', 'recovery').activation;
   assert.ok(act && /shoulder height or below/.test(JSON.stringify(act)));
   assert.ok(!/light DB|Band or/i.test(JSON.stringify(act)), 'no dumbbells or band in recovery activation');
-  // Gate 4: cardiology clears hard efforts -> jump rope returns to the leg days (as arm work)
+  // Gate 4: cardiology clears hard efforts -> power returns in A and C
   ctx.setCardioClear(true);
-  assert.ok(ctx.buildFlow('LP', 'recovery').some(st=> st.exId === 'jump-rope' && st.arms));
-  assert.ok(ctx.buildFlow('LS', 'recovery').some(st=> st.exId === 'jump-rope' && st.arms));
-  // normal templates are untouched
-  assert.deepEqual(plain(ctx.buildFlow('RP').filter(st=> st.kind==='exercise').map(st=> st.exId)), ['ring-pullup','ring-row','ring-pushup','ring-support']);
+  assert.ok(ctx.buildFlow('A', 'recovery').some(st=> st.exId === 'squat-jump'));
+  assert.ok(ctx.buildFlow('C', 'recovery').some(st=> st.exId === 'broad-jump'));
+  assert.deepEqual(plain(ctx.buildFlow('A').filter(st=> st.kind==='exercise').map(st=> st.exId)), ['squat-jump','split-squat','ring-pullup','para-pushup','suitcase-carry','ring-row']);
 });
 
 test('arm check: one tap at the day\'s first session (ring or PT); Skip is an answer; normal mode never asks', () => {
@@ -221,93 +216,133 @@ test('frozen session: a mode switch mid-session or while parked never re-shapes 
   assert.equal(a.tpl.name, 'Heavy Rings: Pull');
 });
 
-test('recovery ring session: gate completes and the rotation advances; nothing scores; scoreboard hidden; anchors restart at bodyweight, replay-safe', () => {
+test('recovery A/B/C session: gate completes and the rotation advances; nothing scores; scoreboard hidden; anchors restart at bodyweight, replay-safe', () => {
   const pre = [{ date:'2026-07-02', sessionType:'RPush', sessionStatus:'stopped', coreComplete:true, sessionId:'22222222-bbbb', sessionSequence:0,
     performed:[ { slotId:'RPush_anchor_ring-pushup', exId:'ring-pushup', role:'anchor', progressionType:'heavyAnchor', reps:[8,8,8,8] } ] }];
   const preAnchors = { 'RPush_anchor_ring-pushup': { exId:'ring-pushup', label:'Heavy Push', lastRawQualityReps:32, creditedQualityReps:null,
     previousCreditedQualityReps:32, creditCapped:false, externalLoad:5, loadUnit:'lb', variationId:null, lastDate:'2026-07-02', steppedUp:true } };
-  const { ctx } = recoveryBoot({ log: pre, nextSessionSequence: 1, anchorProgress: preAnchors, rotationIndex: 2 });
+  const { ctx } = recoveryBoot({ log: pre, nextSessionSequence: 1, anchorProgress: preAnchors });
   ctx.recordArmCheck('better');
-  ctx.startSession('RPush');
-  skipForm(ctx);
-  logWholeExercise(ctx, 10);   // incline push-up gate, 3 x 10
-  assert.equal(AS_(ctx).phase, 'coreFork', 'core = Form, activation, gate');
+  ctx.startSession('A');
+  completeGate(ctx, 10);
+  assert.equal(AS_(ctx).phase, 'coreFork', 'core = opener, prep, legs + arm gates');
   ctx.finishAtFork();
   ctx.finalizeSession('completed');
   let s = ctx.getState();
   const e = s.log.slice(-1)[0];
   assert.equal(e.mode, 'recovery');
   assert.equal(e.sessionStatus, 'completed');
-  assert.equal(s.rotationIndex, 3, 'advanced from logged RPush');
+  assert.equal(s.rotationIndex, 1, 'advanced from logged A');
   assert.equal(e.anchorSnapshot, undefined, 'no scoreboard snapshot for recovery work');
-  for(const slot of ['RPush_anchor_ring-pushup','RP_anchor_ring-pullup']){
+  for(const slot of ['A_anchor_ring-pullup','C_anchor_ring-pushup','RPush_anchor_ring-pushup']){
     assert.equal(s.anchorProgress[slot].externalLoad, 0, `${slot}: bodyweight`);
     assert.equal(s.anchorProgress[slot].creditedQualityReps, null, `${slot}: fresh baseline pending`);
   }
   ctx.renderHome();
   assert.ok(!html(ctx, 'home-content').includes('anchor-card'), 'scoreboard hidden in recovery mode');
-  // after PT clears: normal mode, first anchor session sets a bodyweight baseline
   ctx.setRecoveryMode(false);
-  ctx.startSession('RPush');
-  skipForm(ctx);
-  logWholeExercise(ctx, 5);
+  ctx.startSession('C');
+  completeGate(ctx, 5);   // cossack, ring push-up 5/5 = 10 baseline, chin-up
   if(AS_(ctx).phase === 'coreFork') ctx.finishAtFork();
   ctx.finalizeSession('completed');
   s = ctx.getState();
-  let push = s.anchorProgress['RPush_anchor_ring-pushup'];
-  assert.equal(push.externalLoad, 0, 'restarts at bodyweight, not the pre-injury +5 lb');
-  assert.equal(push.creditedQualityReps, 20, '5 x 4 = the new baseline');
-  // replay the WHOLE log (pre-injury +5 step, recovery reset, new baseline): same answer
+  let push = s.anchorProgress['C_anchor_ring-pushup'];
+  assert.equal(push.externalLoad, 0, 'restarts at bodyweight');
+  assert.equal(push.creditedQualityReps, 10, '5 x 2 = the new baseline');
   const full = JSON.parse(JSON.stringify(s));
   ctx.rebuildAnchorProgress(full);
-  assert.equal(full.anchorProgress['RPush_anchor_ring-pushup'].externalLoad, 0, 'the reset survives the replay');
-  assert.equal(full.anchorProgress['RPush_anchor_ring-pushup'].creditedQualityReps, 20);
+  assert.equal(full.anchorProgress['C_anchor_ring-pushup'].externalLoad, 0, 'the reset survives the replay');
+  assert.equal(full.anchorProgress['C_anchor_ring-pushup'].creditedQualityReps, 10);
   ctx.deleteLogEntry(0);
-  push = ctx.getState().anchorProgress['RPush_anchor_ring-pushup'];
+  push = ctx.getState().anchorProgress['C_anchor_ring-pushup'];
   assert.equal(push.externalLoad, 0);
-  assert.equal(push.creditedQualityReps, 20);
+  assert.equal(push.creditedQualityReps, 10);
   ctx.renderHome();
-  assert.ok(html(ctx, 'home-content').includes('anchor-card'), 'scoreboard returns with normal mode');
+  const h = html(ctx, 'home-content');
+  assert.ok(h.includes('anchor-card'), 'scoreboard returns with normal mode');
+  assert.doesNotMatch(h, /\(v7\)/, 'v7 slots never show on Home');
 });
 
-test('symptom stop, ring day: first crossing stops the exercise and its gate counts; second ends the arm work; the session counts', () => {
+test('symptom stop (v8): first crossing stops the exercise and its gate counts; End arm work finishes the legs; Core never counts before the legs', () => {
   const { ctx } = recoveryBoot();
   ctx.recordArmCheck('same');
-  ctx.startSession('RP');
+  ctx.startSession('A');
   skipForm(ctx);
   ctx.renderStation();
   assert.match(html(ctx, 'flow-foot'), /Symptom stop/, 'button on recovery stations');
-  assert.match(html(ctx, 'flow-body'), /two reps short of failure/, 'effort cap shown until cardiology clears');
-  logSet(ctx, 9);
+  // End arm work on the very first (leg) exercise: Core must still wait for the legs
   ctx.openSymptomStop();
-  tap(ctx, 'Stop this exercise');
-  assert.equal(AS_(ctx).phase, 'coreFork', 'stopped gate still counts: core complete');
-  ctx.keepGoingFromFork();
-  logSet(ctx, 8);
-  ctx.openSymptomStop();
-  tap(ctx, 'End arm work, session counts');
-  assert.equal(AS_(ctx).cursor, ctx.currentFlow().length, 'a ring day stops there');
+  tap(ctx, 'End arm work, finish the legs');
+  assert.equal(AS_(ctx).armWorkEnded, true);
+  assert.equal(ctx.liveCoreComplete(), false, 'never instantly complete');
+  logWholeExercise(ctx, 10);   // the legs
+  assert.equal(ctx.liveCoreComplete(), true, 'legs done -> Core counts');
+  completeGate(ctx, 8);
+  if(AS_(ctx).phase === 'coreFork') ctx.finishAtFork();
   ctx.finalizeSession('completed');
-  const s = ctx.getState();
-  const e = s.log.slice(-1)[0];
+  let s = ctx.getState();
+  let e = s.log.slice(-1)[0];
   assert.equal(e.sessionStatus, 'completed');
   assert.equal(e.coreComplete, true);
   assert.equal(e.symptomStop, true);
-  assert.deepEqual(plain(e.symptomStops), ['rec-ring-row']);
-  const row = e.performed.find(p=> p.exId === 'rec-ring-row');
-  assert.equal(row.symptomStop, true);
-  assert.deepEqual(plain(row.reps), [9,0,0]);
-  assert.ok(e.issues.filter(i=> /Symptom stop/.test(i.note)).length === 2, 'both crossings logged as issues');
+  assert.equal(e.performed.find(p=> p.exId === 'rec-ring-row').skipped, true, 'arm work passed over');
   assert.equal(s.rotationIndex, 1, 'a bad day never stalls the rotation');
-  // next time: one rung easier
-  ctx.startSession('RP');
+  // a single crossing on an arm gate: that exercise stops and its gate still counts
+  ctx.startSession('B');
   skipForm(ctx);
+  logWholeExercise(ctx, 8);   // hinge
+  logSet(ctx, 9);             // wall push-up plus, first set
+  ctx.openSymptomStop();
+  tap(ctx, 'Stop this exercise');
+  logWholeExercise(ctx, 8);   // pulldown
+  assert.equal(AS_(ctx).phase, 'coreFork', 'stopped gate still counts: core complete');
+  ctx.finishAtFork();
+  ctx.finalizeSession('completed');
+  e = ctx.getState().log.slice(-1)[0];
+  assert.deepEqual(plain(e.symptomStops), ['rec-wall-plus']);
+  assert.deepEqual(plain(e.performed.find(p=> p.exId === 'rec-wall-plus').reps), [9,0]);
+  // next time: one rung easier
+  ctx.startSession('B');
+  skipForm(ctx);
+  logWholeExercise(ctx, 8);
   ctx.renderStation();
   assert.match(html(ctx, 'flow-body'), /one rung easier/);
-  // no symptom button outside recovery mode
   const b = boot();
-  b.ctx.startSession('RP'); skipForm(b.ctx); b.ctx.renderStation();
+  b.ctx.startSession('A'); skipForm(b.ctx); b.ctx.renderStation();
   assert.doesNotMatch(b.ctx.document.getElementById('flow-foot').innerHTML, /Symptom stop/);
+});
+
+test('Legs only today (v8): arm work passed over and marked omitted; Core counts on the legs; no symptom stop; no anchor credit; labelled', () => {
+  const { ctx } = recoveryBoot();
+  ctx.recordArmCheck('worse');
+  ctx.renderHome();
+  assert.match(html(ctx, 'home-content'), /startSession\('A',\{legsOnly:true\}\)/, 'Legs only today on Home');
+  ctx.startSession('A', { legsOnly:true });
+  assert.equal(AS_(ctx).legsOnly, true);
+  assert.equal(ctx.liveCoreComplete(), false);
+  completeGate(ctx, 10);
+  if(AS_(ctx).phase === 'coreFork') ctx.finishAtFork();
+  ctx.finalizeSession('completed');
+  const s = ctx.getState();
+  const e = s.log.slice(-1)[0];
+  assert.equal(e.legsOnly, true);
+  assert.equal(e.coreComplete, true);
+  assert.equal(e.symptomStop, undefined, 'legs only is a choice, not a symptom stop');
+  const row = e.performed.find(p=> p.exId === 'rec-ring-row');
+  assert.equal(row.skipped, true);
+  assert.equal(row.omitted, 'legsOnly');
+  assert.equal(s.rotationIndex, 1);
+  const wire = JSON.parse(JSON.stringify(ctx.buildSyncPayload(e)));
+  assert.match(wire.sessionNote, /^Legs only today/);
+  ctx.renderHistory();
+  assert.match(html(ctx, 'history-content'), /Legs only/);
+  // normal mode: a legs-only A never earns anchor credit
+  const n = boot();
+  n.ctx.startSession('A', { legsOnly:true });
+  completeGate(n.ctx, 10);
+  if(AS_(n.ctx).phase === 'coreFork') n.ctx.finishAtFork();
+  n.ctx.finalizeSession('completed');
+  assert.equal(n.ctx.getState().anchorProgress['A_anchor_ring-pullup'], undefined);
 });
 
 test('symptom stop, leg day: finish the legs; remaining arm work is passed over; the session counts', () => {
@@ -336,9 +371,9 @@ test('symptom stop, leg day: finish the legs; remaining arm work is passed over;
 });
 
 test("PT's list: runs outside the slot while a ring session is parked; never touches rotation, override or the park", () => {
-  const { ctx } = recoveryBoot({ nextSessionOverride: 'LS' });
+  const { ctx } = recoveryBoot({ nextSessionOverride: 'B' });
   ctx.recordArmCheck('same');
-  ctx.startSession('LS');
+  ctx.startSession('B');
   skipForm(ctx);
   logSet(ctx, 10);
   ctx.parkSession();
@@ -373,7 +408,7 @@ test("PT's list: runs outside the slot while a ring session is parked; never tou
   assert.equal(e.ptItems[0].dose, ctx.ptDoseLine(ctx.PT_LIST.items[0]));
   assert.equal(JSON.stringify(s.activeSession), parked, 'the parked session is untouched');
   assert.equal(s.rotationIndex, 0);
-  assert.equal(s.nextSessionOverride, 'LS');
+  assert.equal(s.nextSessionOverride, 'B');
   assert.equal(ctx.__PTS(), null);
   ctx.renderHome();
   assert.match(html(ctx, 'home-content'), /Done today/);
@@ -396,8 +431,9 @@ test('sync payload contract: every session type in every mode validates and maps
   const mk = (o) => ({ sessionId:'s'.repeat(12), sessionSequence:1, date:'2026-10-15', completedAt:'2026-10-15T12:00:00.000Z',
     sessionStatus:'completed', coreComplete:true, performed:[], exerciseMeta:{}, issues:[], ...o });
   const cases = [
-    ...['RP','LP','RPush','LS','RPr','MVS'].map(t=> ({ e: mk({ sessionType:t, mode:'normal' }), mode:'Normal', arm:undefined, pt:undefined })),
-    ...['RP','LP','RPush','LS','RPr'].map(t=> ({ e: mk({ sessionType:t, mode:'recovery', armCheck:'worse' }), mode:'Recovery', arm:'Worse', pt:undefined })),
+    ...['A','B','C','RP','LP','RPush','LS','RPr','MVS'].map(t=> ({ e: mk({ sessionType:t, mode:'normal' }), mode:'Normal', arm:undefined, pt:undefined })),
+    ...['A','B','C','RP','LP','RPush','LS','RPr'].map(t=> ({ e: mk({ sessionType:t, mode:'recovery', armCheck:'worse' }), mode:'Recovery', arm:'Worse', pt:undefined })),
+    { e: mk({ sessionType:'EN', coreComplete:null, engineKind:'Walk', duration:30 }), mode:undefined, arm:undefined, pt:undefined },
     { e: mk({ sessionType:'PT', mode:'recovery', ptList:true, armCheck:'better', ptItems:[{ name:'Supine chin tuck', dose:'3 x 10' }] }), mode:'Recovery', arm:'Better', pt:true },
     { e: mk({ sessionType:'RP' }), mode:undefined, arm:undefined, pt:undefined }   // history from before v7.3
   ];
@@ -412,18 +448,20 @@ test('sync payload contract: every session type in every mode validates and maps
   }
 });
 
-test('Home and Settings: PT list takes the Floor slot; ring days carry the PT-visit rule; rules card; switches work', () => {
+test('Home and Settings: PT list takes the Floor slot; Legs only today; rules card; switches work', () => {
   const { ctx } = recoveryBoot();
   ctx.renderHome();
   let h = html(ctx, 'home-content');
-  assert.match(h, /Pull \(recovery\)/);
+  assert.match(h, /A · Squat \+ Pull \(recovery\)/);
   assert.doesNotMatch(h, /startSession\('MVS'\)/, 'Floor link gone: PT list takes its place');
   assert.match(h, /startPtSession\(\)/);
-  assert.match(h, /PT visit today\?/);
+  assert.match(h, /Legs only today/);
   assert.match(h, /Recovery rules/);
-  assert.match(h, /tick it in My Ivy Care too/);
+  assert.match(h, /This week/);
+  assert.ok(h.indexOf('Start Today') < h.indexOf('This week'), 'Start stays the dominant action, measures below');
   ctx.renderSettings();
   assert.match(html(ctx, 'settings-content'), /Cardiology cleared hard efforts/);
+  assert.match(html(ctx, 'settings-content'), /Record markers/);
   ctx.toggleRecoveryMode();
   tap(ctx, 'Turn off');
   assert.equal(ctx.getState().recovery.on, false);
@@ -431,7 +469,8 @@ test('Home and Settings: PT list takes the Floor slot; ring days carry the PT-vi
   h = html(ctx, 'home-content');
   assert.match(h, /startSession\('MVS'\)/, 'Floor day back in normal mode');
   assert.doesNotMatch(h, /startPtSession\(\)/);
-  assert.match(h, /Heavy Rings: Pull/);
+  assert.match(h, /A · Squat \+ Pull/);
+  assert.match(h, /90-second opener/);
   ctx.toggleRecoveryMode();
   tap(ctx, 'Turn on');
   assert.equal(ctx.getState().recovery.on, true);

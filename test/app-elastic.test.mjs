@@ -69,8 +69,8 @@ function logSet(ctx, reps){
 function logWholeExercise(ctx, reps){
   const flow = ctx.currentFlow();
   const st = flow[AS_(ctx).cursor];
-  const ex = ctx.EXERCISE_LIBRARY[st.exId];
-  for(let i=0;i<ex.sets;i++){
+  const n = ctx.setsFor(st);
+  for(let i=0;i<n;i++){
     if(AS_(ctx).phase === 'coreFork') return; // fork interposed mid-drive
     if(ctx.EXERCISE_LIBRARY[flow[AS_(ctx).cursor].exId] && ctx.isDurationUnit(ctx.EXERCISE_LIBRARY[flow[AS_(ctx).cursor].exId].unit)){
       ctx.startDurationSet(); ctx.finishDurationEarly();
@@ -94,29 +94,47 @@ function completeGate(ctx, reps){
 }
 
 // ---------------------------------------------------------------------------
-test('flow: MVS has no Form; RP has activation; LP does not', () => {
+// v8: log everything until the cursor reaches `exId` (forms advanced, earlier exercises logged).
+function driveTo(ctx, exId, reps = 6){
+  let guard = 0;
+  while(guard++ < 60){
+    const flow = ctx.currentFlow();
+    const st = flow[AS_(ctx).cursor];
+    if(!st) throw new Error('driveTo ran past the flow looking for ' + exId);
+    if(st.kind !== 'exercise'){ ctx.advanceForm(); continue; }
+    if(st.exId === exId) return;
+    logWholeExercise(ctx, reps);
+    if(AS_(ctx).phase === 'coreFork') ctx.keepGoingFromFork();
+  }
+  throw new Error('driveTo never reached ' + exId);
+}
+
+test('flow (v8): A/B/C open with the opener; Floor keeps the kata and gates on the get-up; legacy keys still build', () => {
   const { ctx } = boot();
+  const a = ctx.buildFlow('A');
+  assert.equal(a[0].uid, 'opener', 'A opens with the opener');
+  assert.equal(a.filter(st=>st.kind==='form').length, 1);
+  assert.equal(JSON.stringify(a.filter(st=>st.gate).map(st=>st.exId)), JSON.stringify(['split-squat','ring-pullup','para-pushup']));
+  assert.equal(JSON.stringify(a.filter(st=>st.core && !st.gate).map(st=>st.exId)), JSON.stringify(['squat-jump']), 'power is core, never gate');
+  assert.equal(a.find(st=>st.exId==='ring-pullup').sets, 2, 'block sets override the library default');
+  assert.equal(a.find(st=>st.exId==='ring-pullup').slotId, 'A_anchor_ring-pullup');
+  const b = ctx.buildFlow('B');
+  assert.ok(b.every(st=>st.kind !== 'activation'), 'normal B has no shoulder prep');
+  assert.equal(b.find(st=>st.exId==='hinge-rdl').sets, 3);
+  const c = ctx.buildFlow('C');
+  assert.equal(c.find(st=>st.exId==='ring-pushup').slotId, 'C_anchor_ring-pushup');
   const mvs = ctx.buildFlow('MVS');
-  assert.ok(mvs.every(st=>st.kind !== 'form'), 'MVS skips the Form');
-  const rp = ctx.buildFlow('RP');
-  assert.ok(rp.some(st=>st.kind === 'activation'), 'RP includes activation');
-  assert.equal(rp.filter(st=>st.kind==='form').length, 1, 'v7.2: one-screen Form');
-  const lp = ctx.buildFlow('LP');
-  assert.ok(lp.every(st=>st.kind !== 'activation'), 'LP has no activation');
-  // core flags: LP opener+anchor core; only anchor gated
-  const lpCore = lp.filter(st=>st.core).map(st=>st.exId);
-  assert.equal(JSON.stringify(lpCore), JSON.stringify(['ring-support','split-squat']));
-  assert.equal(JSON.stringify(lp.filter(st=>st.gate).map(st=>st.exId)), JSON.stringify(['split-squat']));
-  // RPr gate = the Ring Practice pair
-  assert.equal(JSON.stringify(ctx.templateGateSlots('RPr').map(g=>g.exId)), JSON.stringify(['ring-row','ring-face-pull']));
+  assert.equal(mvs[0].uid, 'form-all', 'Floor keeps the full kata');
+  assert.equal(JSON.stringify(mvs.filter(st=>st.gate).map(st=>st.exId)), JSON.stringify(['floor-getup']));
+  ['RP','LP','RPush','LS','RPr'].forEach(t=> assert.ok(ctx.buildFlow(t).length > 0, `legacy ${t} still builds`));
+  assert.equal(JSON.stringify([0,1,2].map(i=> ctx.getDefaultSessionType({ rotationIndex:i }))), JSON.stringify(['A','B','C']));
 });
 
-test('gate + fork: RP anchor complete -> coreFork; Finish -> Completed, rotation advances, override consumed', () => {
+test('gate + fork (v8): A gate complete -> coreFork; Finish -> Completed, rotation advances, override consumed', () => {
   const { ctx } = boot();
-  ctx.setSessionOverride('RP'); // rotation default is already RP (index 0) — set an override anyway
-  ctx.startSession('RP');
-  skipForm(ctx);
-  logWholeExercise(ctx, 4); // 4x4 = 16, all sets logged
+  ctx.setSessionOverride('A');
+  ctx.startSession('A');
+  completeGate(ctx, 6);
   assert.equal(AS_(ctx).phase, 'coreFork', 'fork shown after gate earned');
   assert.equal(ctx.liveCoreComplete(), true);
   ctx.finishAtFork();
@@ -125,21 +143,21 @@ test('gate + fork: RP anchor complete -> coreFork; Finish -> Completed, rotation
   const e = s.log[s.log.length-1];
   assert.equal(e.sessionStatus, 'completed');
   assert.equal(e.coreComplete, true);
-  assert.equal(s.rotationIndex, 1, 'advanced from logged RP');
+  assert.equal(s.rotationIndex, 1, 'advanced from logged A');
   assert.equal(s.nextSessionOverride, null, 'override consumed on core-complete');
+  const pull = e.performed.find(p=> p.exId === 'ring-pullup');
+  assert.equal(pull.targetSets, 2, 'the session set count is stored on the entry');
   assert.ok(e.duration >= 1);
 });
 
-test('gate not earned: skipped anchor set -> no fork; full run ends partial; rotation holds; override preserved', () => {
+test('gate not earned (v8): skipped anchor set -> no fork; full run ends partial; rotation holds; override preserved', () => {
   const { ctx } = boot();
-  ctx.setSessionOverride('RPush');
-  ctx.startSession('RPush');
-  skipForm(ctx);
-  // anchor: log 3, skip the 4th
-  logSet(ctx, 8); logSet(ctx, 8); logSet(ctx, 8);
+  ctx.setSessionOverride('C');
+  ctx.startSession('C');
+  driveTo(ctx, 'ring-pushup');
+  logSet(ctx, 8);
   ctx.skipCurrentSet();
   assert.notEqual(AS_(ctx).phase, 'coreFork', 'no fork without the gate');
-  // run out the rest of the session
   completeGate(ctx, 6);
   ctx.finalizeSession('completed');
   const s = ctx.getState();
@@ -147,40 +165,41 @@ test('gate not earned: skipped anchor set -> no fork; full run ends partial; rot
   assert.equal(e.coreComplete, false);
   assert.equal(e.sessionStatus, 'partial');
   assert.equal(s.rotationIndex, 0, 'rotation held');
-  assert.equal(s.nextSessionOverride, 'RPush', 'override preserved');
+  assert.equal(s.nextSessionOverride, 'C', 'override preserved');
 });
 
-test('credit follows work: Stopped session with complete anchor SCORES; one-set stop does not', () => {
+test('credit follows work (v8): stopped A with a complete anchor SCORES on its 2-set top; a one-set stop does not', () => {
   const { ctx } = boot();
-  ctx.startSession('RPush');
-  skipForm(ctx);
-  logWholeExercise(ctx, 8); // 8/8/8/8 = 32 = owned top
+  ctx.startSession('A');
+  driveTo(ctx, 'ring-pullup');
+  logWholeExercise(ctx, 6);   // 6/6 = 12 = owned top for 2 sets
+  driveTo(ctx, 'para-pushup');
+  logWholeExercise(ctx, 8);
   if(AS_(ctx).phase === 'coreFork') ctx.keepGoingFromFork();
   ctx.finalizeSession('stopped');
   let s = ctx.getState();
   let e = s.log[s.log.length-1];
   assert.equal(e.sessionStatus, 'stopped', 'Stopped survives as the status');
   assert.equal(e.coreComplete, true);
-  const prog = s.anchorProgress['RPush_anchor_ring-pushup'];
+  const prog = s.anchorProgress['A_anchor_ring-pullup'];
   assert.ok(prog, 'stopped session scored');
-  assert.equal(prog.externalLoad, 5, 'owned top -> stepped up');
+  assert.equal(prog.externalLoad, 5, 'owned top (2 x 6) -> stepped up');
   assert.equal(prog.creditedQualityReps, null, 're-baselining at the new load');
-  assert.equal(s.rotationIndex, 3, 'core-complete stop advances from logged RPush (idx2 -> 3)');
-  // one-great-set exploit earns nothing
+  assert.equal(s.rotationIndex, 1, 'core-complete stop advances from logged A');
   const b2 = boot();
-  b2.ctx.startSession('RP');
-  skipForm(b2.ctx);
+  b2.ctx.startSession('A');
+  driveTo(b2.ctx, 'ring-pullup');
   logSet(b2.ctx, 6);
   b2.ctx.finalizeSession('stopped');
   s = b2.ctx.getState();
-  assert.equal(s.anchorProgress['RP_anchor_ring-pullup'], undefined, 'incomplete anchor never scores');
+  assert.equal(s.anchorProgress['A_anchor_ring-pullup'], undefined, 'incomplete anchor never scores');
   assert.equal(s.rotationIndex, 0, 'pre-core stop holds rotation');
 });
 
 test('park: freezes a live rest timer via pause semantics; resume un-parks with timer paused', () => {
   const { ctx } = boot();
-  ctx.startSession('RP');
-  skipForm(ctx);
+  ctx.startSession('A');
+  driveTo(ctx, 'ring-pullup');
   const els = ctx.document.getElementById('rep-input');
   els.value = '5';
   ctx.logRepSet(); // starts a 2:30 rest (more sets remain)
@@ -195,7 +214,6 @@ test('park: freezes a live rest timer via pause semantics; resume un-parks with 
   assert.ok(a.timerRemaining > 0 && a.timerRemaining <= 150000, 'remaining captured');
   assert.equal(a.phase, 'restPaused');
   assert.equal(a.lastActiveAt, null, 'active clock frozen');
-  // fixed bound: end of the following local day
   const d = new Date(a.parkedAt); d.setHours(0,0,0,0); d.setDate(d.getDate()+2);
   assert.equal(a.parkExpiresAt, d.getTime());
   assert.equal(AS_(ctx), null, 'left the session');
@@ -205,29 +223,26 @@ test('park: freezes a live rest timer via pause semantics; resume un-parks with 
 });
 
 test('park expiry (lazy): pre-core -> Partial, rotation holds, override preserved; core-complete -> Completed + advance', () => {
-  // pre-core case
   let b = boot();
-  b.ctx.setSessionOverride('LS');
-  b.ctx.startSession('LS');
+  b.ctx.setSessionOverride('B');
+  b.ctx.startSession('B');
   skipForm(b.ctx);
-  logSet(b.ctx, 15); // one opener set only — nowhere near the gate
+  logSet(b.ctx, 8); // one hinge set only — nowhere near the gate
   b.ctx.parkSession();
   let s = b.ctx.getState();
-  s.activeSession.parkExpiresAt = Date.now() - 1000; // force the bound into the past
+  s.activeSession.parkExpiresAt = Date.now() - 1000;
   b.ctx.saveState(s);
-  b.ctx.renderHome(); // lazy enforcement point
+  b.ctx.renderHome();
   s = b.ctx.getState();
   assert.equal(s.activeSession, null, 'expired park finalized');
   let e = s.log[s.log.length-1];
   assert.equal(e.sessionStatus, 'partial');
   assert.equal(e.coreComplete, false);
   assert.equal(s.rotationIndex, 0, 'rotation held');
-  assert.equal(s.nextSessionOverride, 'LS', 'override preserved through expiry');
-  // core-complete case
+  assert.equal(s.nextSessionOverride, 'B', 'override preserved through expiry');
   b = boot();
-  b.ctx.startSession('LP');
-  skipForm(b.ctx);
-  completeGate(b.ctx, 8); // opener + anchor -> gate earned -> fork
+  b.ctx.startSession('A');
+  completeGate(b.ctx, 6);
   assert.equal(AS_(b.ctx).phase, 'coreFork');
   b.ctx.keepGoingFromFork();
   b.ctx.parkSession();
@@ -239,17 +254,17 @@ test('park expiry (lazy): pre-core -> Partial, rotation holds, override preserve
   e = s.log[s.log.length-1];
   assert.equal(e.sessionStatus, 'completed', 'core-complete park expiry saves as Completed');
   assert.equal(e.coreComplete, true);
-  assert.equal(s.rotationIndex, 2, 'advanced from logged LP (idx1 -> 2)');
+  assert.equal(s.rotationIndex, 1, 'advanced from logged A');
 });
 
-test('MVS floor: completes, counts, never advances rotation, never consumes an override', () => {
+test('Floor (v8): kata + get-up completes and counts; never advances rotation, never consumes an override', () => {
   const { ctx } = boot();
-  ctx.setSessionOverride('RPush');
+  ctx.setSessionOverride('C');
   ctx.startSession('MVS');
-  assert.ok(ctx.currentFlow().every(st=>st.kind !== 'form'));
-  completeGate(ctx, 10);
-  // gate earned but nothing after core -> no fork; cursor at end -> completion
-  assert.notEqual(AS_(ctx).phase, 'coreFork');
+  assert.equal(ctx.currentFlow()[0].uid, 'form-all', 'Floor keeps the kata');
+  completeGate(ctx, 4);
+  assert.equal(AS_(ctx).phase, 'coreFork', 'Floor Extension follows the get-up');
+  ctx.finishAtFork();
   ctx.finalizeSession('completed');
   const s = ctx.getState();
   const e = s.log[s.log.length-1];
@@ -258,12 +273,10 @@ test('MVS floor: completes, counts, never advances rotation, never consumes an o
   assert.equal(e.coreComplete, true);
   assert.equal(e.overrideUsed, false, 'MVS is not an override use');
   assert.equal(s.rotationIndex, 0, 'rotation untouched');
-  assert.equal(s.nextSessionOverride, 'RPush', 'override preserved');
+  assert.equal(s.nextSessionOverride, 'C', 'override preserved');
 });
 
-test('MIGRATION FIXTURE: real July log shapes — stopped RPush 8/8/8/8 steps to +5 lb on v7 migrate; RP partial result unchanged', () => {
-  // Shapes mirror the live Session Log rows: 2026-06-10 RP partial (24 raw, scored, stepped
-  // to +5, re-baselining) and 2026-07-02 RPush stopped (32 raw, formerly unscored).
+test('MIGRATION FIXTURE: real July log shapes still replay exactly; v9 moves the rotation to A once and keeps a backup', () => {
   const seed = {
     schemaVersion: 6, progressionEngineVersion: 2, rotationIndex: 1, nextSessionOverride: 'LP',
     nextSessionSequence: 7, pendingDeletes: [], activeSession: null,
@@ -276,32 +289,30 @@ test('MIGRATION FIXTURE: real July log shapes — stopped RPush 8/8/8/8 steps to
         performed:[ { slotId:'RPush_anchor_ring-pushup', exId:'ring-pushup', role:'anchor', progressionType:'heavyAnchor', reps:[8,8,8,8] } ] }
     ]
   };
-  const { ctx } = boot({ seed });
-  const s = ctx.getState(); // triggers migrate()
+  const { ctx, storage } = boot({ seed });
+  const s = ctx.getState();
   assert.equal(s.progressionEngineVersion, 3);
-  assert.ok(s.schemaVersion >= 7);
+  assert.equal(s.schemaVersion, 9);
   const rp = s.anchorProgress['RP_anchor_ring-pullup'];
   assert.equal(rp.externalLoad, 5, 'RP result unchanged by replay');
   assert.equal(rp.creditedQualityReps, null);
   const rpush = s.anchorProgress['RPush_anchor_ring-pushup'];
-  assert.ok(rpush, 'stopped RPush now scores');
-  assert.equal(rpush.externalLoad, 5, 'EXPECTED: 32 = owned top -> +5 lb step');
-  assert.equal(rpush.creditedQualityReps, null, 're-baselining at the new load');
+  assert.ok(rpush, 'stopped RPush scores (v7 top: 4 x 8)');
+  assert.equal(rpush.externalLoad, 5, 'EXPECTED: 32 = owned v7 top -> +5 lb step');
   assert.equal(rpush.lastRawQualityReps, 32);
-  // migration never touches rotation or override
-  assert.equal(s.rotationIndex, 1);
-  assert.equal(s.nextSessionOverride, 'LP');
-  // coreComplete backfilled from performed[] against current templates
+  assert.equal(s.rotationIndex, 0, 'v9: rotation starts at A');
+  assert.equal(s.nextSessionOverride, null, 'v9: an override naming a retired key clears');
+  assert.ok(storage.get('train_state_backup_pre_v9'), 'raw pre-v9 backup kept');
   assert.equal(s.log[0].coreComplete, true);
   assert.equal(s.log[1].coreComplete, true);
-  // idempotent: second migrate pass changes nothing
   const again = ctx.migrate(JSON.parse(JSON.stringify(s)));
   assert.equal(JSON.stringify(again.anchorProgress), JSON.stringify(s.anchorProgress));
+  assert.equal(again.rotationIndex, 0);
 });
 
 test('history delete rebuild: replays stopped entries too; rotation + override untouched', () => {
   const seed = {
-    schemaVersion: 6, progressionEngineVersion: 2, rotationIndex: 4, nextSessionOverride: 'RP',
+    schemaVersion: 9, progressionEngineVersion: 3, rotationIndex: 2, nextSessionOverride: 'B',
     nextSessionSequence: 3, pendingDeletes: [], activeSession: null,
     legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, anchorProgress:{},
     log: [
@@ -313,24 +324,28 @@ test('history delete rebuild: replays stopped entries too; rotation + override u
   };
   const { ctx } = boot({ seed });
   let s = ctx.getState();
+  s.anchorProgress = {}; ctx.rebuildAnchorProgress(s); ctx.saveState(s);
   assert.equal(s.anchorProgress['RP_anchor_ring-pullup'].lastRawQualityReps, 20, 'stopped RP scored in rebuild');
-  ctx.deleteLogEntry(1); // delete the LP entry
+  ctx.deleteLogEntry(1);
   s = ctx.getState();
   assert.equal(s.log.length, 1);
   assert.ok(s.anchorProgress['RP_anchor_ring-pullup'], 'rebuild kept the stopped RP score');
-  assert.equal(s.rotationIndex, 4, 'rotation untouched by delete/rebuild');
-  assert.equal(s.nextSessionOverride, 'RP', 'override untouched by delete/rebuild');
+  assert.equal(s.rotationIndex, 2, 'rotation untouched by delete/rebuild');
+  assert.equal(s.nextSessionOverride, 'B', 'override untouched by delete/rebuild');
 });
 
-test('regression: all 6 session types build; legacy pre-engine entry no-ops; invalid override cleared, valid preserved', () => {
+test('regression: every template builds with unique uids; legacy pre-engine entry no-ops; invalid override cleared, valid preserved', () => {
   const { ctx } = boot();
-  ['RP','LP','RPush','LS','RPr','MVS'].forEach(t=>{
+  Object.keys(ctx.SESSION_TEMPLATES).forEach(t=>{
     const flow = ctx.buildFlow(t);
     assert.ok(flow.length > 0);
     const uids = flow.map(st=>st.uid);
     assert.equal(new Set(uids).size, uids.length, `uids collision-free for ${t}`);
   });
-  // pre-engine entry (no performed[]) no-ops in replay and yields null coreComplete
+  Object.keys(ctx.RECOVERY_TEMPLATES).forEach(t=>{
+    const uids = ctx.buildFlowFrom(t, ctx.RECOVERY_TEMPLATES[t]).map(st=>st.uid);
+    assert.equal(new Set(uids).size, uids.length, `recovery uids collision-free for ${t}`);
+  });
   const seed = { schemaVersion:6, progressionEngineVersion:2, rotationIndex:0, nextSessionOverride:'BAD',
     nextSessionSequence:1, pendingDeletes:[], activeSession:null,
     legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, anchorProgress:{},
@@ -340,13 +355,15 @@ test('regression: all 6 session types build; legacy pre-engine entry no-ops; inv
   assert.equal(JSON.stringify(s.anchorProgress), '{}', 'legacy entry no-ops');
   assert.equal(s.log[0].coreComplete, null, 'unknown template -> null, not false');
   assert.equal(s.nextSessionOverride, null, 'invalid override cleared');
-  const b2 = boot({ seed: { ...seed, nextSessionOverride:'LS', log:[] } });
-  assert.equal(b2.ctx.getState().nextSessionOverride, 'LS', 'valid override preserved');
+  const b2 = boot({ seed: { ...seed, schemaVersion:9, nextSessionOverride:'B', log:[] } });
+  assert.equal(b2.ctx.getState().nextSessionOverride, 'B', 'valid override preserved');
+  const b3 = boot({ seed: { ...seed, schemaVersion:9, nextSessionOverride:'LS', log:[] } });
+  assert.equal(b3.ctx.getState().nextSessionOverride, null, 'a retired key is never a valid override');
 });
 
 test('active-time duration: idle gaps capped, park freezes the clock', () => {
   const { ctx } = boot();
-  ctx.startSession('RP');
+  ctx.startSession('A');
   skipForm(ctx);
   // simulate a 3-hour-old lastActiveAt (left the phone) — cap keeps it to <= 10 min
   AS_(ctx).lastActiveAt = Date.now() - 3*60*60*1000;
