@@ -174,3 +174,16 @@ test('a parked v7 session still resolves after the v9 migration and finishes wit
   assert.equal(after.log.slice(-1)[0].sessionType, 'LS');
   assert.equal(after.rotationIndex, 0, 'a legacy session never advances A/B/C');
 });
+
+test('review fixes: old Floor history keeps its v7 gate; Legs only says the legs are still needed until they are done; markers tolerate null rows', () => {
+  const { ctx } = boot({ seed: v9({ markers:[null, { date:'2026-10-01', values:{ x:null } }] }) });
+  const done = (exId) => ({ slotId:'MVS_finisher_'+exId, exId, reps:[10,10,10,10,10], targetSets:2 });
+  const oldFloor = { sessionType:'MVS', performed:['pushup','reverse-lunge','hollow-body'].map(done) };
+  assert.equal(ctx.entryCoreComplete(oldFloor), true, 'v7 Floor entry still complete');
+  assert.equal(ctx.entryCoreComplete({ sessionType:'MVS', performed:[{ slotId:'MVS_finisher_floor-getup', exId:'floor-getup', reps:[] }] }), false);
+  assert.doesNotThrow(()=> ctx.lastMarkers(ctx.getState()));
+  const src = readFileSync(join(root,'index.html'),'utf8');
+  assert.match(src, /the leg sets are still needed for it to count/);
+  assert.match(src, /function openMarkers\(\)\{\n  if\(handoffActive\(\)\) return;/);
+  assert.match(src, /function saveMarkers\(\)\{\n  if\(handoffActive\(\)\) return;/);
+});

@@ -290,8 +290,13 @@ function templateGateSlots(sessionType){
 // Core gate for a LOG ENTRY (historical or fresh): every gate exercise has all sets
 // logged with reps > 0 in performed[] — the same completeness predicate the scoring
 // engine uses. Returns null (unknown, not false) for pre-engine or retired-type entries.
+// v7 Floor gated on the push-up/lunge/hollow trio; an MVS entry without the v8 get-up slot
+// is judged by that frozen gate so old history never recomputes as incomplete.
+const MVS_LEGACY_GATES = ['pushup','reverse-lunge','hollow-body'].map(exId=>({ slotId:'MVS_finisher_'+exId, exId }));
 function entryCoreComplete(entry){
-  const slots = entry && templateGateSlots(entry.sessionType);
+  let slots = entry && templateGateSlots(entry.sessionType);
+  if(entry && entry.sessionType === 'MVS' && Array.isArray(entry.performed)
+     && !entry.performed.some(x=> x.slotId === 'MVS_finisher_floor-getup')) slots = MVS_LEGACY_GATES;
   if(!slots || !Array.isArray(entry.performed)) return null;
   return slots.every(g=>{
     const p = entry.performed.find(x=> x.slotId === g.slotId && !x.skipped);
@@ -1568,7 +1573,7 @@ function openSymptomStop(){
   const body = (second
       ? 'Second crossing this session: the arm work is done for today. '
       : 'Crossed PT’s line? Stop this exercise for today; next time it drops one rung. A second crossing, or symptoms that linger, end the arm work for today. ')
-    + 'The session counts either way. New weakness, or numbness that doesn’t settle: call PT or a doctor promptly.';
+    + (ringDay ? 'The session counts either way. ' : 'Finish the leg sets and the session still counts. ') + 'New weakness, or numbness that doesn’t settle: call PT or a doctor promptly.';
   const buttons = second ? [
     { text: endLabel, cls:'btn-primary', action:()=>{ hideModal(); symptomEndArmWork(); } },
     { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() }
@@ -1930,10 +1935,10 @@ function renderCompletion(){
   body.innerHTML = `
     <div class="flow-meta"><span class="badge badge-${AS.type.toLowerCase()}">${AS.type}</span> Session review</div>
     <div class="flow-title">Nice work.</div>
-    <div class="flow-sub">${done} completed &middot; ${skipped} skipped of ${exTotal} exercises.${currentTpl().opener || currentTpl().noForm ? '' : ' The Form is done too.'}${AS.legsOnly ? ' Legs only today, by choice; the session counts.' : AS.symptomStop ? ' Arm work ended at a symptom stop; the session counts.' : ''}</div>
+    <div class="flow-sub">${done} completed &middot; ${skipped} skipped of ${exTotal} exercises.${currentTpl().opener || currentTpl().noForm ? '' : ' The Form is done too.'}${(AS.legsOnly || AS.symptomStop) ? ((AS.legsOnly ? ' Legs only today, by choice' : ' Arm work ended at a symptom stop') + (liveCoreComplete() ? '; the session counts.' : '; the leg sets are still needed for it to count.')) : ''}</div>
     <div style="margin-top:14px;">
       <div class="move-name" style="font-size:14px;margin-bottom:8px;">Anything to note? (optional)</div>
-      <textarea class="note-field" id="session-note" rows="3" placeholder="How it felt, anything to remember…">${AS.sessionNote||''}</textarea>
+      <textarea class="note-field" id="session-note" rows="3" placeholder="How it felt, anything to remember…">${escHtml(AS.sessionNote||'')}</textarea>
       <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--text2);cursor:pointer;">
         <input type="checkbox" id="session-attention" ${AS.attentionFlag?'checked':''} style="width:18px;height:18px;flex:none;">
         Flag this session for review
@@ -2232,7 +2237,7 @@ function renderRecoveryRules(s){
   const clear = cardioCleared(s);
   const rules = [
     ['PT&rsquo;s rule', 'Work up to tingling or other nerve symptoms, never into them. PT&rsquo;s own list runs exactly as prescribed.'],
-    ['Crossing it', 'Tap Symptom stop. That exercise stops for today and drops one rung next time. A second crossing, or symptoms that linger, end the arm work: a ring day stops there, a leg day finishes the legs. The session counts either way.'],
+    ['Crossing it', 'Tap Symptom stop. That exercise stops for today and drops one rung next time. A second crossing, or symptoms that linger, end the arm work: finish the leg sets and the session still counts.'],
     ['Worse, not settling', 'Symptoms that last or keep getting worse go to PT. New weakness, or numbness that doesn&rsquo;t settle: call PT or a doctor promptly.'],
     ['Arms up', 'No overhead loading. Unloaded reaches go only as high as PT&rsquo;s rule allows; the arm positions shown are starting points, not caps.'],
     ['Hands', 'No weight through flat palms. Grip an edge, or use fists or forearms, including the Form&rsquo;s hands and knees.'],
@@ -2473,7 +2478,7 @@ const MARKERS = [
 ];
 function lastMarkers(s){
   const out = {};
-  (s.markers || []).forEach(m=>{ Object.keys(m.values || {}).forEach(k=>{ out[k] = { value: m.values[k].value, note: m.values[k].note || '', date: m.date }; }); });
+  (s.markers || []).forEach(m=>{ const vals = (m && m.values) || {}; Object.keys(vals).forEach(k=>{ if(vals[k]) out[k] = { value: vals[k].value, note: vals[k].note || '', date: m.date }; }); });
   return out;
 }
 function renderMarkersCard(s){
@@ -2489,6 +2494,7 @@ function renderMarkersCard(s){
     </div>`;
 }
 function openMarkers(){
+  if(handoffActive()) return;
   document.getElementById('modal-title').textContent = 'Record markers';
   document.getElementById('modal-body').innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Fill what you tested today; leave the rest blank.</div>`
     + MARKERS.map(m=> `<div style="margin-bottom:10px;"><div style="font-size:13px;font-weight:600;">${m.label} <span style="color:var(--text3);font-weight:400;">(${m.unit})</span></div>
@@ -2499,6 +2505,7 @@ function openMarkers(){
   document.getElementById('modal').classList.add('visible');
 }
 function saveMarkers(){
+  if(handoffActive()) return;
   const values = {};
   MARKERS.forEach(m=>{
     const v = (document.getElementById('mk-' + m.key) || {}).value;
@@ -2897,7 +2904,7 @@ function renderHistory(){
     if(entry.armCheck) detail += `<div class="history-exercise" style="color:var(--text2);">Arm check: <span>${entry.armCheck}</span></div>`;
     if(entry.exercises) Object.entries(entry.exercises).forEach(([exId,reps])=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise">${checkHit(exId,reps)?'&#9632;':'&#9633;'} ${ex?ex.name:exId}: <span>${reps.join(', ')}</span></div>`; });
     if(entry.skipped) entry.skipped.forEach(exId=>{ const ex = EXERCISE_LIBRARY[exId]; detail += `<div class="history-exercise" style="color:var(--text3);">&#8212; ${ex?ex.name:exId}: <span>skipped</span></div>`; });
-    if(entry.issues) entry.issues.forEach(it=>{ detail += `<div class="history-exercise" style="color:var(--warn);">! ${it.note}</div>`; });
+    if(entry.issues) entry.issues.forEach(it=>{ detail += `<div class="history-exercise" style="color:var(--warn);">! ${escHtml(it.note)}</div>`; });
     if(entry.notes) detail += `<div style="font-size:12px;color:var(--text2);margin-top:8px;font-style:italic;">“${escHtml(entry.notes)}”</div>`;
     const stat = entry.sessionStatus || 'completed';
     return `<div class="history-item" onclick="this.classList.toggle('expanded')">
@@ -2987,7 +2994,9 @@ function renderReference(){
   const s = getState();
   // v8: one group per live session, read from its template, then the Form.
   const cats = ROTATION.concat(['MVS']).map(k=>{ const t = SESSION_TEMPLATES[k];
-    return { label: t.name, ids: t.blocks.reduce((a,b)=> a.concat(b.exercises), []) }; });
+    const sets = {}, slots = {};
+    t.blocks.forEach(b=> b.exercises.forEach(exId=>{ if(b.sets) sets[exId] = b.sets; const sl = k+'_'+b.type+'_'+exId; if(HEAVY_ANCHOR_SLOTS[sl]) slots[exId] = sl; }));
+    return { label: t.name, ids: t.blocks.reduce((a,b)=> a.concat(b.exercises), []), sets, slots }; });
   cats.push({ label:'The Form (mobility kata, Floor day)', form:true });
   // v7.3: in recovery mode, PT's list and the recovery swaps lead the reference.
   const recovery = isRecoveryOn(s);
@@ -3011,10 +3020,11 @@ function renderReference(){
       const ex = EXERCISE_LIBRARY[exId]; if(!ex) return; const i = getCurrentVariation(exId);
       const ladder = ex.ladder.map((v,idx)=>{ if(idx===i) return `<span class="ref-current">${v}</span>`; if(idx<i) return `<span style="text-decoration:line-through;color:var(--text3);">${v}</span>`; return `<span style="color:var(--text3);">${v}</span>`; }).join(' &#8594; ');
       // Anchor slots show their v2 scoreboard total; others just show the ladder (reference only).
-      const apEntry = (exId==='ring-pullup' && s.anchorProgress) ? s.anchorProgress['RP_anchor_ring-pullup']
-                    : (exId==='ring-pushup' && s.anchorProgress) ? s.anchorProgress['RPush_anchor_ring-pushup'] : null;
+      const apSlot = cat.slots && cat.slots[exId];
+      const apEntry = (apSlot && s.anchorProgress) ? s.anchorProgress[apSlot] : null;
+      const setCount = (cat.sets && cat.sets[exId]) || ex.sets;
       const anchorTag = (!recovery && apEntry && apEntry.lastRawQualityReps!=null) ? ` &middot; <span style="color:var(--accent);">${apEntry.lastRawQualityReps} total${apEntry.externalLoad?` +${apEntry.externalLoad}${apEntry.loadUnit||'lb'}`:''}</span>` : '';
-      html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.openReps ? openRepsLabel(ex).toLowerCase() : `${ex.repRange[0]}-${ex.repRange[1]} ${ex.unit}`} &times; ${ex.sets}</span>${anchorTag}</div></div><div class="ref-ladder">${ladder}</div></div>`;
+      html += `<div class="ref-exercise"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><div class="ref-name">${ex.name} <span style="color:var(--text3);font-size:12px;font-weight:400;">${ex.openReps ? openRepsLabel(ex).toLowerCase() : `${repSpan(ex)} ${ex.unit}`} &times; ${setCount}</span>${anchorTag}</div></div><div class="ref-ladder">${ladder}</div></div>`;
     });
   });
   document.getElementById('reference-content').innerHTML = html;
