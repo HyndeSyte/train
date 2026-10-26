@@ -29,7 +29,7 @@ function boot(opts = {}){
   vm.runInContext(m[1] + '\n;globalThis.ROTATION = ROTATION;', ctx);
   return { ctx, els, storage, listeners };
 }
-const base = () => ({ schemaVersion:8, progressionEngineVersion:3, nextSessionOverride:null, nextSessionSequence:0,
+const base = () => ({ schemaVersion:9, progressionEngineVersion:3, nextSessionOverride:null, nextSessionSequence:0,
   pendingDeletes:[], activeSession:null, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, anchorProgress:{}, log:[] });
 
 test('migrate: a missing, string, NaN or null rotationIndex becomes 0; numbers wrap into the rotation', () => {

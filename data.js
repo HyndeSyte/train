@@ -5,7 +5,7 @@
 // recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '7.4.1';
+window.TRAIN_DATA_VERSION = '8.0.0';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -49,11 +49,23 @@ window.EXERCISE_LIBRARY = {
   'rec-wall-plus': { name:'Wall Push-Up Plus (forearms)', grip:'none', ladder:['Wall Push-Up Plus (forearms)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'Forearms on the wall, elbows at shoulder height or below. Push the wall away so the shoulder blades spread, then let them come back. Light, small range.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-hollow-hold': { name:'Hollow Hold (arms down)', grip:'none', ladder:['Hollow Hold (arms toward feet)'], repRange:[15,30], sets:3, unit:'sec', reference:{ status:'text', cue:'Lower back pressed to the floor, arms long by your sides, reaching toward your feet. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-glute-bridge': { name:'Glute Bridge', grip:'none', ladder:['Glute Bridge'], repRange:[10,15], sets:2, unit:'reps', reference:{ status:'text', cue:'Feet flat, arms resting by your sides. Drive through the heels, squeeze at the top, lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  'rec-split-squat': { name:'Rear-Foot-Elevated Split Squat', grip:'none', openReps:true, ladder:['Rear-Foot-Elevated Split Squat (bodyweight)'], repRange:[6,15], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Back foot on the bench, hands free, no dumbbells. Upright torso. Open reps: log what you do.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  'rec-sl-rdl': { name:'Single-Leg RDL (bodyweight)', grip:'none', ladder:['Single-Leg RDL (bodyweight)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Bodyweight, hands free. Hinge at the hip, not the back. A fingertip on the wall for balance if needed, no weight through the hand.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  'rec-cossack': { name:'Cossack Squat (bodyweight)', grip:'none', ladder:['Cossack Squat (bodyweight, hands free)'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Bodyweight, hands free. Heel stays planted. Go only as deep as you can control.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-split-squat': { name:'Rear-Foot-Elevated Split Squat', grip:'none', openReps:true, ladder:['RFE Split Squat (bodyweight, or DBs at your sides)'], repRange:[6,15], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Back foot on the bench, upright torso. Load is your call: dumbbells at your sides, elbows straight; tingling or a worse arm day means bodyweight. Open reps: log what you do.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-sl-rdl': { name:'Single-Leg RDL', grip:'none', ladder:['Single-Leg RDL (bodyweight, or a DB at your side)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Hinge at the hip, not the back. Load is your call: a dumbbell hanging at your side, elbow straight; tingling or a worse arm day means bodyweight. A fingertip on the wall for balance if needed, no weight through the hand.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'rec-cossack': { name:'Cossack Squat', grip:'none', ladder:['Cossack Squat (bodyweight, or a DB at your side)'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Heel stays planted; go only as deep as you can control. Load is your call: a dumbbell hanging at your side, elbow straight; tingling or a worse arm day means bodyweight.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-dead-bug': { name:'Dead Bug', grip:'none', ladder:['Dead Bug (arms toward the ceiling)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'On your back, lower back pressed down, arms reaching toward the ceiling. Lower the opposite leg slowly while the arms stay put. Arms go further only as PT\u2019s rule allows.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  'rec-reverse-crunch': { name:'Reverse Crunch (floor)', grip:'none', ladder:['Reverse Crunch (floor)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'On your back, arms resting by your sides. Curl the knees toward the chest and lift the hips a little, then lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } }
+  'rec-reverse-crunch': { name:'Reverse Crunch (floor)', grip:'none', ladder:['Reverse Crunch (floor)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'On your back, arms resting by your sides. Curl the knees toward the chest and lift the hips a little, then lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  // ---- v8 (2026-10-26): A/B/C full-body additions. Power never scores and waits for
+  // cardiology (index.html CARDIO_EXERCISES); carries progress by distance or time. ----
+  'squat-jump': { name:'Squat Jump', grip:'none', ladder:['Squat Jump (submaximal, soft landing)','Broad Jump (stick the landing)','Broad Jump to Reset (two in a row)'], repRange:[3,3], sets:3, unit:'reps', reference:{ status:'text', cue:'Crisp, not max. Land soft and quiet, knees tracking over toes. Stop the set when a rep gets sloppy.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'broad-jump': { name:'Broad Jump', grip:'none', ladder:['Broad Jump (submaximal, stick it)','Broad Jump (longer, stick it)','Hill Bounds (outdoors)'], repRange:[3,3], sets:3, unit:'reps', reference:{ status:'text', cue:'Hands free. Jump out, stick the landing for a breath, walk back. Submaximal and crisp; stop when the landing gets loose. Later options once technique is solid: one-dumbbell swing, hill bounds outdoors.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'hinge-rdl': { name:'Single-Leg DB RDL', grip:'low', ladder:['DB Single-Leg RDL (25s)','DB Single-Leg RDL (slow lower)','DB Romanian Deadlift (heavier pair)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Long spine, hinge at the hip, back leg reaches long. A dumbbell in the opposite hand. The bilateral RDL takes over when the heavier dumbbells arrive.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'hk-db-press': { name:'Half-Kneeling DB Press', grip:'low', ladder:['Half-Kneeling DB Press (25)','Half-Kneeling DB Press (slow lower)','Standing DB Press'], repRange:[6,10], sets:2, unit:'reps/side', reference:{ status:'text', cue:'One knee down, glute of the down leg squeezed, ribs down. Press up and slightly in; the 8 ft ceiling clears it kneeling.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'ring-chinup': { name:'Ring Chin-Up', grip:'high', ladder:['Ring Negative Chin-Up (5s)','Ring Chin-Up (feet assist)','Ring Chin-Up','Ring Chin-Up (pause at top)'], repRange:[3,6], sets:2, unit:'reps', reference:{ status:'text', cue:'Palms turned toward you, rings free to rotate. Chest to the rings, full hang at the bottom.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'suitcase-carry': { name:'Suitcase Carry', grip:'high', ladder:['Suitcase Carry (one 25)','Suitcase Carry (longer)','Suitcase Carry (heavier)'], repRange:[30,45], sets:4, unit:'sec', reference:{ status:'text', cue:'One dumbbell, stand tall, don’t lean toward it. Alternate hands each set. With the 25s, progress by time or distance.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'farmer-carry': { name:'Farmer Carry', grip:'high', ladder:['Farmer Carry (both 25s)','Farmer Carry (longer)','Sandbag Bear-Hug Carry'], repRange:[30,60], sets:3, unit:'sec', reference:{ status:'text', cue:'Both dumbbells, tall and quiet, short quick steps. Progress by time or distance; the sandbag bear-hug carry takes over once you own one.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'hill-repeats': { name:'Hill Repeats', grip:'none', ladder:['Hill Repeats (hard walk up, easy back)','Hill Repeats (run up, walk back)'], repRange:[4,6], sets:1, unit:'rounds', reference:{ status:'text', cue:'Optional, every one to two weeks: hard up the hill, easy all the way back down. Skip it on any other week.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'side-plank': { name:'Side Plank', grip:'none', ladder:['Side Plank (knees)','Side Plank','Side Plank (top leg lifted)'], repRange:[20,40], sets:2, unit:'sec', reference:{ status:'text', cue:'Elbow under the shoulder, hips high, body in one line. Switch sides each set.', mediaUrl:null, mediaType:null, sourceLabel:null } },
+  'floor-getup': { name:'Floor Get-Up', grip:'none', ladder:['Floor Get-Up (hands as needed)','Floor Get-Up (one hand)','Floor Get-Up (no hands)'], repRange:[3,5], sets:2, unit:'reps/side', reference:{ status:'text', cue:'Lie flat, then stand up and lie back down, smooth and controlled. Use as few hands and knees as you can; switch the lead side each rep.', mediaUrl:null, mediaType:null, sourceLabel:null } },
 };
 
 // ===================================================================
@@ -103,6 +115,22 @@ window.FORM = {
 };
 
 // ===================================================================
+// THE OPENER (v8): fixed 60-90 s start for A/B/C, the same every time. The full kata
+// (FORM) moves to the Floor. Not logged as sets.
+// ===================================================================
+window.OPENER = {
+  name: 'Opener',
+  breath: 'About 90 seconds · move on the exhale',
+  movements: [
+    { name:'Root + Breath', detail:'Stand easy, feet under your hips. Three slow breaths, weight rocking gently side to side.' },
+    { name:'Spinal Wave', detail:'Slow side bends and turns, a few each way. Arms overhead if they are happy there.', recoveryDetail:'Slow side bends and turns, a few each way. Reaches stay at or below shoulder height.' },
+    { name:'Deep Squat Pry', detail:'Sit into your deepest squat, heels down. Hands loose in front; let your legs push the knees apart. Five breaths.' },
+    { name:'90/90', detail:'Sit with both knees at right angles and sweep side to side, three each way.' }
+  ],
+  rehearse: 'Then rehearse the first movement easily before its work sets.'
+};
+
+// ===================================================================
 // SESSION TEMPLATES (working blocks; the Form replaces the old mobility primer)
 // ===================================================================
 // v7 ELASTIC SESSIONS: core/gate flags are EXPLICIT per block (never inferred from
@@ -117,36 +145,69 @@ const UPPER_ACTIVATION = { title:'Shoulder Prep', cue:'Thirty seconds. Wake the 
   { name:'Scap Set', detail:'Arms overhead, shrug up, then pull the shoulder blades down and wide. 5 reps. Shoulders packed before the first pull.' }
 ]};
 
+// ---- v8 (2026-10-26): A -> B -> C, full-body. Every session: the fixed opener, power on A
+// and C (held by the cardiology cap), then lower + push + pull as the gate. Block sets
+// override the library default (2 work sets each; the hinge 3). Arm blocks carry arms:true
+// so End arm work / Legs only pass them over and the legs still finish. Each heavy anchor
+// sits in its own block, so its slot is A_anchor_ring-pullup / C_anchor_ring-pushup.
+// RP..RPr below are the retired v7 split: legacy:true, never offered, kept so history and
+// a parked v7 session still resolve.
 window.SESSION_TEMPLATES = {
-  RP: { name:'Heavy Rings: Pull', fullName:'Heavy Rings A — Pull', grip:'high', activation: UPPER_ACTIVATION, blocks:[
+  A: { name:'A · Squat + Pull', fullName:'A — Squat, Pull, Push', grip:'high', opener:true, blocks:[
+    { type:'power', label:'Power', core:true, sets:3, exercises:['squat-jump'] },
+    { type:'builder', label:'Legs', core:true, gate:true, sets:2, exercises:['split-squat'] },
+    { type:'anchor', label:'Pull Anchor', core:true, gate:true, arms:true, sets:2, progressionType:'heavyAnchor', exercises:['ring-pullup'] },
+    { type:'builder', label:'Push', core:true, gate:true, arms:true, sets:2, exercises:['para-pushup'] },
+    { type:'finisher', label:'Carry', arms:true, exercises:['suitcase-carry'] },
+    { type:'builder', label:'Extra pull', arms:true, sets:2, exercises:['ring-row'] }
+  ]},
+  B: { name:'B · Hinge + Press', fullName:'B — Hinge, Press, Row', grip:'low', opener:true, blocks:[
+    { type:'builder', label:'Hinge', core:true, gate:true, sets:3, exercises:['hinge-rdl'] },
+    { type:'builder', label:'Press', core:true, gate:true, arms:true, sets:2, exercises:['hk-db-press'] },
+    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['ring-row'] },
+    { type:'finisher', label:'Extension', sets:2, exercises:['glute-bridge','calf-raise','side-plank'] }
+  ]},
+  C: { name:'C · Lateral + Push', fullName:'C — Lateral, Push, Chin', grip:'high', opener:true, blocks:[
+    { type:'power', label:'Power', core:true, sets:3, exercises:['broad-jump'] },
+    { type:'builder', label:'Legs', core:true, gate:true, sets:2, exercises:['cossack-squat'] },
+    { type:'anchor', label:'Push Anchor', core:true, gate:true, arms:true, sets:2, progressionType:'heavyAnchor', exercises:['ring-pushup'] },
+    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['ring-chinup'] },
+    { type:'finisher', label:'Carry', arms:true, exercises:['farmer-carry'] },
+    { type:'finisher', label:'Hills (every 1-2 weeks)', exercises:['hill-repeats'] },
+    { type:'finisher', label:'Trunk', exercises:['hollow-body'] }
+  ]},
+  RP: { legacy:true, name:'Heavy Rings: Pull', fullName:'Heavy Rings A — Pull', grip:'high', activation: UPPER_ACTIVATION, blocks:[
     { type:'anchor', label:'Pull Anchor', core:true, gate:true, progressionType:'heavyAnchor', exercises:['ring-pullup'] },
     { type:'builder', label:'Builders', exercises:['ring-row','ring-pushup'] },
     { type:'finisher', label:'Finisher', exercises:['ring-support'] }
   ]},
-  LP: { name:'Lower: Posterior', fullName:'Lower — Posterior + Unilateral', grip:'low', blocks:[
+  LP: { legacy:true, name:'Lower: Posterior', fullName:'Lower — Posterior + Unilateral', grip:'low', blocks:[
     { type:'finisher', label:'Ring Opener', core:true, exercises:['ring-support'] },
     { type:'anchor', label:'Anchor', core:true, gate:true, exercises:['split-squat'] },
     { type:'builder', label:'Builders', exercises:['single-leg-rdl','jump-rope'] },
     { type:'finisher', label:'Finisher', exercises:['ab-wheel'] }
   ]},
-  RPush: { name:'Heavy Rings: Push', fullName:'Heavy Rings B — Push', grip:'high', activation: UPPER_ACTIVATION, blocks:[
+  RPush: { legacy:true, name:'Heavy Rings: Push', fullName:'Heavy Rings B — Push', grip:'high', activation: UPPER_ACTIVATION, blocks:[
     { type:'anchor', label:'Push Anchor', core:true, gate:true, progressionType:'heavyAnchor', exercises:['ring-pushup'] },
     { type:'builder', label:'Builders', exercises:['pike-pushup','ring-pullup'] },
     { type:'finisher', label:'Finisher', exercises:['hollow-body'] }
   ]},
-  LS: { name:'Lower: Squat + Cond', fullName:'Lower — Squat + Conditioning', grip:'low', blocks:[
+  LS: { legacy:true, name:'Lower: Squat + Cond', fullName:'Lower — Squat + Conditioning', grip:'low', blocks:[
     { type:'finisher', label:'Ring Opener', core:true, exercises:['ring-support'] },
     { type:'anchor', label:'Anchor', core:true, gate:true, exercises:['cossack-squat'] },
     { type:'builder', label:'Builders', exercises:['step-lunge','calf-raise'] },
     { type:'finisher', label:'Conditioning', exercises:['jump-rope'] }
   ]},
-  RPr: { name:'Ring Practice + WB', fullName:'Ring Practice + Whole-body', grip:'low', blocks:[
+  RPr: { legacy:true, name:'Ring Practice + WB', fullName:'Ring Practice + Whole-body', grip:'low', blocks:[
     { type:'builder', label:'Ring Practice', core:true, gate:true, exercises:['ring-row','ring-face-pull'] },
     { type:'builder', label:'Whole-body', exercises:['db-press','para-pushup'] },
     { type:'finisher', label:'Trunk', exercises:['hanging-knee-raise'] }   // not 'Core': that word means the gate path
   ]},
-  MVS: { name:'Floor — Minimum Viable', fullName:'Floor — Minimum Viable Session', grip:'none', noForm:true, blocks:[
-    { type:'finisher', label:'Floor', core:true, gate:true, exercises:['pushup','reverse-lunge','hollow-body'] }
+  // Floor (v8): the full kata, then the get-up as its gate (so a Floor completes); the old
+  // Floor trio rides as its Extension. Counts as an active day, never advances the rotation.
+  MVS: { name:'Floor', fullName:'Floor — kata + get-up', grip:'none', blocks:[
+    { type:'finisher', label:'Get-up', core:true, gate:true, exercises:['floor-getup'] },
+    { type:'finisher', label:'Extension', exercises:['pushup','reverse-lunge','hollow-body'] }
   ]}
 };
 
@@ -165,30 +226,52 @@ const REC_ACTIVATION = { title:'Shoulder Prep', cue:'Thirty seconds, empty-hande
 ]};
 
 window.RECOVERY_TEMPLATES = {
-  RP: { name:'Pull (recovery)', fullName:'Recovery: Ring Row + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
+  // v8 recovery A/B/C: the v7.3 arm-safe swaps (no weight on arm work, edge grip or
+  // forearms, below the symptom line) and the leg work with load at his call.
+  A: { name:'A · Squat + Pull (recovery)', fullName:'Recovery: A — Squat, Row, Incline Push-Up', grip:'low', opener:true, activation: REC_ACTIVATION, blocks:[
+    { type:'power', label:'Power', core:true, sets:3, requiresCardioClear:true, exercises:['squat-jump'] },
+    { type:'builder', label:'Legs', core:true, gate:true, sets:2, exercises:['rec-split-squat'] },
+    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['rec-ring-row'] },
+    { type:'builder', label:'Push', core:true, gate:true, arms:true, sets:2, exercises:['rec-incline-pushup'] },
+    { type:'finisher', label:'Extension', exercises:['rec-glute-bridge','rec-hollow-hold'] }
+  ]},
+  B: { name:'B · Hinge + Press (recovery)', fullName:'Recovery: B — Hinge, Wall Plus, Pulldown', grip:'low', opener:true, activation: REC_ACTIVATION, blocks:[
+    { type:'builder', label:'Hinge', core:true, gate:true, sets:3, exercises:['rec-sl-rdl'] },
+    { type:'builder', label:'Push', core:true, gate:true, arms:true, sets:2, exercises:['rec-wall-plus'] },
+    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['rec-pulldown'] },
+    { type:'finisher', label:'Extension', exercises:['calf-raise','rec-dead-bug'] }
+  ]},
+  C: { name:'C · Lateral + Push (recovery)', fullName:'Recovery: C — Cossack, Incline Push-Up, Row', grip:'low', opener:true, activation: REC_ACTIVATION, blocks:[
+    { type:'power', label:'Power', core:true, sets:3, requiresCardioClear:true, exercises:['broad-jump'] },
+    { type:'builder', label:'Legs', core:true, gate:true, sets:2, exercises:['rec-cossack'] },
+    { type:'builder', label:'Push', core:true, gate:true, arms:true, sets:2, exercises:['rec-incline-pushup'] },
+    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['rec-ring-row'] },
+    { type:'finisher', label:'Extension', exercises:['step-lunge','rec-reverse-crunch'] }
+  ]},
+  RP: { legacy:true, name:'Pull (recovery)', fullName:'Recovery: Ring Row + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
     { type:'anchor', label:'Pull Gate', core:true, gate:true, exercises:['rec-ring-row'] },
     { type:'builder', label:'Builder', exercises:['rec-pulldown'] },
     { type:'finisher', label:'Finisher', exercises:['rec-hollow-hold'] }
   ]},
-  LP: { name:'Lower: Posterior (recovery)', fullName:'Recovery: Lower, Posterior + Unilateral', grip:'none', blocks:[
+  LP: { legacy:true, name:'Lower: Posterior (recovery)', fullName:'Recovery: Lower, Posterior + Unilateral', grip:'none', blocks:[
     { type:'finisher', label:'Opener', core:true, exercises:['rec-glute-bridge'] },
     { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-split-squat'] },
     { type:'builder', label:'Builders', exercises:['rec-sl-rdl'] },
     { type:'builder', label:'Builders', requiresCardioClear:true, arms:true, exercises:['jump-rope'] },
     { type:'finisher', label:'Finisher', arms:true, exercises:['rec-dead-bug'] }
   ]},
-  RPush: { name:'Push (recovery)', fullName:'Recovery: Incline Push-Up + Wall Plus', grip:'low', activation: REC_ACTIVATION, blocks:[
+  RPush: { legacy:true, name:'Push (recovery)', fullName:'Recovery: Incline Push-Up + Wall Plus', grip:'low', activation: REC_ACTIVATION, blocks:[
     { type:'anchor', label:'Push Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
     { type:'builder', label:'Builder', exercises:['rec-wall-plus'] },
     { type:'finisher', label:'Finisher', exercises:['rec-hollow-hold'] }
   ]},
-  LS: { name:'Lower: Squat (recovery)', fullName:'Recovery: Lower, Squat', grip:'none', blocks:[
+  LS: { legacy:true, name:'Lower: Squat (recovery)', fullName:'Recovery: Lower, Squat', grip:'none', blocks:[
     { type:'finisher', label:'Opener', core:true, exercises:['rec-glute-bridge'] },
     { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-cossack'] },
     { type:'builder', label:'Builders', exercises:['step-lunge','calf-raise'] },
     { type:'finisher', label:'Conditioning', requiresCardioClear:true, arms:true, exercises:['jump-rope'] }
   ]},
-  RPr: { name:'Ring Practice (recovery)', fullName:'Recovery: Incline Push-Up + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
+  RPr: { legacy:true, name:'Ring Practice (recovery)', fullName:'Recovery: Incline Push-Up + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
     // Gate is the incline push-up so rows never run two sessions in a row; the light
     // pulldown repeats RP's by design.
     { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
