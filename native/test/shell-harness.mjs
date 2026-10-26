@@ -335,7 +335,7 @@ export function entry(n, extra) {
     notionSync: { status: 'synced', syncedAt: '2026-10-18T22:00:00.000Z', notionPageId: 'p', error: null } }, extra || {});
 }
 export function seedState(extra) {
-  return Object.assign({ schemaVersion: 8, progressionEngineVersion: 3, rotationIndex: 0, nextSessionOverride: null, nextSessionSequence: 4,
+  return Object.assign({ schemaVersion: 9, progressionEngineVersion: 3, rotationIndex: 0, nextSessionOverride: null, nextSessionSequence: 4,
     pendingDeletes: [], activeSession: null, legacy: { promotions: {}, exerciseVariations: {}, promotionLog: [] }, anchorProgress: {},
     recovery: { on: true, cardioClear: false, since: '2026-10-15T12:00:00.000Z', offAt: null }, armCheck: null,
     log: [entry(1), entry(2), entry(3)] }, extra || {});
