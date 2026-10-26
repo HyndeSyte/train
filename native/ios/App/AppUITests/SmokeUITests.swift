@@ -36,7 +36,7 @@ final class SmokeUITests: XCTestCase {
         let after = json(afterText)
         let lastId = try XCTUnwrap(after["lastSessionId"] as? String, "lastSessionId in the file: " + store.label)
         XCTAssertFalse(lastId.isEmpty)
-        XCTAssertEqual(after["lastSessionType"] as? String, "RP", "the new entry is the RP session")
+        XCTAssertEqual(after["lastSessionType"] as? String, "A", "the new entry is the A session (v8 migrates the fixture to A)")
         XCTAssertNotNil(after["lastDate"] as? String)
         XCTAssertNotNil(after["lastStatus"] as? String)
         let rev1 = (after["rev"] as? NSNumber)?.intValue ?? -1
@@ -80,7 +80,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertFalse(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'kept as a snapshot' OR label CONTAINS 'fell behind' OR label CONTAINS 'did not reach'")).firstMatch.exists, "no banner after relaunch")
 
         web.buttons.matching(NSPredicate(format: "label CONTAINS 'History'")).firstMatch.tap()
-        XCTAssertTrue(web.staticTexts.matching(NSPredicate(format: "label CONTAINS 'RP'")).firstMatch.waitForExistence(timeout: 15), "History lists the RP session")
+        XCTAssertTrue(web.staticTexts.matching(NSPredicate(format: "label == 'A'")).firstMatch.waitForExistence(timeout: 15), "History lists the A session")
         web.buttons.matching(NSPredicate(format: "label CONTAINS 'Settings'")).firstMatch.tap()
         let storeLine = web.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Store: rev'")).firstMatch
         XCTAssertTrue(storeLine.waitForExistence(timeout: 15), "Settings shows the store line")

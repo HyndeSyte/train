@@ -824,7 +824,7 @@
   // --- the fingerprint and "verified" ---
   // SHA-256 of canonical JSON (keys sorted, compact) of the state after migrate(): every log entry minus
   // notionSync, plus the listed top-level keys; _rev, _base, seedRev and every notionSync are outside it.
-  var FP_KEYS = ['pendingDeletes', 'rotationIndex', 'nextSessionOverride', 'nextSessionSequence', 'anchorProgress', 'legacy', 'activeSession', 'recovery', 'armCheck', 'ptLevels', 'schemaVersion', 'progressionEngineVersion'];
+  var FP_KEYS = ['pendingDeletes', 'rotationIndex', 'nextSessionOverride', 'nextSessionSequence', 'anchorProgress', 'legacy', 'activeSession', 'recovery', 'armCheck', 'ptLevels', 'schemaVersion', 'progressionEngineVersion', 'markers'];
   function canonical(v) {
     if (v === undefined || v === null || typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return JSON.stringify(v === undefined ? null : v);
     if (Array.isArray(v)) return '[' + v.map(canonical).join(',') + ']';

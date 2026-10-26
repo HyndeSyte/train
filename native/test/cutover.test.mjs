@@ -250,6 +250,7 @@ test('fingerprint: canonical JSON of the covered fields; any covered field chang
     armCheck: (s) => { s.armCheck = { date: '2026-10-19', value: 'same' }; },
     ptLevels: (s) => { s.ptLevels = { 'pt-1': 1 }; },
     schemaVersion: (s) => { s.schemaVersion = 10; },
+    markers: (s) => { s.markers = [{ date: '2026-10-26', values: { route: { value: '1.5' } } }]; },
     progressionEngineVersion: (s) => { s.progressionEngineVersion = 4; }
   };
   for (const [name, change] of Object.entries(changes)) {
