@@ -41,7 +41,7 @@ Train PWA (on finalize)
   "sessionSequence": 42,
   "date": "2026-06-04",
   "completedAt": "2026-06-04T13:47:00.000Z",
-  "sessionType": "RP | LP | RPush | LS | RPr | MVS | PT",
+  "sessionType": "A | B | C | EN | MVS | PT  (EN shows as \"Engine\"; RP | LP | RPush | LS | RPr accepted for v7 history)",
   "status": "Completed | Partial | Stopped",
   "durationMin": 47,
   "overrideUsed": false,
@@ -50,7 +50,7 @@ Train PWA (on finalize)
   "armCheck": "Better | Same | Worse",
   "ptList": true,
   "anchor": {
-    "slot": "RP_anchor_ring-pullup | RPush_anchor_ring-pushup",
+    "slot": "A_anchor_ring-pullup | C_anchor_ring-pushup  (v7: RP_anchor_ring-pullup | RPush_anchor_ring-pushup)",
     "exercise": "ring-pullup",
     "reps": "5/5/4/4",
     "rawQualityReps": 18,

@@ -178,3 +178,14 @@ test('props: ptList false is written as an unchecked box', () => {
   assert.equal(p['PT List'].checkbox, false);
   assert.equal('Arm Check' in p, false, 'skipped arm check sends nothing');
 });
+
+test('v8: A/B/C and EN validate; EN maps to "Engine" in the title and the Session Type; v8 anchor slots accepted', () => {
+  for(const t of ['A','B','C','EN']) assert.equal(validatePayload({ ...base, sessionType: t }).ok, true, t);
+  const p = toNotionProperties({ ...base, sessionType:'EN', status:'Completed' }, '2026-10-26T12:00:00.000Z');
+  assert.equal(p['Session Type'].select.name, 'Engine');
+  assert.equal(p['Session'].title[0].text.content, '2026-06-04 · Engine');
+  assert.equal(toNotionProperties({ ...base, sessionType:'A' }, 'x')['Session Type'].select.name, 'A');
+  for(const slot of ['A_anchor_ring-pullup','C_anchor_ring-pushup','RP_anchor_ring-pullup']){
+    assert.equal(validatePayload({ ...base, anchor:{ ...base.anchor, slot } }).ok, true, slot);
+  }
+});
