@@ -187,3 +187,13 @@ test('review fixes: old Floor history keeps its v7 gate; Legs only says the legs
   assert.match(src, /function openMarkers\(\)\{\n  if\(handoffActive\(\)\) return;/);
   assert.match(src, /function saveMarkers\(\)\{\n  if\(handoffActive\(\)\) return;/);
 });
+
+test('recovery reference clips: the five graded moves carry their kept primaries (2026-10-26)', () => {
+  const { ctx } = boot({ seed: v9() });
+  const want = { 'rec-ring-row':'B90sF7dbP04', 'rec-pulldown':'BjxeYTIBUXM', 'rec-incline-pushup':'GDTFPZFz960', 'rec-split-squat':'kQ1VCHrfbbs', 'rec-cossack':'dhDjKmTX8tU' };
+  for(const [id, vid] of Object.entries(want)){
+    const r = ctx.EXERCISE_LIBRARY[id].reference;
+    assert.equal(r.status, 'video', id); assert.equal(r.videoId, vid, id);
+    assert.match(ctx.buildEmbedUrl(r), new RegExp('youtube-nocookie.com/embed/' + vid), id);
+  }
+});
