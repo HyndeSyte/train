@@ -91,7 +91,7 @@ test('the switch: a confirm turns syncing on, persisted through setSyncArmed; Sy
   page.els['store-sync-switch'].onclick();
   assert.equal(page.ctx.__sync.armed, false, 'off at once');
   assert.ok(await until(() => w.store.syncArmed === false), 'then persisted');
-  assert.notEqual(page.modalTitle(), 'Start syncing from this app?');
+  assert.equal(page.els.modal.classList.contains('visible'), false, 'no confirm is open');
   // the persisted switch decides the next run: on again, then relaunch posts at boot; off, relaunch posts nothing
   await page.ctx.__setSyncArmed(true);
   w.evict(); w.store.file = committedBytes(pendingState(), w.store.rev); w.syncRequests = [];
