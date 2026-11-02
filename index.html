@@ -3116,7 +3116,7 @@ function setRecoveryMode(on){
 function toggleRecoveryMode(){
   const s = getState();
   if(isRecoveryOn(s)){
-    const capNote = cardioCleared(s) ? '' : ' Cardiology hasn’t cleared hard efforts yet, so the effort cap stays on until you mark it cleared.';
+    const capNote = cardioCleared(s) ? '' : ' The cardiology effort cap is still on. Mark hard efforts cleared in Settings once cardiology has cleared you or no restriction is on record.';
     showModal('Turn off recovery mode?', 'Only after PT clears you, hang test included. Ring sessions go back to normal, PT’s list leaves Home, and the two ring anchors restart at bodyweight. A session already in progress keeps its exercises.' + capNote, [
       { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
       { text:'Turn off', cls:'btn-danger', action:()=>{ hideModal(); setRecoveryMode(false); renderSettings(); } }
@@ -3137,7 +3137,7 @@ function setCardioClear(on){
 function toggleCardioClear(){
   const s = getState();
   if(cardioCleared(s)){ setCardioClear(false); renderSettings(); return; }   // the safer direction needs no confirm
-  showModal('Cardiology cleared hard efforts?', 'Turn this on only once cardiology has cleared hard efforts. It lifts the two-reps-short cap and brings power work, hill repeats and jump rope back.', [
+  showModal('Cardiology cleared hard efforts?', 'Turn this on when cardiology has cleared you, or when no cardiology restriction is on record for your exercise. It lifts the two-reps-short cap and brings power work, hill repeats and jump rope back.', [
     { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() },
     { text:'Yes, cleared', cls:'btn-primary', action:()=>{ hideModal(); setCardioClear(true); renderSettings(); } }
   ]);
