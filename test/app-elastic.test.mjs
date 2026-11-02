@@ -342,10 +342,6 @@ test('regression: every template builds with unique uids; legacy pre-engine entr
     const uids = flow.map(st=>st.uid);
     assert.equal(new Set(uids).size, uids.length, `uids collision-free for ${t}`);
   });
-  Object.keys(ctx.RECOVERY_TEMPLATES).forEach(t=>{
-    const uids = ctx.buildFlowFrom(t, ctx.RECOVERY_TEMPLATES[t]).map(st=>st.uid);
-    assert.equal(new Set(uids).size, uids.length, `recovery uids collision-free for ${t}`);
-  });
   const seed = { schemaVersion:6, progressionEngineVersion:2, rotationIndex:0, nextSessionOverride:'BAD',
     nextSessionSequence:1, pendingDeletes:[], activeSession:null,
     legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, anchorProgress:{},

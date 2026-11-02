@@ -1,9 +1,9 @@
 // End-to-end run in a real WebKit at iPhone size (plan v3, R0 "WebKit run"): a fresh install
-// turns recovery mode on, runs PT's list through the guided timer to Finish, then runs one
-// recovery ring session to Complete. The sync call is stubbed at the network layer (nothing
-// reaches Netlify or Notion); the clock is faked so timers run instantly and the local day is a
-// known Eastern evening. Asserts: no console/page errors, both entries logged with the local
-// date, both sync payloads captured by the stub, History shows them, PT's list marks "done today".
+// runs one normal rotation session (Start Today) through Form, stations and the fork to Complete.
+// The sync call is stubbed at the network layer (nothing reaches Netlify or Notion); the clock is
+// faked so timers run instantly and the local day is a known Eastern evening. Asserts: no
+// console/page errors, the entry is logged with the local date in normal mode, its sync payload
+// is captured by the stub, History shows it, Settings carries no recovery or cardiology rows.
 //   node e2e/webkit-session.mjs            (WebKit; E2E_BROWSER=chromium for a local dry run)
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -88,75 +88,22 @@ try {
   expect(writerReads.length === 1 && /writer\.json\?t=\d+/.test(writerReads[0]), 'one cache-busted writer.json read: ' + JSON.stringify(writerReads));
   expect(await settle(() => page.evaluate(() => /Start Today/.test(document.getElementById('home-content').innerText))), 'Home is writable after the backstop');
   await clickBtn('Settings');
-  expect((await text('#settings-content')).includes('Recovery mode'), 'Settings has the recovery row');
+  expect(!/Recovery mode|ardiology/.test(await text('#settings-content')), 'Settings has no recovery or cardiology rows');
   expect((await text('#settings-content')).includes('Hand off to the Train app'), 'Settings has the hand-off row');
   const digest0 = await page.evaluate(() => sessionDigest(getState()));
   expect(/^[0-9a-f]{8}$/.test(digest0), 'digest computes in the page: ' + digest0);
   await page.waitForTimeout(50);
   expect((await text('#session-digest')).includes('0 sessions') && (await text('#session-digest')).includes(digest0), 'digest line shows: ' + (await text('#session-digest')));
-  const recRow = page.locator('.setting-row', { hasText: 'Recovery mode' }).first();
-  await recRow.getByRole('button').first().click();
-  expect((await text('#modal-title')).includes('Turn on recovery mode'), 'recovery confirm modal');
-  await clickBtn('Turn on');
   await clickBtn('Today');
-  const home = await text('#home-content');
-  expect(/PT/.test(home) && /Start PT/.test(home), 'Home offers PT’s list in recovery mode: ' + home.slice(0, 120));
+  expect(/Start Today/.test(await text('#home-content')), 'Home offers Start Today');
 
-  // ---- 1. PT's list, guided, through the timer, to Finish.
-  await clickBtn('Start PT');
-  expect((await text('#modal-title')) === 'Arm check', 'arm check asked at the first session of the day');
-  await clickBtn('Same');
-  expect(await page.locator('#screen-pt.active').count() === 1, 'PT screen open');
-  const ptItems = await page.evaluate(() => ptItemsAll().map((it) => ({ name: it.name, block: it.block || 'pt' })));
-  const ptCount = ptItems.filter((it) => it.block === 'pt').length;
-  expect(ptCount === 7, 'PT program has 7 items, got ' + ptCount);
-  await clickBtn('Start with');                      // opens the first open item (the breathing opener)
-  // Drive every item: tap Start, then let the fake clock run the holds/rests; tap Set done for rep sets.
-  let driven = 0;
-  for (let guard = 0; guard < 40; guard++) {
-    const onItem = await page.locator('#pt-content').evaluate((el) => /One tap starts it/.test(el.innerText));
-    if (!onItem) break;
-    await clickBtn('Start');
-    driven++;
-    for (let g2 = 0; g2 < 400; g2++) {
-      const state = await page.evaluate(() => PTS && PTS.run && PTS.run.plan ? (PTS.run.plan[PTS.run.k] && PTS.run.plan[PTS.run.k].kind) : null);
-      if (!state) break;                                  // item finished -> next item's idle screen or the list
-      if (state === 'reps') await clickBtn('Set done');
-      else await tick(1000);
-    }
-    const backOnList = await page.locator('#pt-content').evaluate((el) => /PT’s program/.test(el.innerText) && !/One tap starts it/.test(el.innerText));
-    if (backOnList) break;
-  }
-  const statuses = await page.evaluate(() => Object.assign({}, PTS.status));
-  const doneCount = Object.values(statuses).filter((s) => s === 'done').length;
-  log('PT items driven', driven, 'done', doneCount, 'of', ptItems.length);
-  expect(doneCount >= ptCount, 'every PT program item done (' + doneCount + ')');
-  // Train adds are optional; whatever is left open stays open. Finish from the list.
-  if (!(await page.locator('#pt-content').evaluate((el) => /Finish/.test(el.innerText)))) await clickBtn('The list');
-  await page.locator('#pt-note').fill('e2e run');
-  await clickBtn('Finish');
-  await page.waitForTimeout(50);
-  const afterPt = await page.evaluate(() => ({ screen: currentScreen, log: getState().log.map((e) => ({ type: e.sessionType, date: e.date, status: e.sessionStatus, ptList: !!e.ptList, mode: e.mode, items: (e.ptItems || []).length })) }));
-  log('after PT', JSON.stringify(afterPt));
-  expect(afterPt.log.length === 1 && afterPt.log[0].type === 'PT', 'one PT entry logged');
-  expect(afterPt.log[0].date === LOCAL_DAY, 'PT entry dated the local day ' + afterPt.log[0].date);
-  expect(afterPt.log[0].status === 'completed', 'PT list completed');
-  expect(afterPt.log[0].items === ptItems.length, 'per-item statuses logged');
-  await tick(2000);                                       // let the fire-and-forget sync run
-  await page.waitForTimeout(100);
-  expect(synced.length >= 1, 'PT entry reached the (stubbed) sync endpoint');
-  expect(synced[synced.length - 1].client === 'pwa', 'sync post names the client: ' + synced[synced.length - 1].client);
-  const ptPayload = synced[synced.length - 1].body || {};
-  expect(ptPayload.date === LOCAL_DAY && ptPayload.ptList === true && ptPayload.mode === 'Recovery', 'PT sync payload carries date/ptList/mode: ' + JSON.stringify({ date: ptPayload.date, ptList: ptPayload.ptList, mode: ptPayload.mode, status: ptPayload.status }));
-  expect(/done today|Open the list again|Logged today/i.test(await text('#home-content')), 'Home marks PT’s list done today');
-
-  // ---- 2. One recovery ring session, Start -> Form -> stations -> fork -> Complete.
+  // ---- 1. One normal ring session, Start -> Form -> stations -> fork -> Complete.
   await clickBtn("Start Today");
   expect(await page.locator('#screen-session.active').count() === 1, 'session screen open');
   const sessionType = await page.evaluate(() => AS && AS.type);
   const mode = await page.evaluate(() => AS && AS.mode);
   log('ring session', sessionType, mode);
-  expect(mode === 'recovery', 'session runs in recovery mode');
+  expect(mode !== 'recovery', 'session runs in normal mode, got ' + mode);
   for (let guard = 0; guard < 200; guard++) {
     const st = await page.evaluate(() => {
       if (!AS) return { done: true };
@@ -191,23 +138,24 @@ try {
   }
   const afterRing = await page.evaluate(() => ({ screen: currentScreen, as: !!AS, log: getState().log.map((e) => ({ type: e.sessionType, date: e.date, status: e.sessionStatus, core: e.coreComplete, mode: e.mode })) }));
   log('after ring', JSON.stringify(afterRing));
-  expect(afterRing.log.length === 2, 'ring entry logged');
-  const ring = afterRing.log[1] || {};
+  expect(afterRing.log.length === 1, 'ring entry logged');
+  const ring = afterRing.log[0] || {};
   expect(ring.date === LOCAL_DAY, 'ring entry dated the local day ' + ring.date);
-  expect(ring.mode === 'recovery', 'ring entry in recovery mode');
+  expect(ring.mode !== 'recovery', 'ring entry in normal mode');
   expect(ring.status === 'completed' || ring.status === 'partial', 'ring entry has a status: ' + ring.status);
   await tick(2000); await page.waitForTimeout(100);
-  expect(synced.length >= 2, 'ring entry reached the (stubbed) sync endpoint');
+  expect(synced.length >= 1, 'ring entry reached the (stubbed) sync endpoint');
+  expect(synced[synced.length - 1].client === 'pwa', 'sync post names the client: ' + synced[synced.length - 1].client);
   const ringPayload = synced[synced.length - 1].body || {};
-  expect(ringPayload.date === LOCAL_DAY && ringPayload.mode === 'Recovery', 'ring sync payload: ' + JSON.stringify({ date: ringPayload.date, mode: ringPayload.mode, type: ringPayload.sessionType, status: ringPayload.status }));
+  expect(ringPayload.date === LOCAL_DAY && ringPayload.mode !== 'Recovery', 'ring sync payload: ' + JSON.stringify({ date: ringPayload.date, mode: ringPayload.mode, type: ringPayload.sessionType, status: ringPayload.status }));
 
-  // ---- 3. History shows both, dated the local day; Settings build line present.
+  // ---- 2. History shows it, dated the local day; Settings build line present.
   await clickBtn('History');
   const hist = await text('#history-content');
-  expect(hist.includes('PT') && hist.length > 40, 'History lists the entries');
+  expect(hist.length > 40, 'History lists the entry');
   await clickBtn('Settings');
   const settings = await text('#settings-content');
-  expect(/Build: v\d/.test(settings) && /2 sessions/.test(settings), 'Settings shows the build line and 2 sessions');
+  expect(/Build: v\d/.test(settings) && /1 session/.test(settings), 'Settings shows the build line and 1 session');
   await context.close();
 } catch (e) {
   fail('exception: ' + (e && e.stack || e));

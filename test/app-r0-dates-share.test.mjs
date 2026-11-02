@@ -62,7 +62,7 @@ function boot(opts = {}){
   const html = readFileSync(join(root,'index.html'),'utf8');
   const m = /<script>\n([\s\S]*)\n<\/script>/.exec(html);
   assert.ok(m, 'inline app script found');
-  vm.runInContext(m[1] + '\n;globalThis.__AS = () => AS; globalThis.__setAS = (v) => { AS = v; }; globalThis.__PTS = () => PTS;', ctx);
+  vm.runInContext(m[1] + '\n;globalThis.__AS = () => AS; globalThis.__setAS = (v) => { AS = v; };', ctx);
   return { ctx, els, storage, clock, created, urls, shares, canShareCalls };
 }
 const AS_ = (c) => c.__AS();
@@ -136,7 +136,6 @@ test('ring session finished at 7:30 PM EST (after the clocks change) is dated th
 
 test('an expired park is dated the day it was parked, not the day it expired', () => {
   const { ctx, clock } = boot({ seed: seed() });
-  if(ctx.needsArmCheck(ctx.getState())) ctx.recordArmCheck('same');
   ctx.startSession('RP'); skipForm(ctx); logSet(ctx, 5);   // one set in, core not done
   ctx.parkSession();                                  // 8:30 PM EDT, Oct 18
   const parked = ctx.getState().activeSession;
@@ -151,36 +150,8 @@ test('an expired park is dated the day it was parked, not the day it expired', (
   assert.equal(e.completedAt, '2026-10-20T13:00:00.000Z');
 });
 
-test("PT's list finished at 8:30 PM EDT is dated the local day it was started", () => {
-  const { ctx, clock } = boot({ seed: seed() });
-  ctx.recordArmCheck('same');
-  ctx.startPtSession();
-  assert.ok(ctx.__PTS(), 'PT session open');
-  const items = ctx.PT_LIST.items;
-  items.forEach((it,i)=>{ if((it.block || 'pt') === 'pt'){ ctx.ptOpen(i); ctx.ptItemDone('done'); } });
-  clock.now += 6 * 60 * 1000;                          // six minutes later, still the same evening
-  ctx.finishPtSession();
-  const e = ctx.getState().log.slice(-1)[0];
-  assert.equal(e.sessionType, 'PT');
-  assert.equal(e.date, '2026-10-18');
-  assert.equal(e.startedAt, '2026-10-19T00:30:00.000Z');
-  assert.equal(e.completedAt, '2026-10-19T00:36:00.000Z');
-  assert.equal(ctx.ptDoneToday(ctx.getState()), true, "counts as today's PT list");
-});
-
-test("PT's list at 7:30 PM EST is dated the local day", () => {
-  const { ctx } = boot({ seed: seed(), now: EST_EVENING });
-  ctx.recordArmCheck('same');
-  ctx.startPtSession();
-  const items = ctx.PT_LIST.items;
-  items.forEach((it,i)=>{ if((it.block || 'pt') === 'pt'){ ctx.ptOpen(i); ctx.ptItemDone('done'); } });
-  ctx.finishPtSession();
-  assert.equal(ctx.getState().log.slice(-1)[0].date, '2026-11-05');
-});
-
 test('a park across the Nov 1 clock change, reopened days later, is dated the day it was parked', () => {
   const { ctx, clock } = boot({ seed: seed(), now: Date.UTC(2026, 10, 1, 0, 30, 0) });   // Oct 31, 8:30 PM EDT
-  if(ctx.needsArmCheck(ctx.getState())) ctx.recordArmCheck('same');
   ctx.startSession('RP'); skipForm(ctx); logSet(ctx, 5);
   ctx.parkSession();
   const parked = ctx.getState().activeSession;
@@ -192,20 +163,6 @@ test('a park across the Nov 1 clock change, reopened days later, is dated the da
   assert.equal(ctx.getState().activeSession, null);
   assert.equal(e.date, '2026-10-31');
   assert.equal(e.completedAt, '2026-11-03T23:00:00.000Z');
-});
-
-test("PT's list started before midnight and finished after is dated its start day", () => {
-  const { ctx, clock } = boot({ seed: seed(), now: Date.UTC(2026, 9, 19, 3, 55, 0) });   // Oct 18, 11:55 PM EDT
-  ctx.recordArmCheck('same');
-  ctx.startPtSession();
-  const items = ctx.PT_LIST.items;
-  items.forEach((it,i)=>{ if((it.block || 'pt') === 'pt'){ ctx.ptOpen(i); ctx.ptItemDone('done'); } });
-  clock.now += 10 * 60 * 1000;                         // 12:05 AM Oct 19
-  ctx.finishPtSession();
-  const e = ctx.getState().log.slice(-1)[0];
-  assert.equal(e.date, '2026-10-18');
-  assert.equal(e.completedAt, '2026-10-19T04:05:00.000Z');
-  assert.equal(ctx.ptDoneToday(ctx.getState()), false, 'on Oct 19 the list is open again (it counted for Oct 18)');
 });
 
 test('no UTC-date idiom remains in the app script', () => {
