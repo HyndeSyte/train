@@ -75,7 +75,7 @@ function boot(opts = {}){
   const html = readFileSync(join(root,'index.html'),'utf8');
   const m = /<script>\n([\s\S]*)\n<\/script>/.exec(html);
   assert.ok(m, 'inline app script found');
-  vm.runInContext(m[1] + '\n;globalThis.__AS = () => AS; globalThis.__setAS = (v) => { AS = v; }; globalThis.__PTS = () => PTS; globalThis.__setPTS = (v) => { PTS = v; }; globalThis.__draining = (v) => { syncDraining = v; };', ctx);
+  vm.runInContext(m[1] + '\n;globalThis.__AS = () => AS; globalThis.__setAS = (v) => { AS = v; }; globalThis.__draining = (v) => { syncDraining = v; };', ctx);
   if(opts.shell) ctx.handoffSupported = () => false;   // what bridge.js does before DOMContentLoaded
   const writerFetches = () => calls.filter(c => c.url.startsWith(WRITER_URL)).length;
   const syncPosts = () => calls.filter(c => c.url === SYNC_URL);
@@ -101,13 +101,13 @@ function seed(extra){
 
 // ---- the switch ---------------------------------------------------------------------------
 
-test('switch on: Home shows the handed-off card and no start, PT or resume path; boot skips the sync', async () => {
+test('switch on: Home shows the handed-off card and no start or resume path; boot skips the sync', async () => {
   const b = boot({ seed: seed({ log:[ entry(1), entry(2, { notionSync:{ status:'pending' } }) ] }), key:'on' });
   await b.runBoot();
   assert.equal(b.writerFetches(), 0, 'no writer.json fetch with an explicit flag');
   assert.equal(b.syncPosts().length, 0, 'boot sync skipped');
   assert.match(b.home(), /Handed off to the Train app/);
-  assert.doesNotMatch(b.home(), /startSession\(|startPtSession\(|resumeSession\(/);
+  assert.doesNotMatch(b.home(), /startSession\(|resumeSession\(/);
 });
 
 test('switch on: the three sync functions are no-ops and mark nothing', async () => {
@@ -160,11 +160,6 @@ test('switch refuses with a parked session, with pending items, and while a drai
   draining.ctx.__draining(true);
   draining.ctx.confirmHandoff();
   assert.match(draining.els['modal-body'].textContent, /sync in progress/);
-
-  const pt = boot({ seed: seed() });
-  pt.ctx.__setPTS({ startedAt: NOW, status:{}, run:null, note:'' });
-  pt.ctx.confirmHandoff();
-  assert.match(pt.els['modal-body'].textContent, /PT’s list in progress/);
 });
 
 test('switch on through the confirm, then undo re-posts what is pending', async () => {
@@ -346,7 +341,7 @@ test('the Settings row offers the hand-off only when writable', () => {
   assert.match(unknown.settings(), /paused: which app is in charge is unknown/);
 });
 
-test('a stale tab cannot start, resume, start PT or delete while handed off (direct guards)', () => {
+test('a stale tab cannot start, resume or delete while handed off (direct guards)', () => {
   const b = boot({ seed: seed({ activeSession:{ type:'RP', parkedAt: NOW - 1000, parkExpiresAt: NOW + 86400000, records:{}, cursor:0 } }), key:'on' });
   // Home rendered with a parked session and the flag on: no Resume path
   b.ctx.renderHome();
@@ -357,8 +352,6 @@ test('a stale tab cannot start, resume, start PT or delete while handed off (dir
   const logBefore = b.ctx.getState().log.length;
   b.ctx.startSession('RP');
   assert.equal(b.ctx.__AS(), null, 'start refused');
-  b.ctx.startPtSession();
-  assert.equal(b.ctx.__PTS(), null, 'PT start refused');
   b.ctx.deleteLogEntry(0);
   assert.equal(b.ctx.getState().log.length, logBefore, 'delete refused');
   assert.deepEqual(b.ctx.getState().pendingDeletes, [], 'no tombstone queued');

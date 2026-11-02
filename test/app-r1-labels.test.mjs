@@ -8,14 +8,14 @@ import vm from 'node:vm';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
-test('RPr finisher reads "Trunk"; no template block in either mode is labeled "Core"', () => {
+test('RPr finisher reads "Trunk"; no template block is labeled "Core"', () => {
   const ctx = { window: {} }; ctx.window = ctx; vm.createContext(ctx);
   vm.runInContext(readFileSync(join(root, 'data.js'), 'utf8'), ctx);
-  const normal = ctx.SESSION_TEMPLATES, recovery = ctx.RECOVERY_TEMPLATES;
+  const normal = ctx.SESSION_TEMPLATES;
   assert.ok(normal && normal.RPr, 'templates loaded');
   const rprFinisher = normal.RPr.blocks.find((b) => b.exercises.includes('hanging-knee-raise'));
   assert.equal(rprFinisher.label, 'Trunk');
-  for (const [name, set] of [['normal', normal], ['recovery', recovery]]) {
+  for (const [name, set] of [['normal', normal]]) {
     for (const [type, t] of Object.entries(set || {})) {
       for (const b of t.blocks || []) assert.notEqual(b.label, 'Core', `${name} ${type} block labeled Core`);
     }

@@ -1,11 +1,10 @@
 "use strict";
 // ===================================================================
 // data.js  -  static content for Train (loaded before the inline app script).
-// Defines window.EXERCISE_LIBRARY, window.FORM, window.SESSION_TEMPLATES, and the v7.3
-// recovery layer's window.RECOVERY_TEMPLATES and window.PT_LIST.
+// Defines window.EXERCISE_LIBRARY, window.FORM, window.OPENER and window.SESSION_TEMPLATES.
 // No app state or logic here. Keep classic: no defer / async / type=module.
 // ===================================================================
-window.TRAIN_DATA_VERSION = '8.0.1';
+window.TRAIN_DATA_VERSION = '8.1.0';
 
 // ===================================================================
 // EXERCISE LIBRARY
@@ -38,9 +37,8 @@ window.EXERCISE_LIBRARY = {
   'calf-raise': { name:'Calf Raises', grip:'none', ladder:['Bilateral Calf Raise','Slow Bilateral (3s up/3s down)','Single-Leg Calf Raise','Single-Leg Slow Calf Raise'], repRange:[12,20], sets:2, unit:'reps', reference:{ status:'text', cue:'Full ROM. Pause at the top and bottom.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'hollow-body': { name:'Hollow Body Hold', grip:'none', ladder:['Tuck Hollow Hold','Single-Leg Hollow Hold','Hollow Body Hold','Hollow Body Rock'], repRange:[20,40], sets:3, unit:'sec', reference:{ status:'text', cue:'Lower back glued to the floor. Breathe.', mediaUrl:null, mediaType:null, sourceLabel:null } },
 
-  // ---- v7.3 RECOVERY SWAPS (2026-10-15) ----
-  // Every swap has its own entry, so a legacy ladder position (some of them loaded, e.g.
-  // DB Bulgarian Split Squat) can never leak into a recovery session. ladder[0] is the
+  // ---- v7.3 recovery swaps (retired as sessions in v8.1.0; kept so old history can name them) ----
+  // Every swap has its own entry. ladder[0] is the
   // name shown; the rest reads as the progression: reps first, then angle. No dumbbells,
   // no hanging, no flat palms, nothing overhead. openReps = no fixed rep target.
   'rec-ring-row': { name:'Ring Row (upright)', grip:'low', ladder:['Ring Row (steep, upright)','Ring Row (a little less steep)','Ring Row (moderate lean)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'video', cue:'Stand steep, close to upright. Ring in the fingers, wrist straight, pressure off the pinky side. Reps first, then lean back a little.', mediaType:'youtube', videoId:'B90sF7dbP04', start:null, end:null, sourceLabel:'OPEX Fitness (YouTube)', fallbackUrl:'https://www.youtube.com/watch?v=B90sF7dbP04', checkedAt:'2026-10-19' } },
@@ -54,8 +52,8 @@ window.EXERCISE_LIBRARY = {
   'rec-cossack': { name:'Cossack Squat', grip:'none', ladder:['Cossack Squat (bodyweight, or a DB at your side)'], repRange:[5,8], sets:3, unit:'reps/side', reference:{ status:'video', cue:'Heel stays planted; go only as deep as you can control. Load is your call: a dumbbell hanging at your side, elbow straight; tingling or a worse arm day means bodyweight.', mediaType:'youtube', videoId:'dhDjKmTX8tU', start:null, end:null, sourceLabel:'Functional Bodybuilding (YouTube)', fallbackUrl:'https://www.youtube.com/watch?v=dhDjKmTX8tU', checkedAt:'2026-10-19' } },
   'rec-dead-bug': { name:'Dead Bug', grip:'none', ladder:['Dead Bug (arms toward the ceiling)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'On your back, lower back pressed down, arms reaching toward the ceiling. Lower the opposite leg slowly while the arms stay put. Arms go further only as PT\u2019s rule allows.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'rec-reverse-crunch': { name:'Reverse Crunch (floor)', grip:'none', ladder:['Reverse Crunch (floor)'], repRange:[8,12], sets:3, unit:'reps', reference:{ status:'text', cue:'On your back, arms resting by your sides. Curl the knees toward the chest and lift the hips a little, then lower slowly.', mediaUrl:null, mediaType:null, sourceLabel:null } },
-  // ---- v8 (2026-10-26): A/B/C full-body additions. Power never scores and waits for
-  // cardiology (index.html CARDIO_EXERCISES); carries progress by distance or time. ----
+  // ---- v8 (2026-10-26): A/B/C full-body additions. Power never scores;
+  // carries progress by distance or time. ----
   'squat-jump': { name:'Squat Jump', grip:'none', ladder:['Squat Jump (submaximal, soft landing)','Broad Jump (stick the landing)','Broad Jump to Reset (two in a row)'], repRange:[3,3], sets:3, unit:'reps', reference:{ status:'text', cue:'Crisp, not max. Land soft and quiet, knees tracking over toes. Stop the set when a rep gets sloppy.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'broad-jump': { name:'Broad Jump', grip:'none', ladder:['Broad Jump (submaximal, stick it)','Broad Jump (longer, stick it)','Hill Bounds (outdoors)'], repRange:[3,3], sets:3, unit:'reps', reference:{ status:'text', cue:'Hands free. Jump out, stick the landing for a breath, walk back. Submaximal and crisp; stop when the landing gets loose. Later options once technique is solid: one-dumbbell swing, hill bounds outdoors.', mediaUrl:null, mediaType:null, sourceLabel:null } },
   'hinge-rdl': { name:'Single-Leg DB RDL', grip:'low', ladder:['DB Single-Leg RDL (25s)','DB Single-Leg RDL (slow lower)','DB Romanian Deadlift (heavier pair)'], repRange:[6,10], sets:3, unit:'reps/side', reference:{ status:'text', cue:'Long spine, hinge at the hip, back leg reaches long. A dumbbell in the opposite hand. The bilateral RDL takes over when the heavier dumbbells arrive.', mediaUrl:null, mediaType:null, sourceLabel:null } },
@@ -123,7 +121,7 @@ window.OPENER = {
   breath: 'About 90 seconds · move on the exhale',
   movements: [
     { name:'Root + Breath', detail:'Stand easy, feet under your hips. Three slow breaths, weight rocking gently side to side.' },
-    { name:'Spinal Wave', detail:'Slow side bends and turns, a few each way. Arms overhead if they are happy there.', recoveryDetail:'Slow side bends and turns, a few each way. Reaches stay at or below shoulder height.' },
+    { name:'Spinal Wave', detail:'Slow side bends and turns, a few each way. Arms overhead if they are happy there.' },
     { name:'Deep Squat Pry', detail:'Sit into your deepest squat, heels down. Hands loose in front; let your legs push the knees apart. Five breaths.' },
     { name:'90/90', detail:'Sit with both knees at right angles and sweep side to side, three each way.' }
   ],
@@ -146,7 +144,7 @@ const UPPER_ACTIVATION = { title:'Shoulder Prep', cue:'Thirty seconds. Wake the 
 ]};
 
 // ---- v8 (2026-10-26): A -> B -> C, full-body. Every session: the fixed opener, power on A
-// and C (held by the cardiology cap), then lower + push + pull as the gate. Block sets
+// and C, then lower + push + pull as the gate. Block sets
 // override the library default (2 work sets each; the hinge 3). Arm blocks carry arms:true
 // so End arm work / Legs only pass them over and the legs still finish. Each heavy anchor
 // sits in its own block, so its slot is A_anchor_ring-pullup / C_anchor_ring-pushup.
@@ -209,150 +207,4 @@ window.SESSION_TEMPLATES = {
     { type:'finisher', label:'Get-up', core:true, gate:true, exercises:['floor-getup'] },
     { type:'finisher', label:'Extension', exercises:['pushup','reverse-lunge','hollow-body'] }
   ]}
-};
-
-// ===================================================================
-// RECOVERY MODE (v7.3, 2026-10-15): reduced-load swaps while PT limits lifting.
-// ===================================================================
-// Same rotation keys, same log, same core/gate rules; only the exercises change. Parked
-// in this mode: hanging, full bodyweight on the arms, overhead loading, dumbbells, weight
-// through flat palms. The Floor (MVS) slot is taken by PT's list (window.PT_LIST below).
-//   requiresCardioClear = block appears only after cardiology clears hard efforts (Gate 4)
-//   arms = arm work on a leg day; a symptom stop passes over it (finish the legs)
-// No block is progressionType 'heavyAnchor': recovery work never touches the scoreboard.
-const REC_ACTIVATION = { title:'Shoulder Prep', cue:'Thirty seconds, empty-handed. Arms start at shoulder height or below.', movements:[
-  { name:'External Rotation Sweep', detail:'Elbows pinned to the ribs, forearms sweep out and back, 10 slow reps. Empty-handed: no dumbbells.' },
-  { name:'Scap Set', detail:'Arms at shoulder height or below. Shrug up, then let the shoulder blades glide down and around on their own, moving freely rather than pulled down. 5 slow reps.' }
-]};
-
-window.RECOVERY_TEMPLATES = {
-  // v8 recovery A/B/C: the v7.3 arm-safe swaps (no weight on arm work, edge grip or
-  // forearms, below the symptom line) and the leg work with load at his call.
-  A: { name:'A · Squat + Pull (recovery)', fullName:'Recovery: A — Squat, Row, Incline Push-Up', grip:'low', opener:true, activation: REC_ACTIVATION, blocks:[
-    { type:'power', label:'Power', core:true, sets:3, requiresCardioClear:true, exercises:['squat-jump'] },
-    { type:'builder', label:'Legs', core:true, gate:true, sets:2, exercises:['rec-split-squat'] },
-    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['rec-ring-row'] },
-    { type:'builder', label:'Push', core:true, gate:true, arms:true, sets:2, exercises:['rec-incline-pushup'] },
-    { type:'finisher', label:'Extension', exercises:['rec-glute-bridge','rec-hollow-hold'] }
-  ]},
-  B: { name:'B · Hinge + Press (recovery)', fullName:'Recovery: B — Hinge, Wall Plus, Pulldown', grip:'low', opener:true, activation: REC_ACTIVATION, blocks:[
-    { type:'builder', label:'Hinge', core:true, gate:true, sets:3, exercises:['rec-sl-rdl'] },
-    { type:'builder', label:'Push', core:true, gate:true, arms:true, sets:2, exercises:['rec-wall-plus'] },
-    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['rec-pulldown'] },
-    { type:'finisher', label:'Extension', exercises:['calf-raise','rec-dead-bug'] }
-  ]},
-  C: { name:'C · Lateral + Push (recovery)', fullName:'Recovery: C — Cossack, Incline Push-Up, Row', grip:'low', opener:true, activation: REC_ACTIVATION, blocks:[
-    { type:'power', label:'Power', core:true, sets:3, requiresCardioClear:true, exercises:['broad-jump'] },
-    { type:'builder', label:'Legs', core:true, gate:true, sets:2, exercises:['rec-cossack'] },
-    { type:'builder', label:'Push', core:true, gate:true, arms:true, sets:2, exercises:['rec-incline-pushup'] },
-    { type:'builder', label:'Pull', core:true, gate:true, arms:true, sets:2, exercises:['rec-ring-row'] },
-    { type:'finisher', label:'Extension', exercises:['step-lunge','rec-reverse-crunch'] }
-  ]},
-  RP: { legacy:true, name:'Pull (recovery)', fullName:'Recovery: Ring Row + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
-    { type:'anchor', label:'Pull Gate', core:true, gate:true, exercises:['rec-ring-row'] },
-    { type:'builder', label:'Builder', exercises:['rec-pulldown'] },
-    { type:'finisher', label:'Finisher', exercises:['rec-hollow-hold'] }
-  ]},
-  LP: { legacy:true, name:'Lower: Posterior (recovery)', fullName:'Recovery: Lower, Posterior + Unilateral', grip:'none', blocks:[
-    { type:'finisher', label:'Opener', core:true, exercises:['rec-glute-bridge'] },
-    { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-split-squat'] },
-    { type:'builder', label:'Builders', exercises:['rec-sl-rdl'] },
-    { type:'builder', label:'Builders', requiresCardioClear:true, arms:true, exercises:['jump-rope'] },
-    { type:'finisher', label:'Finisher', arms:true, exercises:['rec-dead-bug'] }
-  ]},
-  RPush: { legacy:true, name:'Push (recovery)', fullName:'Recovery: Incline Push-Up + Wall Plus', grip:'low', activation: REC_ACTIVATION, blocks:[
-    { type:'anchor', label:'Push Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
-    { type:'builder', label:'Builder', exercises:['rec-wall-plus'] },
-    { type:'finisher', label:'Finisher', exercises:['rec-hollow-hold'] }
-  ]},
-  LS: { legacy:true, name:'Lower: Squat (recovery)', fullName:'Recovery: Lower, Squat', grip:'none', blocks:[
-    { type:'finisher', label:'Opener', core:true, exercises:['rec-glute-bridge'] },
-    { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-cossack'] },
-    { type:'builder', label:'Builders', exercises:['step-lunge','calf-raise'] },
-    { type:'finisher', label:'Conditioning', requiresCardioClear:true, arms:true, exercises:['jump-rope'] }
-  ]},
-  RPr: { legacy:true, name:'Ring Practice (recovery)', fullName:'Recovery: Incline Push-Up + Pulldown', grip:'low', activation: REC_ACTIVATION, blocks:[
-    // Gate is the incline push-up so rows never run two sessions in a row; the light
-    // pulldown repeats RP's by design.
-    { type:'anchor', label:'Gate', core:true, gate:true, exercises:['rec-incline-pushup'] },
-    { type:'builder', label:'Builder', exercises:['rec-pulldown'] },
-    { type:'finisher', label:'Finisher', exercises:['rec-reverse-crunch'] }   // not 'Core': that word means the gate path
-  ]}
-};
-
-// ===================================================================
-// PT'S LIST (v7.3): PT's home program, run by Train as its own short daily session.
-// ===================================================================
-// PT owns the list. Train's copy is updated from the visit notes after each
-// visit, and it runs exactly as PT prescribed: PT's names and doses. v7.4 adds how-to and
-// demo per item (technique only), and an optional 'Train adds' block inside PT's limits.
-// One tap-through card, one Finish; it never parks and never advances the rotation.
-window.PT_LIST = {
-  name: 'PT\u2019s list',
-  updated: '2026-10-18',
-  ivyUntil: '2026-10-29',          // the 'tick it in PT's app too' line shows until Train has carried the list two weeks
-  rule: 'Work up to tingling or other nerve symptoms, never into them.',
-  // All-day elbow and posture habits PT asked for: first-line care; no session time.
-  // Standing red flags (reviewed 2026-10-18): shown on the list screen every day, not only after a stop.
-  redFlags: 'Call PT for numbness that doesn\u2019t settle. Same-day medical care, and tell PT, for new or worsening weakness, new hand clumsiness (dropping things, trouble with buttons), or a change in balance or walking. Emergency room for sudden major weakness or new bladder or bowel trouble.',
-  allDay: 'All day: don\u2019t lean on your elbows, use a headset for calls, and keep the elbows from staying bent at night (a towel loosely wrapped around the elbow helps).',
-  items: [
-    // TRAIN ADDS (block 'adds', optional): reviewed 2026-10-18 by an internal PT red team, ChatGPT
-    // and Gemini. Kept small on purpose: everything PT gives runs first and counts as the full day.
-    // Cut after review: wall slide and open book (overhead / end-range plexus tension, possible TOS),
-    // levator stretch (rotation + side bend toward the worse side), rhomboid stretch and the
-    // shoulder-blade squeeze ("back and down" is the costoclavicular provocation position).
-    // Breathing is the opener (block 'open', runs before PT's program); shrugs close.
-    { id:'breath', block:'open', source:'train', name:'Belly breathing, lying down', doseText:'1 easy minute', sets:1, reps:1, holdSec:60, setupSec:5, restSec:0,
-      ref:{ cue:'One easy minute to settle the neck before anything else. Can\u2019t fail.',
-        steps:['Lie on your back, knees bent, hands on your belly or by your sides.','Breathe in through the nose; let the belly and lower ribs rise.','Breathe out slowly, a little longer than the in-breath. Shoulders stay soft.'],
-        feel:'The belly and lower ribs moving; the neck and shoulders quiet.', stop:'you feel light-headed. Breathe normally.', status:'text' } },
-    // PT's program (block 'pt'): PT's movements. Doses chosen 2026-10-18 at Dane's direction
-    // ("app numbers are good, but if we can find a better path I want those"): stretches use
-    // PT's own clinic dose (2 x 30 s holds); the chin tuck follows the craniocervical-flexion
-    // endurance approach (Jull): 10 reps, holds start at 5 s and build toward 10 s only when the
-    // current hold feels easy (holdSteps; Dane taps to progress); glides stay PT's 3 x 10 per arm
-    // with the head tilt PT taught. Reviewed by ChatGPT, Gemini and an internal PT red team.
-    // ref = how to do it (the standard clinical technique) and when to stop; it never changes the dose.
-    { id:'pec', block:'pt', source:'ivy', name:'Doorway pec stretch', sets:2, reps:1, holdSec:30, restSec:10,
-      ref:{ cue:'A gentle chest stretch, not a strain. Elbow below shoulder height for now.',
-        steps:['Forearm flat on the door frame, elbow bent and a little below shoulder height.','Step through with the same-side foot until the chest stretches gently.','Stand tall and breathe slowly. Let the shoulder sit naturally; don\u2019t force it down.'],
-        feel:'Stretch across the front of the chest and shoulder.', stop:'the hand or fingers tingle. Lower the elbow or step through less.',
-        status:'video', mediaType:'youtube', videoId:'M850sCj9LHQ', start:null, end:null, sourceLabel:'MedBridge', fallbackUrl:'https://www.youtube.com/watch?v=M850sCj9LHQ', checkedAt:'2026-10-18' } },
-    { id:'ut', block:'pt', source:'ivy', name:'Seated upper-trap stretch', sets:2, reps:1, holdSec:30, perSide:true, restSec:10,
-      ref:{ cue:'Ear toward the shoulder, nothing forced.',
-        steps:['Sit tall, hands resting in your lap. Don\u2019t hold the chair or push the shoulder down.','Tilt your ear toward the opposite shoulder. Check both arms as you go.','Want more? Rest the other hand on your head, its weight only.'],
-        feel:'Stretch along the top of the shoulder and side of the neck.', stop:'either arm tingles. Take the hand off your head and bring your head back to center. If tingling lingers after you let go, skip this stretch for today.',
-        status:'video', mediaType:'youtube', videoId:'-r0eoFS7_5Q', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=-r0eoFS7_5Q', checkedAt:'2026-10-18' } },
-    { id:'chin', block:'pt', source:'ivy', name:'Supine chin tuck', sets:1, reps:10, holdSec:5, holdSteps:[5,7,10], relaxSec:5, restSec:0,
-      ref:{ cue:'A small nod, low effort, held. Endurance, not strength. Starts at 5 s holds; when that feels easy, tap \u201cHold longer next time\u201d to build toward 10 s.',
-        steps:['Lie on your back, knees bent; a thin towel under the head if needed.','Nod gently, as if saying yes, so the back of the neck lengthens.','Hold the nod for the count, breathing normally; head stays on the floor. Relax fully, repeat.'],
-        feel:'Gentle work deep at the front of the neck; a lengthening at the back.', stop:'the front neck muscles grip hard or arm symptoms rise. Use less effort.',
-        status:'video', mediaType:'youtube', videoId:'jgz-32qjpOg', start:null, end:null, sourceLabel:'Momentum Physical Therapy', fallbackUrl:'https://www.youtube.com/watch?v=jgz-32qjpOg', checkedAt:'2026-10-18' } },
-    { id:'prayer', block:'pt', source:'ivy', name:'Seated prayer median-nerve glide', sets:3, reps:10, restSec:20, tempoCue:'slow, in and out',
-      ref:{ cue:'Lower the hands only as far as the first mild stretch.',
-        steps:['Sit tall, palms together at chest height.','Slowly lower the hands a few inches, palms staying together. Stay above the bottom of the ribs.','Rise again at the first stretch in the palm or forearm. Smooth, no bouncing.'],
-        feel:'Mild stretch in the forearms and palms.', stop:'the first hint of tingling, or a pull at the old palm injury. Lower the hands less. This one loads the nerve at the wrist more than the glides below.',
-        status:'video', mediaType:'youtube', videoId:'XnJu70SLsJk', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=XnJu70SLsJk', checkedAt:'2026-10-18' } },
-    { id:'median', block:'pt', source:'clinic', name:'Median nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'slow, no holding at the ends',
-      ref:{ cue:'Motion, not stretch: one end lengthens while the other slackens.',
-        steps:['Arm about halfway out to the side (not shoulder height), palm up, elbow slightly bent.','Wrist back as you tilt your head toward that arm.','Wrist down as you tilt your head away. Back and forth, small range.'],
-        feel:'Easy movement; at most a faint pull.', stop:'tingling starts. Make the range smaller. Anything stirred up should settle within minutes.',
-        status:'video', mediaType:'youtube', videoId:'lr5_Yfdb9oM', start:null, end:null, sourceLabel:'Ortho Eval Pal (Paul Marquis, PT)', fallbackUrl:'https://www.youtube.com/watch?v=lr5_Yfdb9oM', checkedAt:'2026-10-18' } },
-    { id:'ulnar', block:'pt', source:'clinic', name:'Ulnar nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'gentle, part range at the elbow',
-      ref:{ cue:'Gentlest of the three. Never push into a deep elbow bend.',
-        steps:['Arm about halfway out to the side, palm facing forward (the demo shows the start position).','Bend the elbow a little and tip the wrist back as you tilt your head toward that arm.','Straighten the elbow as you tilt your head away. Small, rhythmic reps.'],
-        feel:'Easy movement around the elbow; nothing sharp.', stop:'the pinky side tingles. Bend the elbow less. Skip the full OK-sign mask position.',
-        status:'video', mediaType:'youtube', videoId:'_RqaQErKMpE', start:null, end:null, sourceLabel:'Ortho Eval Pal (Paul Marquis, PT)', fallbackUrl:'https://www.youtube.com/watch?v=_RqaQErKMpE', checkedAt:'2026-10-18' } },
-    { id:'radial', block:'pt', source:'clinic', name:'Radial nerve glide', sets:3, reps:10, perSide:true, sideWord:'arm', sides:['Right arm','Left arm'], restSec:20, tempoCue:'slow, easy neck',
-      ref:{ cue:'Shoulder relaxed down, not forced.',
-        steps:['Arm by your side, elbow straight, palm facing back.','Bend the wrist and fingers as you tilt your head toward that arm.','Release the wrist as you tilt your head away. Small, smooth reps.'],
-        feel:'Easy movement along the back of the forearm.', stop:'tingling on the thumb side. Make the range smaller.',
-        status:'video', mediaType:'youtube', videoId:'vL7yF9TXCCo', start:null, end:null, sourceLabel:'Ask Doctor Jo', fallbackUrl:'https://www.youtube.com/watch?v=vL7yF9TXCCo', checkedAt:'2026-10-18' } },
-
-    { id:'shrug', block:'adds', source:'train', name:'Slow shoulder shrugs', sets:1, reps:10, restSec:0, tempoCue:'smooth up, 3 s down, no pause at the top',
-      ref:{ cue:'Lifting the shoulders opens the space at the collarbone. A gentle counter to the day\u2019s slump.',
-        steps:['Sit or stand tall, arms hanging relaxed.','Lift both shoulders smoothly toward your ears. No squeeze or pause at the top.','Lower them slowly over about 3 seconds, all the way, then let go.'],
-        feel:'Easy work on top of the shoulders; a release on the way down.', stop:'arm symptoms start. Make the shrug smaller.', status:'text' } }
-  ]
 };

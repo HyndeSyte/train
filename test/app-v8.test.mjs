@@ -42,7 +42,7 @@ function boot(opts = {}){
   const html = readFileSync(join(root,'index.html'),'utf8');
   const m = /<script>\n([\s\S]*)\n<\/script>/.exec(html);
   assert.ok(m, 'inline app script found');
-  vm.runInContext(m[1] + '\n;globalThis.__AS = () => AS; globalThis.__PTS = () => PTS;', ctx);
+  vm.runInContext(m[1] + '\n;globalThis.__AS = () => AS;', ctx);
   return { ctx, els, storage };
 }
 
@@ -123,17 +123,15 @@ test('Core estimates stay about 20 minutes; Floor about 10', () => {
   assert.ok(f >= 8 && f <= 12, `Floor core ~${f} min`);
 });
 
-test('effort line follows the cardiology cap: 2–3 reps short while it holds, 1–3 after', () => {
-  const capped = boot({ seed: v9({ recovery:{ on:false, cardioClear:false, since:null, offAt:'2026-11-27T00:00:00.000Z' } }) }).ctx;
-  capped.startSession('B');
-  capped.advanceForm();
-  capped.renderStation();
-  assert.match(html(capped, 'flow-body'), /2–3 reps short of failure/);
-  const clear = boot({ seed: v9() }).ctx;
-  clear.startSession('B');
-  clear.advanceForm();
-  clear.renderStation();
-  assert.match(html(clear, 'flow-body'), /1–3 reps short of failure/);
+test('the effort line is 1–3 reps short of failure for every install, whatever legacy state it carries', () => {
+  for(const recovery of [{ on:false, cardioClear:true, since:null, offAt:null }, { on:true, cardioClear:false, since:'2026-10-15T00:00:00.000Z', offAt:null }, { on:false, cardioClear:false, since:null, offAt:'2026-11-27T00:00:00.000Z' }]){
+    const c = boot({ seed: v9({ recovery }) }).ctx;
+    c.startSession('B');
+    c.advanceForm();
+    c.renderStation();
+    assert.match(html(c, 'flow-body'), /Stop 1–3 reps short of failure/);
+    assert.doesNotMatch(html(c, 'flow-body'), /2–3 reps|Until|two reps short/i);
+  }
 });
 
 test('Markers: partial saves keep value, unit and note; the card shows the latest per marker', () => {
