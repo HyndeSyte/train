@@ -314,7 +314,7 @@ test('digest fixture: first 8 hex of SHA-256 over sorted ids joined by LF, no tr
   assert.equal(expected, '3175a2eb', 'the fixture the mirror script must reproduce');
   assert.equal(await b.ctx.sessionDigest(b.ctx.getState()), '3175a2eb');
   b.settings();
-  await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+  for (let i = 0; i < 100 && !/digest [0-9a-f]{8}/.test(b.els['session-digest'].textContent); i++) await new Promise(r => setTimeout(r, 10));
   assert.equal(b.els['session-digest'].textContent, '3 sessions · digest 3175a2eb');
   // an empty log digests the empty string; migrate() gives every entry an id, so after it the
   // count equals the log length
