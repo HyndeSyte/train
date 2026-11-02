@@ -12,9 +12,9 @@ const pendingState = () => seedState({ log: [entry(1, { notionSync: { status: 'p
 const SYNC_URL = 'https://hyndesyte-train-sync.netlify.app/.netlify/functions/sync-training-session';
 const ok = () => ({ status: 200, body: { ok: true, action: 'created', notionPageId: 'p1' } });
 
-// drive one recovery ring session to Complete through the app's own functions
+// drive one ring session to Complete through the app's own functions
 async function completeSession(page) {
-  page.ctx.startSession('RP');
+  page.ctx.startSession('A');
   if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
   for (let guard = 0; guard < 60 && page.ctx.__AS(); guard++) {
     const as = page.ctx.__AS(); const flow = page.ctx.currentFlow(); const st = flow[as.cursor];
