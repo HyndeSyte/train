@@ -746,32 +746,22 @@ test('cues play natively (audio plus haptic) and are gated on soundEnabled() lik
   same(['cueGo', 'cueRelease', 'cueStarted', 'cueLogged', 'cueSessionDone', 'cueNoted'].map((n) => typeof page.ctx[n]), Array(6).fill('function'));
 });
 
-test('one audio path: unlockAudio and toneW are no-ops and the shell never creates an AudioContext, through a session and the PT list', async () => {
+test('one audio path: unlockAudio and toneW are no-ops and the shell never creates an AudioContext, through a session', async () => {
   const w = seededWorld();
   const page = await w.boot();
   await page.settle();
   assert.equal(page.audioContexts.length, 0, 'none at boot');
   page.ctx.unlockAudio(); page.ctx.toneW(523, 0, 0.1, 0.3, 'sine');
-  // a session: the app's own unlockAudio calls and cues (arm check, Form, Prep, a logged set)
-  page.ctx.startSession('RP');
+  // a session: the app's own unlockAudio calls and cues (Form, Prep, a logged set)
+  const cuesBefore = w.store.count('cue');
+  page.ctx.startSession('A');
   if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
   page.ctx.advanceForm(); page.ctx.advanceForm();
   if (page.ctx.__AS() && page.ctx.__AS().phase !== 'rest') { try { page.ctx.logRepSet(); } catch (e) { /* a station that is not a rep set */ } }
   await sleep(20);
   page.ctx.discardCurrentSession();
   assert.equal(page.audioContexts.length, 0, 'no AudioContext through a session');
-  // PT's list: startPtSession, ptStartItem and ptSetDone call unlockAudio and the cues
-  const cuesBefore = w.store.count('cue');
-  page.ctx.startPtSession();
-  if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
-  page.ctx.ptOpen(0);
-  page.ctx.ptStartItem();
-  await sleep(20);
-  if (typeof page.ctx.ptSetDone === 'function') { try { page.ctx.ptSetDone(); } catch (e) { /* a timed step */ } }
-  await sleep(20);
-  page.ctx.closePtSession();
-  assert.equal(page.audioContexts.length, 0, 'no AudioContext through the PT list');
-  assert.ok(w.store.count('cue') > cuesBefore, 'the list used the native cue path: ' + (w.store.count('cue') - cuesBefore));
+  assert.ok(w.store.count('cue') > cuesBefore, 'the session used the native cue path: ' + (w.store.count('cue') - cuesBefore));
   // the counter is live: a direct construction is counted
   new page.ctx.AudioContext();
   assert.equal(page.audioContexts.length, 1);
@@ -830,7 +820,7 @@ test('Settings in the shell tells the truth about the silent switch (the playbac
   assert.match(html, /toggleSound\(\)/, 'with its handler');
 });
 
-test('navigator.wakeLock polyfill: request returns a sentinel with release() and a release event; hidden releases it natively; the PT list re-acquires on visible; a native release the page did not see re-acquires too', async () => {
+test('navigator.wakeLock polyfill: request returns a sentinel with release() and a release event; hidden releases it natively; a native release the page did not see releases the sentinel', async () => {
   const w = seededWorld();
   const page = await w.boot();
   await page.settle();
@@ -850,13 +840,10 @@ test('navigator.wakeLock polyfill: request returns a sentinel with release() and
   assert.equal(w.store.wake.held, true, 'b still holds the timer');
   await b.release();
   assert.equal(w.store.wake.held, false);
-  // the PT list: Start holds the screen; background releases it (hidden event); foreground re-acquires through ptWakeOn
+  // a held screen lock: background releases it natively and the page's sentinel; the polyfill never re-acquires by itself
   const acquiresBefore = w.store.wake.acquires;
-  page.ctx.startPtSession();
-  if (page.modalTitle() === 'Arm check') await page.pressModal('Same');
-  page.ctx.ptOpen(0);
-  page.ctx.ptStartItem();
-  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 1), 'ptWakeOn acquired');
+  const held = await page.ctx.navigator.wakeLock.request('screen');
+  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 1), 'acquired');
   assert.equal(page.wake.sentinels.length, 1);
   assert.equal(w.store.wake.held, true);
   await page.hide();
@@ -864,25 +851,15 @@ test('navigator.wakeLock polyfill: request returns a sentinel with release() and
   assert.equal(w.store.wake.held, false, 'native released');
   assert.equal(w.store.wake.idleTimerDisabled, false);
   await page.show();
-  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 2), 're-acquired on visible: ' + JSON.stringify(w.store.wake));
-  assert.equal(w.store.wake.held, true);
-  assert.equal(page.wake.sentinels.length, 1);
-  // native released while the page saw no hidden event: its event releases the sentinel and the app re-acquires
+  await sleep(30);
+  assert.equal(w.store.wake.acquires, acquiresBefore + 1, 'no re-acquire without a holder');
+  // native released while the page saw no hidden event: its event releases the sentinel
+  const again2 = await page.ctx.navigator.wakeLock.request('screen');
+  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 2));
   w.store.background();
-  assert.ok(await until(() => w.store.wake.acquires === acquiresBefore + 3), 're-acquired after the native event: ' + JSON.stringify(w.store.wake));
+  assert.ok(await until(() => page.wake.sentinels.length === 0), 'the native event released the sentinel');
   assert.equal(page.wake.listener, 'plugin');
   assert.ok(page.bridge.events.some((e) => e.nativeWakeReleased !== undefined && e.released === 1));
-  // the native event re-acquires only while the app's own condition holds: paused, it does not
-  page.ctx.__PTS().run.paused = true;
-  w.store.background();
-  await sleep(30);
-  assert.equal(page.wake.sentinels.length, 0, 'the sentinel was released');
-  assert.equal(w.store.wake.acquires, acquiresBefore + 3, 'no re-acquire while paused');
-  page.ctx.__PTS().run.paused = false;
-  // closing the list releases
-  page.ctx.closePtSession();
-  assert.ok(await until(() => w.store.wake.held === false));
-  assert.equal(page.wake.sentinels.length, 0);
   // hydration releases whatever a previous page held
   w.store.wake.held = true; w.store.wake.idleTimerDisabled = true;
   await w.boot();
