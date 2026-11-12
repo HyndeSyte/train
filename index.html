@@ -91,7 +91,7 @@
 // SCHEMA VERSION
 // ===================================================================
 const SCHEMA_VERSION = 9;
-const BUILD_ID = 'v8.1.0-2026-11-02-abc';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
+const BUILD_ID = 'v8.1.1-2026-11-12-arm';  // bump on every deploy; surfaced in Settings to expose a stale cached shell
 
 // ===================================================================
 // DATA BOOTSTRAP - EXERCISE_LIBRARY, FORM, SESSION_TEMPLATES come from data.js,
@@ -1330,6 +1330,7 @@ function renderExerciseStation(st){
     </div>
     <div class="flow-title">${varName}</div>
     <div class="flow-sub">${ex.name} &middot; ${ex.openReps ? openRepsLabel(ex).toLowerCase() : `target ${repSpan(ex)} ${ex.unit}`}</div>
+    ${(st.arms && !AS.armWorkEnded && showLookahead) ? `<div class="exercise-note arm-note">Arm irritable today? Use an easier version you tolerate, or End arm work (under Symptom stop).</div>` : ''}
     <div class="set-pills">${pills}</div>`;
   const symBtn = symptomStopButton();
 
@@ -1460,7 +1461,7 @@ function openSymptomStop(){
   const body = (second
       ? 'Second crossing this session: the arm work is done for today. '
       : 'New or worse symptoms? Stop this exercise for today. A second crossing, or symptoms that linger, end the arm work for today. ')
-    + (ringDay ? 'The session counts either way. ' : 'Finish the leg sets and the session still counts. ') + 'New weakness, or numbness that doesn’t settle: call your clinician promptly.';
+    + (ringDay ? 'The session counts either way. ' : 'Finish the leg sets and the session still counts. ') + 'Same-day clinician assessment: new weakness or dropping things, muscle wasting, hand clumsiness, or numbness that spreads or stays. Emergency care now: new trouble walking, rapidly worsening weakness or loss of coordination, new loss of bladder or bowel control, a suddenly swollen, discoloured, cold or pale arm or hand, or sudden severe unexplained arm or hand pain.';
   const buttons = second ? [
     { text: endLabel, cls:'btn-primary', action:()=>{ hideModal(); symptomEndArmWork(); } },
     { text:'Cancel', cls:'btn-secondary', action:()=>hideModal() }

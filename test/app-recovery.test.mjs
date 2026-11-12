@@ -273,7 +273,7 @@ test('release stamps: TRAIN_DATA_VERSION 8.1.0, cache-buster and BUILD_ID agree'
   assert.equal(ctx.TRAIN_DATA_VERSION, '8.1.0');
   const app = readFileSync(join(root,'index.html'),'utf8');
   assert.match(app, /data\.js\?v=8\.1\.0"/);
-  assert.match(app, /BUILD_ID = 'v8\.1\.0-2026-11-02-abc'/);
+  assert.match(app, /BUILD_ID = 'v8\.1\.1-2026-11-12-arm'/);
 });
 
 test('sync payload contract: every session type and legacy mode still validates and maps Mode / Arm Check / PT List', () => {
@@ -430,4 +430,23 @@ test('a session frozen under the old recovery mode still resumes and finishes wi
     activeSession:{ ...frozen, parkedAt:1, parkExpiresAt:2, lastActiveAt:null }, legacy:{ promotions:{}, exerciseVariations:{}, promotionLog:[] }, anchorProgress:{}, log:[], recovery: OLD_RECOVERY } });
   assert.doesNotThrow(() => b.ctx.renderHome());
   assert.equal(b.ctx.getState().activeSession, null, 'expired park finalized');
+});
+
+test('arm stations carry the arm-irritable line before loading; leg stations and ended arm work do not; Symptom stop names the same-day and emergency lists (v8.1.1)', () => {
+  const { ctx } = recoveryBoot();
+  ctx.startSession('B');
+  skipForm(ctx);
+  ctx.renderStation();
+  assert.doesNotMatch(html(ctx, 'flow-body'), /Arm irritable today/, 'hinge is a leg station');
+  logWholeExercise(ctx, 8);   // hinge
+  ctx.renderStation();
+  assert.match(html(ctx, 'flow-body'), /Arm irritable today\? Use an easier version you tolerate, or End arm work/, 'press is an arm station');
+  ctx.openSymptomStop();
+  const modal = ctx.document.getElementById('modal-body').textContent;
+  assert.match(modal, /Same-day clinician assessment: new weakness or dropping things/);
+  assert.match(modal, /Emergency care now: new trouble walking/);
+  assert.match(modal, /bladder or bowel/);
+  tap(ctx, 'End arm work, finish the legs');
+  ctx.renderStation();
+  assert.doesNotMatch(html(ctx, 'flow-body'), /Arm irritable today/, 'no line once arm work has ended');
 });
